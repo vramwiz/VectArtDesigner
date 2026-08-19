@@ -1,0 +1,487 @@
+# MIF解析メモ
+
+作成日時: 2026-08-19 13:29 JST  
+対象: IBM WebArt Designer の `.mif` キャンバスデータ解析  
+目的: MIFファイルの構造を把握し、互換読み書きの実現可能性を検証する
+
+## 1. 全体構造
+- 先頭は `MIMG` (`4D 49 4D 47`)。
+- 続いて `MHDR`、その後に複数の `IPNG` ブロック。
+- 各 `IPNG` の実体はPNG (`89 50 4E 47 0D 0A 1A 0A`)。
+- PNGの `tEXt` チャンクに `object type` や `waDA...` 独自情報が保存される。
+
+代表例:
+```text
+application name = "WebArt Designer"
+waDAapplication version
+waDAbackground page index
+object type
+waDAimage ...
+waDAlogo ...
+waDAfont ...
+waDAtexture ...
+```
+
+## 2. 共通オブジェクト情報
+多くのオブジェクトで以下を持つ。
+
+```text
+waDAimage position1 x/y
+waDAimage position2 x/y
+waDAimage position3 x/y
+waDAimage position4 x/y
+waDAimage alpha
+waDAimage hidden
+```
+
+基本配置は、
+```text
+position1 = 左上
+position2 = 右上
+position3 = 右下
+position4 = 左下
+```
+と考えられる。
+
+位置・幅・高さ・回転・反転は4頂点座標で表現される。
+
+通常値として、
+```text
+waDAimage alpha  = 255
+waDAimage hidden = 0
+```
+を確認。
+
+## 3. 数値の保存形式
+多くの数値はキー文字列の後ろに4バイトのビッグエンディアン符号付き整数。
+
+```text
+00 00 00 05 = 5
+FF FF FF F6 = -10
+```
+
+## 4. 色の保存形式
+GUI上のRGBとは逆順のBGR系。
+
+```text
+GUI #0000FF（青） -> 0x00FF0000
+GUI #FF0000（赤） -> 0x000000FF
+GUI #FF8000       -> 0x000080FF
+```
+
+概念的に `0x00BBGGRR`。
+
+# 5. 文字オブジェクト
+文字は、
+```text
+object type = "logo"
+```
+
+代表構造:
+```text
+waDAlogo fs auto
+waDAlogo smooth
+waDAlogo pad x/y
+waDAlogo margin x/y
+waDAlogo format
+waDAlogo text unicode
+waDAlogo text
+waDAfont ...
+waDAlogo writing mode
+waDAlogo outline ...
+waDAlogo effect ...
+```
+
+## 5.1 文字列
+- `waDAlogo text unicode` はUTF-16系。
+- `waDAlogo text` はShift-JIS系と思われる。
+- 互換実装ではUnicode側を優先するのが安全。
+
+## 5.2 フォント
+例:
+```text
+font name = "MS UI Gothic"
+```
+
+無効果時の代表値:
+```text
+font height = -22
+font width  = 9
+waDAlogo fs auto = 1
+waDAlogo smooth = 0
+pad x = 2
+pad y = 2
+```
+
+`fs auto=1` のため、外周効果で必要領域が増えるとフォントサイズが自動縮小される。
+
+# 6. 文字の縁取り
+```text
+waDAlogo outline object type
+waDAlogo outline thick
+waDAlogo outline color
+waDAlogo outline alpha
+```
+
+確認済み種類:
+```text
+なし   = "none"
+通常   = "normal"
+封蝋   = "seal"
+白抜き = "hollow"
+囲み   = "enclose"
+反転   = "invert"
+```
+
+太さ:
+```text
+最小 = 1
+最大 = 5
+```
+
+透明度:
+```text
+透明度 0%   -> alpha = 255
+透明度 100% -> alpha = 0
+```
+概算:
+```text
+alpha ≒ 255 * (1 - 透明度/100)
+```
+
+`seal` のみ `waDAlogo outline direction` を確認。
+```text
+左側ふくらみ = 3
+右側ふくらみ = 7
+```
+
+pad例:
+```text
+none / invert -> (2,2)
+
+normal / seal / hollow
+thick=1 -> (3,3)
+thick=5 -> (7,7)
+
+enclose
+thick=1 -> (5,3)
+thick=5 -> (9,7)
+```
+
+# 7. 文字エフェクト
+共通構造:
+```text
+waDAlogo effect object type
+waDAlogo effect level
+waDAlogo effect color
+waDAlogo effect offset x
+waDAlogo effect offset y
+waDAlogo effect direction
+```
+
+確認済み:
+```text
+なし       = "none"
+ぼかし     = "blur"
+動き       = "motion blur"
+影         = "shadow"
+切り抜き   = "cutout"
+エンボス   = "emboss"
+炎         = "flame"
+```
+
+## 7.1 blur
+```text
+level = 0..5
+```
+最小:
+```text
+pad=(2,2)
+font=(-22,9)
+```
+最大:
+```text
+pad=(12,12)
+font=(-13,5)
+```
+外側に広がる効果。
+
+## 7.2 motion blur
+```text
+level = 0..5
+```
+方向:
+```text
+0 = 左
+1 = 左下
+2 = 下      ※推定
+3 = 右下
+4 = 右
+5 = 右上
+6 = 上
+7 = 左上    ※推定
+```
+直接確認済み: 0,1,3,4,5,6。
+
+最大レベル時のpad例:
+```text
+右   -> (27,7)
+上   -> (7,17)
+右上 -> (27,17)
+```
+
+## 7.3 shadow
+```text
+level = 0..5
+offset x = -10..10
+offset y = -10..10
+```
+GUI対応:
+```text
+強さ   -> level
+色     -> color
+横位置 -> offset x
+縦位置 -> offset y
+```
+
+最低例:
+```text
+level=0
+offset=-10,-10
+pad=(13,12)
+font=(-13,5)
+```
+
+最大例:
+```text
+level=5
+offset=10,10
+pad=(23,23)
+font=(-2,2)
+```
+
+## 7.4 cutout
+```text
+level = 0..5
+offset x/y = -10..10
+color = BGR
+```
+ただし最小・最大とも:
+```text
+pad=(2,2)
+font=(-22,9)
+```
+外側描画領域を増やさない。
+
+## 7.5 emboss
+```text
+effect object type = "emboss"
+level = 0..5
+direction = 0..7
+```
+確認:
+```text
+左下 = 1
+右下 = 3
+```
+最小・最大とも:
+```text
+pad=(2,2)
+font=(-22,9)
+```
+`color` と `offset x/y` は未使用の共通保持値とみられる。
+
+## 7.6 flame
+```text
+effect object type = "flame"
+level = 0..5
+color = BGR
+```
+色例:
+```text
+赤 -> 0x000000FF
+青 -> 0x00FF0000
+```
+最低:
+```text
+pad=(2,2)
+font=(-22,9)
+```
+最大:
+```text
+pad=(12,17)
+font=(-8,3)
+```
+外側に大きく広がる効果。
+
+# 8. 「情報」タブ
+文字固有ではなく共通オブジェクトGUIと考えられる。
+
+```text
+オブジェクトの種類
+X座標
+Y座標
+幅
+高さ
+縦横比保持
+透明度
+```
+
+# 9. ペン
+GUI上の「ペン」は独立MIFオブジェクトではない。
+
+保存時:
+```text
+object type = "image"
+```
+
+描画結果をラスタライズして画像として保存しているとみられる。
+`pen / brush / stroke / point / path` 等の固有再編集データは確認できていない。
+
+したがってMIF解析では、
+```text
+ペン = 画像編集用GUI機能
+保存結果 = image
+```
+として独立型としては無視可能。
+
+# 10. 画像オブジェクト
+画像配置時:
+```text
+object type = "image"
+```
+
+構造:
+```text
+image {
+    embedded PNG
+    position1 x/y
+    position2 x/y
+    position3 x/y
+    position4 x/y
+    alpha
+    hidden
+}
+```
+
+## 10.1 拡大縮小
+表示幅を変更しても埋め込みPNG自体のピクセルサイズは変わらない。
+4頂点座標だけが変更される。
+
+## 10.2 回転
+約45度右回転でPNG本体は不変。
+4頂点座標のみが回転。
+別のrotationフィールドは不要と考えられる。
+
+## 10.3 左右反転
+PNG本体を作り直さず、左右頂点の対応を入れ替える。
+
+概念:
+```text
+通常:
+P1=左上 P2=右上 P3=右下 P4=左下
+
+左右反転:
+P1=右上 P2=左上 P3=左下 P4=右下
+```
+
+## 10.4 上下反転
+同様に上下頂点を入れ替える。
+
+```text
+上下反転:
+P1=左下 P2=右下 P3=右上 P4=左上
+```
+
+## 10.5 入力画像形式
+JPEG / PNG / GIF / BMP 等を配置して確認した結果、MIF内の画像ブロックはPNGシグネチャだった。
+
+```text
+JPEG ┐
+PNG  ├→ PNGへ正規化 → IPNGとして格納
+GIF  ┤
+BMP  ┘
+```
+
+元ファイル名・元拡張子・外部パスを保持している形跡は現時点では確認できていない。
+
+# 11. texture オブジェクト
+```text
+object type = "texture"
+```
+
+代表項目:
+```text
+waDAtexture object type
+waDAtexture color1
+waDAtexture color2
+waDAtexture angle
+waDAtexture level
+waDAtexture pathname
+```
+
+画像本体とは別の背景/テクスチャ系データとみられる。
+詳細は未解析。
+
+# 12. 現時点のオブジェクト分類
+```text
+logo    = 文字
+image   = 画像
+texture = テクスチャ系
+```
+
+ペンは `image` へ変換されるため独立型ではない。
+
+# 13. 画像で未確認の項目
+1. `waDAimage alpha` とGUI透明度の正確な対応
+2. `waDAimage hidden` のON時の値
+3. 縦横比保持チェック状態そのものがMIF保存されるか
+4. 四隅自由変形が可能か
+
+# 14. 互換実装上の方針
+有力なReader/Writer方針:
+
+```text
+1. MIMG/MHDRを解析
+2. IPNGブロックを順次抽出
+3. PNGとして解析
+4. tEXtから object type / waDA* を取得
+5. object typeごとに構造化
+6. imageはembedded PNG + 4頂点 + alpha + hiddenで復元
+7. logoは文字・フォント・縁取り・効果を復元
+```
+
+画像では回転・拡縮・左右反転・上下反転を専用フラグとして持たず、4頂点から再現可能。
+
+# 15. 確度
+## ほぼ確定
+- MIF先頭は `MIMG`
+- `IPNG` 内にPNG
+- PNG `tEXt` にwaDAメタデータ
+- 文字=`logo`
+- 画像=`image`
+- 画像はMIF内部でPNG化
+- 画像の位置/サイズ/回転/反転=4頂点
+- ペンは画像化され `image`
+- 色はBGR系
+- 文字のoutline/effect主要種類
+- 多くの数値は32bit big-endian
+
+## 推定を含む
+- motion blur direction 2=下
+- motion blur direction 7=左上
+- textureの詳細用途
+- alphaの全変換式
+- hiddenのON値
+- 縦横比保持チェックの保存有無
+
+# 16. 次回候補
+画像について最後に確認する場合:
+```text
+1. 透明度50%
+2. hidden ON
+3. 縦横比保持OFFで幅だけ変更
+4. 四隅自由変形があれば1頂点のみ変更
+```
+
+その後、次の未解析オブジェクトへ進む。
