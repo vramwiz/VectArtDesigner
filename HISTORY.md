@@ -1,7 +1,25 @@
 # VectArtDesigner 制作履歴
 
 完了済みの作業と、日付付きの重要な検証結果を記録する。
-現在の状況と次の作業は [note.md](note.md) を参照する。
+共通基盤の状況は [note.md](note.md)、単独編集アプリ固有の状況は
+[note_VectArtDesigner.md](note_VectArtDesigner.md) を参照する。
+
+## 2026-08-21
+
+- 作業ノートを3プロジェクト共通の`note.md`と、単独編集アプリ固有の
+  `note_VectArtDesigner.md`へ分割した。
+- ルートへ`SYNC_ScreenLayout_Filter`プロジェクトを追加し、AviUtl2上の`【画面レイアウト】`、
+  分類`SYNC`、`編集`ボタン、`配置データ`文字列だけを持つ最小フィルタープラグインを作成した。
+- Syncroh2の`PluginFilterTable.pas`を共通`Lib\AviUtl2`へ移植し、画面レイアウトプラグインの
+  テーブル設定とGUI項目登録を共通ヘルパー経由へ変更した。
+- 画面レイアウトプラグインのWin64ビルド後にAviUtl2の専用プラグインフォルダへ配置し、
+  `.auf2`への改名後に中間の`.dll`、`.rsm`、`.exe`を削除するビルドイベントを追加した。
+- `編集`ボタンから単独アプリと同じ編集画面を開き、AviUtl2の`配置データ`をDocument JSONとして
+  読み込み、画面終了時にUTF-8で書き戻すプラグイン用ホストを追加した。
+- Document JSONバージョン1の往復テストを追加し、日本語レイヤー名、矩形、透明度、ロック、
+  不正JSON時の非破壊性を確認した。
+- 共通UIをDLLから使う場合もモジュール自身と同じ場所の`sk4d.dll`を参照するようSkia初期化を
+  共通化し、プラグインのビルド後配置へSkiaランタイムのコピーを追加した。
 
 ## 2026-08-20
 
@@ -126,6 +144,21 @@
   既定色・不透明度100%とし、Object Propertiesで確定した値を次のRectangle作成へ継承する。
 - キャンバスのドラッグ作成とレイヤー操作バーの追加ボタンを同じ共有スタイルへ接続した。
   複製操作は共有スタイルではなく、従来どおり複製元レイヤーのスタイルを保持する。
+- デザイナー用の4つのFrameへ個別に渡していたDocument、編集履歴、EditorStateを、共通の
+  `IVectArtDesignerContext`へ集約した。標準アダプターはサービスを所有せず、別アプリからも
+  同じContext接続口でFrame群を再利用できる構成にした。
+- MIF外側コンテナーのReader／Writerを追加し、MIMGシグネチャ、ビッグエンディアン長、MHDR、
+  IPNG、MENDを境界検査付きで読み書きできるようにした。未知ブロックは解釈せずそのまま保持する。
+- MIFの読込と保存を`IVectArtMifContainerReader`／`IVectArtMifContainerWriter`へ分離し、具象クラスを
+  factoryの背後へ隠した。Containerはデータ保持だけを担当し、Streamとファイルの入出力を差し替え可能にした。
+- FileメニューへOpen、Save、Save Asを追加し、標準ファイルダイアログからMIF Reader／Writerを
+  呼び出せるようにした。ツールバーのOpen／SaveとCtrl+O／Ctrl+S／Ctrl+Shift+Sも同じ処理へ接続した。
+- MIF読込後はファイル名とチャンク数を表示し、Documentへの画面展開が未実装であることをステータスへ
+  明示するようにした。保存は同一フォルダーの一時ファイルへ書いた後で置き換える。
+- 調査用MIF全12ファイルをDelphi製の試験プログラムで読み込み、メモリへ再保存した結果、全ファイルで
+  元データと1バイト単位で完全一致することを確認した。
+- PNG内の`waDA*`情報は通常の`tEXt`キーではなく、チャンクtypeを`waDA`、dataをキー接尾辞、NUL、
+  値とする独自PNGチャンクであることを確認した。
 
 ## 2026-08-19
 

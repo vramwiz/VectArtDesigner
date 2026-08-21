@@ -28,10 +28,11 @@ object MainForm: TMainForm
     Color = 2236962
     ParentBackground = False
     TabOrder = 0
+    ExplicitWidth = 1178
     object lblMenuItems: TLabel
       Left = 0
       Top = 0
-      Width = 298
+      Width = 239
       Height = 30
       Align = alLeft
       Caption = 'File     Edit                    Object     Layout     Help'
@@ -42,6 +43,7 @@ object MainForm: TMainForm
       Font.Style = []
       ParentFont = False
       Layout = tlCenter
+      ExplicitHeight = 15
     end
     object pnlViewMenuButton: TPanel
       Left = 72
@@ -72,6 +74,7 @@ object MainForm: TMainForm
     Color = 2631720
     ParentBackground = False
     TabOrder = 1
+    ExplicitWidth = 1178
     object lblShortcutItems: TLabel
       Left = 0
       Top = 0
@@ -86,7 +89,7 @@ object MainForm: TMainForm
       Font.Style = []
       ParentFont = False
       Layout = tlCenter
-      ExplicitWidth = 237
+      ExplicitWidth = 228
       ExplicitHeight = 15
     end
   end
@@ -100,6 +103,8 @@ object MainForm: TMainForm
     Color = 2236962
     ParentBackground = False
     TabOrder = 2
+    ExplicitTop = 688
+    ExplicitWidth = 1178
     object lblStatus: TLabel
       Left = 0
       Top = 0
@@ -114,7 +119,7 @@ object MainForm: TMainForm
       Font.Style = []
       ParentFont = False
       Layout = tlCenter
-      ExplicitWidth = 181
+      ExplicitWidth = 144
       ExplicitHeight = 15
     end
   end
@@ -128,6 +133,25 @@ object MainForm: TMainForm
     Color = 1710618
     ParentBackground = False
     TabOrder = 3
+    ExplicitWidth = 1178
+    ExplicitHeight = 616
+    object splLeftRegion: TSplitter
+      Left = 286
+      Top = 0
+      Width = 5
+      Height = 624
+      Color = 3815994
+      ParentColor = False
+    end
+    object splRightRegion: TSplitter
+      Left = 885
+      Top = 0
+      Width = 5
+      Height = 624
+      Align = alRight
+      Color = 3815994
+      ParentColor = False
+    end
     object pnlLeftDockArea: TPanel
       Left = 0
       Top = 0
@@ -138,14 +162,7 @@ object MainForm: TMainForm
       Color = 2171169
       ParentBackground = False
       TabOrder = 0
-    end
-    object splLeftRegion: TSplitter
-      Left = 286
-      Top = 0
-      Width = 5
-      Height = 624
-      Color = 3815994
-      ParentColor = False
+      ExplicitHeight = 616
     end
     object pnlRightDockArea: TPanel
       Left = 890
@@ -157,15 +174,8 @@ object MainForm: TMainForm
       Color = 2171169
       ParentBackground = False
       TabOrder = 1
-    end
-    object splRightRegion: TSplitter
-      Left = 885
-      Top = 0
-      Width = 5
-      Height = 624
-      Align = alRight
-      Color = 3815994
-      ParentColor = False
+      ExplicitLeft = 888
+      ExplicitHeight = 616
     end
     object pnlEditorHost: TPanel
       Left = 291
@@ -177,6 +187,8 @@ object MainForm: TMainForm
       Color = 1184274
       ParentBackground = False
       TabOrder = 2
+      ExplicitWidth = 592
+      ExplicitHeight = 616
     end
     object pnlLeftDropTarget: TPanel
       Left = 0

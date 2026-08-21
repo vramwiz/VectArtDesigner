@@ -127,13 +127,16 @@
         <DCCReference Include="Source\Shell\VectArtDesignerMainForm.pas">
             <Form>MainForm</Form>
         </DCCReference>
+        <DCCReference Include="Source\Shell\VectArtDesignerFileActionsUI.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerEditActionsUI.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerDocument.pas"/>
+        <DCCReference Include="Source\Core\VectArtDesignerContext.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerEditorState.pas"/>
         <DCCReference Include="Source\Core\Commands\VectArtDesignerEditCommands.pas"/>
         <DCCReference Include="Source\Core\Commands\VectArtDesignerLayerStructureCommands.pas"/>
         <DCCReference Include="Source\Core\Commands\VectArtDesignerLayerBatchCommands.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerEditHistory.pas"/>
+        <DCCReference Include="Source\Persistence\Mif\VectArtDesignerMifContainer.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerCanvas.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerCanvasInteraction.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerShapeCreation.pas"/>

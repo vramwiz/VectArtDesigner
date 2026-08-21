@@ -1,32 +1,24 @@
-// レイヤーツールのFrameを提供し、Documentをレイヤー一覧へ接続する。
+﻿// レイヤーツールのFrameを提供し、Documentをレイヤー一覧へ接続する。
 unit VectArtDesignerLayerPanelFrame;
 
 interface
 
 uses
-  System.Classes, VectArtDesignerDocument, VectArtDesignerEditHistory,
-  VectArtDesignerEditorState, VectArtDesignerLayerActions, VectArtDesignerLayerList,
-  VectArtDesignerToolFrames;
+  System.Classes, VectArtDesignerContext, VectArtDesignerLayerActions,
+  VectArtDesignerLayerList, VectArtDesignerToolFrames;
 
 type
   TLayerPanelFrame = class(TToolPlaceholderFrame)
   private
     FLayerList: TVectArtLayerListControl;
     FLayerActions: TVectArtLayerActionsControl;
-    function GetDocument: TVectArtDocument;
-    function GetEditHistory: TVectArtEditHistory;
-    function GetEditorState: TVectArtEditorState;
-    procedure SetDocument(const Value: TVectArtDocument);
-    procedure SetEditHistory(const Value: TVectArtEditHistory);
-    procedure SetEditorState(const Value: TVectArtEditorState);
+    FContext: IVectArtDesignerContext;
+    procedure SetContext(const Value: IVectArtDesignerContext);
   public
     constructor Create(AOwner: TComponent); override;
     procedure RefreshFromDocument;
-    property Document: TVectArtDocument read GetDocument write SetDocument;
-    property EditHistory: TVectArtEditHistory read GetEditHistory
-      write SetEditHistory;
-    property EditorState: TVectArtEditorState read GetEditorState
-      write SetEditorState;
+    // Contextを交換すると、一覧と操作バーへ同じサービス一式を接続する。
+    property Context: IVectArtDesignerContext read FContext write SetContext;
     property LayerList: TVectArtLayerListControl read FLayerList;
   end;
 
@@ -55,42 +47,31 @@ begin
   FLayerActions.BringToFront;
 end;
 
-function TLayerPanelFrame.GetDocument: TVectArtDocument;
-begin
-  Result := FLayerList.Document;
-end;
-
-function TLayerPanelFrame.GetEditHistory: TVectArtEditHistory;
-begin
-  Result := FLayerActions.EditHistory;
-end;
-
-function TLayerPanelFrame.GetEditorState: TVectArtEditorState;
-begin
-  Result := FLayerActions.EditorState;
-end;
-
 procedure TLayerPanelFrame.RefreshFromDocument;
 begin
   FLayerList.Invalidate;
   FLayerActions.RefreshState;
 end;
 
-procedure TLayerPanelFrame.SetDocument(const Value: TVectArtDocument);
+procedure TLayerPanelFrame.SetContext(const Value: IVectArtDesignerContext);
 begin
-  FLayerList.Document := Value;
-  FLayerActions.Document := Value;
-end;
-
-procedure TLayerPanelFrame.SetEditHistory(const Value: TVectArtEditHistory);
-begin
-  FLayerList.EditHistory := Value;
-  FLayerActions.EditHistory := Value;
-end;
-
-procedure TLayerPanelFrame.SetEditorState(const Value: TVectArtEditorState);
-begin
-  FLayerActions.EditorState := Value;
+  FContext := Value;
+  if FContext = nil then
+  begin
+    FLayerActions.EditorState := nil;
+    FLayerActions.EditHistory := nil;
+    FLayerActions.Document := nil;
+    FLayerList.EditHistory := nil;
+    FLayerList.Document := nil;
+  end
+  else
+  begin
+    FLayerList.Document := FContext.Document;
+    FLayerList.EditHistory := FContext.EditHistory;
+    FLayerActions.Document := FContext.Document;
+    FLayerActions.EditHistory := FContext.EditHistory;
+    FLayerActions.EditorState := FContext.EditorState;
+  end;
 end;
 
 end.

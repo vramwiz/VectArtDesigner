@@ -1,31 +1,23 @@
-// 中央編集領域のFrameを提供し、Documentを編集キャンバスへ接続する。
+﻿// 中央編集領域のFrameを提供し、Documentを編集キャンバスへ接続する。
 unit VectArtDesignerEditorWorkspaceFrame;
 
 interface
 
 uses
-  System.Classes, VectArtDesignerCanvas, VectArtDesignerDocument,
-  VectArtDesignerEditHistory, VectArtDesignerEditorState,
+  System.Classes, VectArtDesignerCanvas, VectArtDesignerContext,
   VectArtDesignerToolFrames;
 
 type
   TEditorWorkspaceFrame = class(TPlaceholderFrame)
   private
     FCanvasControl: TVectArtCanvasControl;
-    function GetDocument: TVectArtDocument;
-    function GetEditHistory: TVectArtEditHistory;
-    function GetEditorState: TVectArtEditorState;
-    procedure SetDocument(const Value: TVectArtDocument);
-    procedure SetEditHistory(const Value: TVectArtEditHistory);
-    procedure SetEditorState(const Value: TVectArtEditorState);
+    FContext: IVectArtDesignerContext;
+    procedure SetContext(const Value: IVectArtDesignerContext);
   public
     constructor Create(AOwner: TComponent); override;
     property CanvasControl: TVectArtCanvasControl read FCanvasControl;
-    property Document: TVectArtDocument read GetDocument write SetDocument;
-    property EditHistory: TVectArtEditHistory read GetEditHistory
-      write SetEditHistory;
-    property EditorState: TVectArtEditorState read GetEditorState
-      write SetEditorState;
+    // Contextを交換すると、Frame内の全Controlへ同じサービス一式を接続する。
+    property Context: IVectArtDesignerContext read FContext write SetContext;
   end;
 
 implementation
@@ -48,36 +40,22 @@ begin
   FCanvasControl.Align := alClient;
 end;
 
-function TEditorWorkspaceFrame.GetDocument: TVectArtDocument;
+procedure TEditorWorkspaceFrame.SetContext(
+  const Value: IVectArtDesignerContext);
 begin
-  Result := FCanvasControl.Document;
-end;
-
-function TEditorWorkspaceFrame.GetEditHistory: TVectArtEditHistory;
-begin
-  Result := FCanvasControl.EditHistory;
-end;
-
-function TEditorWorkspaceFrame.GetEditorState: TVectArtEditorState;
-begin
-  Result := FCanvasControl.EditorState;
-end;
-
-procedure TEditorWorkspaceFrame.SetDocument(const Value: TVectArtDocument);
-begin
-  FCanvasControl.Document := Value;
-end;
-
-procedure TEditorWorkspaceFrame.SetEditHistory(
-  const Value: TVectArtEditHistory);
-begin
-  FCanvasControl.EditHistory := Value;
-end;
-
-procedure TEditorWorkspaceFrame.SetEditorState(
-  const Value: TVectArtEditorState);
-begin
-  FCanvasControl.EditorState := Value;
+  FContext := Value;
+  if FContext = nil then
+  begin
+    FCanvasControl.EditorState := nil;
+    FCanvasControl.EditHistory := nil;
+    FCanvasControl.Document := nil;
+  end
+  else
+  begin
+    FCanvasControl.Document := FContext.Document;
+    FCanvasControl.EditHistory := FContext.EditHistory;
+    FCanvasControl.EditorState := FContext.EditorState;
+  end;
 end;
 
 end.

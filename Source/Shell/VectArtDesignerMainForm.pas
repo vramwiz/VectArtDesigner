@@ -6,10 +6,11 @@ interface
 
 uses
   System.Classes, Vcl.Controls, Vcl.ExtCtrls, Vcl.Forms, Vcl.StdCtrls,
-  VectArtDesignerDockManager, VectArtDesignerDocument,
+  VectArtDesignerContext, VectArtDesignerDockManager, VectArtDesignerDocument,
   VectArtDesignerEditHistory, VectArtDesignerEditorState,
   VectArtDesignerEditorWorkspaceFrame, VectArtDesignerLayerPanelFrame,
-  VectArtDesignerEditActionsUI,
+  VectArtDesignerEditActionsUI, VectArtDesignerFileActionsUI,
+  VectArtDesignerMifContainer,
   VectArtDesignerObjectPropertiesFrame, VectArtDesignerToolFrames,
   VectArtDesignerToolPaletteFrame;
 
@@ -40,11 +41,13 @@ type
     procedure lblViewMenuClick(Sender: TObject);
   private
     FDockManager: TVectDockManager;
+    FDesignerContext: IVectArtDesignerContext;
     FDocument: TVectArtDocument;
     FEditorFrame: TEditorWorkspaceFrame;
     FEditorState: TVectArtEditorState;
     FEditActionsUI: TVectArtEditActionsUI;
     FEditHistory: TVectArtEditHistory;
+    FFileActionsUI: TVectArtFileActionsUI;
     FLayerFrame: TLayerPanelFrame;
     FObjectPropertiesFrame: TObjectPropertiesFrame;
     FSkiaAcquired: Boolean;
@@ -54,12 +57,19 @@ type
     FLayerMenuItem: TPanel;
     FObjectPropertiesMenuItem: TPanel;
     FToolPaletteMenuItem: TPanel;
+    FMifContainer: TVectArtMifContainer;
+    FMifReader: IVectArtMifContainerReader;
+    FMifWriter: IVectArtMifContainerWriter;
     procedure AttachFrame(AFrame: TFrame; AHost: TWinControl);
     function CreateViewMenuItem(const Caption: string): TPanel;
     procedure DocumentChanged(Sender: TObject);
     procedure FinalizeSkiaRuntime;
     procedure HistoryChanged(Sender: TObject);
     procedure EditorStateChanged(Sender: TObject);
+    procedure FileOpenRequest(Sender: TObject; const FileName: string);
+    procedure FileOpenShortcut(Sender: TObject);
+    procedure FileSaveRequest(Sender: TObject; const FileName: string);
+    procedure FileSaveShortcut(Sender: TObject);
     procedure InitializeSkiaRuntime;
     procedure LoadLayoutSettings;
     procedure SaveLayoutSettings;
@@ -68,6 +78,9 @@ type
     procedure ToolVisibilityChanged(Sender: TToolPlaceholderFrame);
     procedure UpdateLayoutEditMenu;
     procedure UpdateToolMenuItems;
+  public
+    // プラグインなど外部ホストが、同じ編集UIへDocumentを受け渡すための接続口。
+    property Document: TVectArtDocument read FDocument;
   end;
 
 var
@@ -77,8 +90,8 @@ implementation
 
 uses
   System.IniFiles, System.IOUtils, System.Math, System.SysUtils,
-  TextRendererSkiaRuntime, VectArtDesignerKeyboardMovement, Winapi.Dwmapi,
-  Winapi.Windows;
+  TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
+  VectArtDesignerKeyboardMovement, Winapi.Dwmapi, Winapi.Windows;
 
 {$R *.dfm}
 
@@ -154,29 +167,32 @@ begin
   FEditorState.OnChanged := EditorStateChanged;
   FEditHistory := TVectArtEditHistory.Create;
   FEditHistory.OnChanged := HistoryChanged;
+  FDesignerContext := TVectArtDesignerContext.Create(FDocument, FEditHistory,
+    FEditorState);
+  FMifReader := CreateVectArtMifContainerReader;
+  FMifWriter := CreateVectArtMifContainerWriter;
   lblShortcutItems.Visible := False;
+  FFileActionsUI := TVectArtFileActionsUI.CreateForHosts(Self, Self,
+    pnlMenuBar);
+  FFileActionsUI.OnOpenFile := FileOpenRequest;
+  FFileActionsUI.OnSaveFile := FileSaveRequest;
   FEditActionsUI := TVectArtEditActionsUI.CreateForHosts(Self, Self,
     pnlMenuBar, pnlShortcutBar);
   FEditActionsUI.History := FEditHistory;
+  FEditActionsUI.OnOpenRequest := FileOpenShortcut;
   FEditorFrame := TEditorWorkspaceFrame.Create(Self);
-  FEditorFrame.Document := FDocument;
-  FEditorFrame.EditHistory := FEditHistory;
-  FEditorFrame.EditorState := FEditorState;
+  FEditorFrame.Context := FDesignerContext;
   AttachFrame(FEditorFrame, pnlEditorHost);
 
   FDockManager := TVectDockManager.Create(Self, pnlWorkspace,
     pnlLeftDockArea, pnlRightDockArea, pnlLeftDropTarget,
     pnlRightDropTarget, splLeftRegion, splRightRegion);
   FLayerFrame := TLayerPanelFrame.Create(Self);
-  FLayerFrame.Document := FDocument;
-  FLayerFrame.EditHistory := FEditHistory;
-  FLayerFrame.EditorState := FEditorState;
+  FLayerFrame.Context := FDesignerContext;
   FToolPaletteFrame := TToolPaletteFrame.Create(Self);
-  FToolPaletteFrame.EditorState := FEditorState;
+  FToolPaletteFrame.Context := FDesignerContext;
   FObjectPropertiesFrame := TObjectPropertiesFrame.Create(Self);
-  FObjectPropertiesFrame.Document := FDocument;
-  FObjectPropertiesFrame.EditHistory := FEditHistory;
-  FObjectPropertiesFrame.EditorState := FEditorState;
+  FObjectPropertiesFrame.Context := FDesignerContext;
   FDockManager.RegisterTool(FLayerFrame, vdsLeft);
   FDockManager.RegisterTool(FToolPaletteFrame, vdsLeft);
   FDockManager.RegisterTool(FObjectPropertiesFrame, vdsRight);
@@ -206,6 +222,62 @@ begin
   EditorStateChanged(FEditorState);
 end;
 
+procedure TMainForm.FileOpenRequest(Sender: TObject; const FileName: string);
+var
+  Container: TVectArtMifContainer;
+  ErrorMessage: string;
+begin
+  ErrorMessage := '';
+  if (FMifReader = nil) or
+    not FMifReader.TryReadFile(FileName, Container, ErrorMessage) then
+  begin
+    lblStatus.Caption := 'MIF open error: ' + ErrorMessage;
+    Exit;
+  end;
+  FreeAndNil(FMifContainer);
+  FMifContainer := Container;
+  FFileActionsUI.CurrentFileName := FileName;
+  FFileActionsUI.CanSave := True;
+  FEditActionsUI.OnSaveRequest := FileSaveShortcut;
+  Caption := 'VectArtDesigner - ' + ExtractFileName(FileName);
+  lblStatus.Caption := Format(
+    'MIF container loaded: %s   Chunks: %d   Canvas import: pending',
+    [ExtractFileName(FileName), FMifContainer.ChunkCount]);
+end;
+
+procedure TMainForm.FileOpenShortcut(Sender: TObject);
+begin
+  if FFileActionsUI <> nil then
+    FFileActionsUI.ExecuteOpen;
+end;
+
+procedure TMainForm.FileSaveRequest(Sender: TObject; const FileName: string);
+var
+  ErrorMessage: string;
+begin
+  ErrorMessage := '';
+  if FMifContainer = nil then
+  begin
+    lblStatus.Caption := 'MIF save error: no MIF container is loaded';
+    Exit;
+  end;
+  if (FMifWriter = nil) or
+    not FMifWriter.TryWriteFile(FMifContainer, FileName, ErrorMessage) then
+  begin
+    lblStatus.Caption := 'MIF save error: ' + ErrorMessage;
+    Exit;
+  end;
+  FFileActionsUI.CurrentFileName := FileName;
+  Caption := 'VectArtDesigner - ' + ExtractFileName(FileName);
+  lblStatus.Caption := 'MIF container saved: ' + ExtractFileName(FileName);
+end;
+
+procedure TMainForm.FileSaveShortcut(Sender: TObject);
+begin
+  if FFileActionsUI <> nil then
+    FFileActionsUI.ExecuteSave;
+end;
+
 procedure TMainForm.DocumentChanged(Sender: TObject);
 begin
   if FEditorFrame <> nil then
@@ -232,15 +304,20 @@ end;
 procedure TMainForm.FormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
-  if FEditHistory = nil then
-    Exit;
   if ssCtrl in Shift then
   begin
-    if (Key = Ord('Z')) and (ssShift in Shift) then
+    if (Key = Ord('O')) and not (ssShift in Shift) then
+      FFileActionsUI.ExecuteOpen
+    else if (Key = Ord('S')) and (ssShift in Shift) then
+      FFileActionsUI.ExecuteSaveAs
+    else if Key = Ord('S') then
+      FFileActionsUI.ExecuteSave
+    else if (Key = Ord('Z')) and (ssShift in Shift) and
+      (FEditHistory <> nil) then
       FEditHistory.Redo
-    else if Key = Ord('Z') then
+    else if (Key = Ord('Z')) and (FEditHistory <> nil) then
       FEditHistory.Undo
-    else if Key = Ord('Y') then
+    else if (Key = Ord('Y')) and (FEditHistory <> nil) then
       FEditHistory.Redo
     else
       Exit;
@@ -285,27 +362,22 @@ begin
   if FDocument <> nil then
     FDocument.OnChanged := nil;
   if FEditorFrame <> nil then
-  begin
-    FEditorFrame.EditorState := nil;
-    FEditorFrame.EditHistory := nil;
-    FEditorFrame.Document := nil;
-  end;
+    FEditorFrame.Context := nil;
   if FLayerFrame <> nil then
-  begin
-    FLayerFrame.EditHistory := nil;
-    FLayerFrame.Document := nil;
-  end;
+    FLayerFrame.Context := nil;
   if FObjectPropertiesFrame <> nil then
-  begin
-    FObjectPropertiesFrame.EditHistory := nil;
-    FObjectPropertiesFrame.Document := nil;
-  end;
+    FObjectPropertiesFrame.Context := nil;
   if FToolPaletteFrame <> nil then
-    FToolPaletteFrame.EditorState := nil;
+    FToolPaletteFrame.Context := nil;
+  FDesignerContext := nil;
   if FEditorState <> nil then
     FEditorState.OnChanged := nil;
   if FEditHistory <> nil then
     FEditHistory.OnChanged := nil;
+  FreeAndNil(FMifContainer);
+  FMifReader := nil;
+  FMifWriter := nil;
+  FreeAndNil(FFileActionsUI);
   FreeAndNil(FEditActionsUI);
   FreeAndNil(FEditHistory);
   FreeAndNil(FEditorState);
@@ -322,12 +394,9 @@ begin
 end;
 
 procedure TMainForm.InitializeSkiaRuntime;
-var
-  LibraryFileName: string;
 begin
-  LibraryFileName := TPath.Combine(ExtractFilePath(ParamStr(0)), 'sk4d.dll');
   try
-    TTextRendererSkiaRuntime.Acquire(LibraryFileName);
+    TTextRendererSkiaRuntime.Acquire(BundledSkiaRuntimeFileName);
     FSkiaAcquired := True;
   except
     on E: Exception do

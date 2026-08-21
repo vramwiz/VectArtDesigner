@@ -1,6 +1,9 @@
-unit TextRendererSkiaBootstrap;
+﻿unit TextRendererSkiaBootstrap;
 
 interface
+
+// このユニットを含むEXEまたはDLLと同じ場所のSkiaランタイムを返す。
+function BundledSkiaRuntimeFileName: string;
 
 implementation
 
@@ -26,14 +29,16 @@ begin
 end;
 
 procedure LoadBundledSkiaRuntime;
-var
-  LibraryFileName: string;
 begin
-  LibraryFileName := ModuleDirectory + 'sk4d.dll';
-  BootstrapLibraryHandle := LoadLibrary(PChar(LibraryFileName));
+  BootstrapLibraryHandle := LoadLibrary(PChar(BundledSkiaRuntimeFileName));
   if BootstrapLibraryHandle = 0 then
     raise EOSError.CreateFmt('Cannot load Skia runtime: %s (error %d)',
-      [LibraryFileName, GetLastError]);
+      [BundledSkiaRuntimeFileName, GetLastError]);
+end;
+
+function BundledSkiaRuntimeFileName: string;
+begin
+  Result := ModuleDirectory + 'sk4d.dll';
 end;
 
 initialization

@@ -1,7 +1,14 @@
-﻿program VectArtDesigner;
+﻿library SYNC_ScreenLayout_Filter;
+
+// 「画面レイアウト」フィルターのAviUtl2 DLL境界。
+
+{$ALIGN 8}
 
 uses
-  Vcl.Forms,
+  AviUtl2FilterTypes in 'Lib\AviUtl2\AviUtl2FilterTypes.pas',
+  PluginFilterTable in 'Lib\AviUtl2\PluginFilterTable.pas',
+  ScreenLayoutFilterPlugin in 'Source\PlacementPlugin\ScreenLayoutFilterPlugin.pas',
+  ScreenLayoutEditorHost in 'Source\PlacementPlugin\ScreenLayoutEditorHost.pas',
   TextRendererSkiaBootstrap in 'Lib\TextRenderer\TextRendererSkiaBootstrap.pas',
   TextRendererTypes in 'Lib\TextRenderer\TextRendererTypes.pas',
   TextRenderer in 'Lib\TextRenderer\TextRenderer.pas',
@@ -18,6 +25,7 @@ uses
   VectArtDesignerLayerBatchCommands in 'Source\Core\Commands\VectArtDesignerLayerBatchCommands.pas',
   VectArtDesignerEditHistory in 'Source\Core\VectArtDesignerEditHistory.pas',
   VectArtDesignerMifContainer in 'Source\Persistence\Mif\VectArtDesignerMifContainer.pas',
+  VectArtDesignerDocumentJson in 'Source\Persistence\VectArtDesignerDocumentJson.pas',
   VectArtDesignerCanvas in 'Source\Editor\VectArtDesignerCanvas.pas',
   VectArtDesignerCanvasInteraction in 'Source\Editor\VectArtDesignerCanvasInteraction.pas',
   VectArtDesignerShapeCreation in 'Source\Editor\VectArtDesignerShapeCreation.pas',
@@ -37,12 +45,26 @@ uses
   VectArtDesignerToolPaletteFrame in 'Source\ToolPalette\VectArtDesignerToolPaletteFrame.pas',
   VectArtDesignerToolPalette in 'Source\ToolPalette\VectArtDesignerToolPalette.pas';
 
-{$R *.res}
+function InitializePlugin(Version: Cardinal): Byte; cdecl;
+begin
+  InitializeScreenLayoutFilter;
+  Result := 1;
+end;
+
+procedure UninitializePlugin; cdecl;
+begin
+  FinalizeScreenLayoutFilter;
+end;
+
+function GetFilterPluginTable: PFILTER_PLUGIN_TABLE; cdecl;
+begin
+  Result := GetScreenLayoutFilterTable;
+end;
+
+exports
+  InitializePlugin name 'InitializePlugin',
+  UninitializePlugin name 'UninitializePlugin',
+  GetFilterPluginTable name 'GetFilterPluginTable';
 
 begin
-  Application.Initialize;
-  Application.MainFormOnTaskbar := True;
-  Application.Title := 'VectArtDesigner';
-  Application.CreateForm(TMainForm, MainForm);
-  Application.Run;
 end.

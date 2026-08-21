@@ -1,23 +1,23 @@
-// 編集ツールパレットのFrame外枠を提供する。
+﻿// 編集ツールパレットのFrame外枠を提供する。
 unit VectArtDesignerToolPaletteFrame;
 
 interface
 
 uses
-  System.Classes, VectArtDesignerEditorState, VectArtDesignerToolFrames,
+  System.Classes, VectArtDesignerContext, VectArtDesignerToolFrames,
   VectArtDesignerToolPalette;
 
 type
   TToolPaletteFrame = class(TToolPlaceholderFrame)
   private
     FToolPalette: TVectArtToolPaletteControl;
-    function GetEditorState: TVectArtEditorState;
-    procedure SetEditorState(const Value: TVectArtEditorState);
+    FContext: IVectArtDesignerContext;
+    procedure SetContext(const Value: IVectArtDesignerContext);
   public
     constructor Create(AOwner: TComponent); override;
     procedure RefreshState;
-    property EditorState: TVectArtEditorState read GetEditorState
-      write SetEditorState;
+    // 他のFrameと同じContext接続口を使い、必要な編集状態だけを利用する。
+    property Context: IVectArtDesignerContext read FContext write SetContext;
   end;
 
 implementation
@@ -40,19 +40,18 @@ begin
   FToolPalette.Align := alClient;
 end;
 
-function TToolPaletteFrame.GetEditorState: TVectArtEditorState;
-begin
-  Result := FToolPalette.EditorState;
-end;
-
 procedure TToolPaletteFrame.RefreshState;
 begin
   FToolPalette.RefreshState;
 end;
 
-procedure TToolPaletteFrame.SetEditorState(const Value: TVectArtEditorState);
+procedure TToolPaletteFrame.SetContext(const Value: IVectArtDesignerContext);
 begin
-  FToolPalette.EditorState := Value;
+  FContext := Value;
+  if FContext = nil then
+    FToolPalette.EditorState := nil
+  else
+    FToolPalette.EditorState := FContext.EditorState;
 end;
 
 end.

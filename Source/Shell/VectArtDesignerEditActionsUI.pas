@@ -1,4 +1,4 @@
-// Editメニューとコード描画Undo／Redoショートカットを構築・管理する。
+﻿// Editメニューとコード描画Undo／Redoショートカットを構築・管理する。
 unit VectArtDesignerEditActionsUI;
 
 interface
@@ -11,6 +11,8 @@ type
   TVectArtEditShortcutControl = class(TCustomControl)
   private
     FHistory: TVectArtEditHistory;
+    FOnOpenRequest: TNotifyEvent;
+    FOnSaveRequest: TNotifyEvent;
     function ButtonEnabled(Index: Integer): Boolean;
     function ButtonRect(Index: Integer): TRect;
     procedure DrawButton(Index: Integer; const Caption: string);
@@ -24,6 +26,10 @@ type
     constructor Create(AOwner: TComponent); override;
     procedure RefreshState;
     property History: TVectArtEditHistory read FHistory write SetHistory;
+    property OnOpenRequest: TNotifyEvent read FOnOpenRequest
+      write FOnOpenRequest;
+    property OnSaveRequest: TNotifyEvent read FOnSaveRequest
+      write FOnSaveRequest;
   end;
 
   TVectArtEditActionsUI = class(TComponent)
@@ -31,6 +37,8 @@ type
     FEditButton: TPanel;
     FHistory: TVectArtEditHistory;
     FMainForm: TWinControl;
+    FOnOpenRequest: TNotifyEvent;
+    FOnSaveRequest: TNotifyEvent;
     FPopup: TPanel;
     FRedoItem: TPanel;
     FShortcutControl: TVectArtEditShortcutControl;
@@ -40,12 +48,18 @@ type
       ClickHandler: TNotifyEvent): TPanel;
     procedure RedoClick(Sender: TObject);
     procedure SetHistory(const Value: TVectArtEditHistory);
+    procedure SetOnOpenRequest(const Value: TNotifyEvent);
+    procedure SetOnSaveRequest(const Value: TNotifyEvent);
     procedure UndoClick(Sender: TObject);
   public
     constructor CreateForHosts(AOwner: TComponent; AMainForm,
       AMenuBar, AShortcutHost: TWinControl);
     procedure RefreshState;
     property History: TVectArtEditHistory read FHistory write SetHistory;
+    property OnOpenRequest: TNotifyEvent read FOnOpenRequest
+      write SetOnOpenRequest;
+    property OnSaveRequest: TNotifyEvent read FOnSaveRequest
+      write SetOnSaveRequest;
   end;
 
 implementation
@@ -67,6 +81,8 @@ const
 function TVectArtEditShortcutControl.ButtonEnabled(Index: Integer): Boolean;
 begin
   case Index of
+    1: Result := Assigned(FOnOpenRequest);
+    2: Result := Assigned(FOnSaveRequest);
     3: Result := (FHistory <> nil) and FHistory.CanUndo;
     4: Result := (FHistory <> nil) and FHistory.CanRedo;
   else
@@ -176,12 +192,16 @@ procedure TVectArtEditShortcutControl.MouseDown(Button: TMouseButton;
 var
   Index: Integer;
 begin
-  if (Button = mbLeft) and (FHistory <> nil) then
+  if Button = mbLeft then
   begin
     Index := EnsureRange(X div BUTTON_WIDTH, 0, BUTTON_COUNT - 1);
-    if (Index = 3) and FHistory.CanUndo then
+    if (Index = 1) and Assigned(FOnOpenRequest) then
+      FOnOpenRequest(Self)
+    else if (Index = 2) and Assigned(FOnSaveRequest) then
+      FOnSaveRequest(Self)
+    else if (Index = 3) and (FHistory <> nil) and FHistory.CanUndo then
       FHistory.Undo
-    else if (Index = 4) and FHistory.CanRedo then
+    else if (Index = 4) and (FHistory <> nil) and FHistory.CanRedo then
       FHistory.Redo;
   end;
   inherited MouseDown(Button, Shift, X, Y);
@@ -297,6 +317,20 @@ procedure TVectArtEditActionsUI.SetHistory(const Value: TVectArtEditHistory);
 begin
   FHistory := Value;
   FShortcutControl.History := Value;
+  RefreshState;
+end;
+
+procedure TVectArtEditActionsUI.SetOnOpenRequest(const Value: TNotifyEvent);
+begin
+  FOnOpenRequest := Value;
+  FShortcutControl.OnOpenRequest := Value;
+  RefreshState;
+end;
+
+procedure TVectArtEditActionsUI.SetOnSaveRequest(const Value: TNotifyEvent);
+begin
+  FOnSaveRequest := Value;
+  FShortcutControl.OnSaveRequest := Value;
   RefreshState;
 end;
 

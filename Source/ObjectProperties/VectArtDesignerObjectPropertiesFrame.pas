@@ -1,31 +1,23 @@
-// 選択オブジェクト設定ツールのFrame外枠を提供する。
+﻿// 選択オブジェクト設定ツールのFrame外枠を提供する。
 unit VectArtDesignerObjectPropertiesFrame;
 
 interface
 
 uses
-  System.Classes, VectArtDesignerDocument,
-  VectArtDesignerEditHistory, VectArtDesignerEditorState,
+  System.Classes, VectArtDesignerContext,
   VectArtDesignerObjectPropertiesControl, VectArtDesignerToolFrames;
 
 type
   TObjectPropertiesFrame = class(TToolPlaceholderFrame)
   private
     FPropertiesControl: TVectArtObjectPropertiesControl;
-    function GetDocument: TVectArtDocument;
-    function GetEditHistory: TVectArtEditHistory;
-    function GetEditorState: TVectArtEditorState;
-    procedure SetDocument(const Value: TVectArtDocument);
-    procedure SetEditHistory(const Value: TVectArtEditHistory);
-    procedure SetEditorState(const Value: TVectArtEditorState);
+    FContext: IVectArtDesignerContext;
+    procedure SetContext(const Value: IVectArtDesignerContext);
   public
     constructor Create(AOwner: TComponent); override;
     procedure RefreshFromDocument;
-    property Document: TVectArtDocument read GetDocument write SetDocument;
-    property EditHistory: TVectArtEditHistory read GetEditHistory
-      write SetEditHistory;
-    property EditorState: TVectArtEditorState read GetEditorState
-      write SetEditorState;
+    // Contextを交換すると、プロパティ編集Controlへサービス一式を接続する。
+    property Context: IVectArtDesignerContext read FContext write SetContext;
   end;
 
 implementation
@@ -49,41 +41,27 @@ begin
   FPropertiesControl.Align := alClient;
 end;
 
-function TObjectPropertiesFrame.GetDocument: TVectArtDocument;
-begin
-  Result := FPropertiesControl.Document;
-end;
-
-function TObjectPropertiesFrame.GetEditHistory: TVectArtEditHistory;
-begin
-  Result := FPropertiesControl.EditHistory;
-end;
-
-function TObjectPropertiesFrame.GetEditorState: TVectArtEditorState;
-begin
-  Result := FPropertiesControl.EditorState;
-end;
-
 procedure TObjectPropertiesFrame.RefreshFromDocument;
 begin
   FPropertiesControl.RefreshFromDocument;
 end;
 
-procedure TObjectPropertiesFrame.SetDocument(const Value: TVectArtDocument);
+procedure TObjectPropertiesFrame.SetContext(
+  const Value: IVectArtDesignerContext);
 begin
-  FPropertiesControl.Document := Value;
-end;
-
-procedure TObjectPropertiesFrame.SetEditHistory(
-  const Value: TVectArtEditHistory);
-begin
-  FPropertiesControl.EditHistory := Value;
-end;
-
-procedure TObjectPropertiesFrame.SetEditorState(
-  const Value: TVectArtEditorState);
-begin
-  FPropertiesControl.EditorState := Value;
+  FContext := Value;
+  if FContext = nil then
+  begin
+    FPropertiesControl.EditorState := nil;
+    FPropertiesControl.EditHistory := nil;
+    FPropertiesControl.Document := nil;
+  end
+  else
+  begin
+    FPropertiesControl.Document := FContext.Document;
+    FPropertiesControl.EditHistory := FContext.EditHistory;
+    FPropertiesControl.EditorState := FContext.EditorState;
+  end;
 end;
 
 end.
