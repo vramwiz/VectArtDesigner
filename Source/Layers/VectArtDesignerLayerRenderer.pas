@@ -342,7 +342,7 @@ begin
   ACanvas.FillRect(Bounds);
   if FDocument = nil then
     Exit;
-  for I := 0 to FDocument.LayerCount - 1 do
+  for I := 1 to FDocument.LayerCount - 1 do
   begin
     ItemRect := LayerItemRect(Bounds, I);
     if ItemRect.Bottom <= Bounds.Top then
@@ -363,7 +363,7 @@ begin
   ACanvas.FillRect(Bounds);
   if FDocument = nil then
     Exit;
-  for I := 0 to FDocument.LayerCount - 1 do
+  for I := 1 to FDocument.LayerCount - 1 do
   begin
     ItemRect := LayerItemRect(Bounds, I);
     if ItemRect.Bottom <= Bounds.Top then
@@ -401,7 +401,7 @@ begin
   Result := -1;
   if FDocument = nil then
     Exit;
-  for I := 0 to FDocument.LayerCount - 1 do
+  for I := 1 to FDocument.LayerCount - 1 do
   begin
     ItemRect := LayerItemRect(Bounds, I);
     if (Y >= ItemRect.Top) and (Y < ItemRect.Bottom) then
@@ -414,8 +414,10 @@ function TVectArtLayerRenderer.LayerItemRect(const Bounds: TRect;
 var
   ItemBottom: Integer;
 begin
+  if Index <= 0 then
+    Exit(TRect.Empty);
   ItemBottom := Bounds.Bottom - LAYER_LIST_PADDING -
-    Index * (LAYER_ROW_HEIGHT + LAYER_GAP);
+    (Index - 1) * (LAYER_ROW_HEIGHT + LAYER_GAP);
   Result := Rect(Bounds.Left + LAYER_LIST_PADDING,
     ItemBottom - LAYER_ROW_HEIGHT,
     Bounds.Right - LAYER_LIST_PADDING, ItemBottom);

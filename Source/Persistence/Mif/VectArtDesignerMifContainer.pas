@@ -28,6 +28,8 @@ type
   public
     constructor Create;
     destructor Destroy; override;
+    // 新規MIF生成時に、指定タグとデータを末尾へ追加する。
+    procedure AddChunk(const Tag: AnsiString; const Data: TBytes);
     property ChunkCount: Integer read GetChunkCount;
     property Chunks[Index: Integer]: TVectArtMifChunk read GetChunk; default;
   end;
@@ -120,6 +122,14 @@ begin
 end;
 
 { TVectArtMifContainer }
+
+procedure TVectArtMifContainer.AddChunk(const Tag: AnsiString;
+  const Data: TBytes);
+begin
+  if Length(Tag) <> 4 then
+    raise EArgumentException.Create('MIF chunk tag must contain four bytes');
+  FChunks.Add(TVectArtMifChunk.Create(Tag, Data));
+end;
 
 constructor TVectArtMifContainer.Create;
 begin

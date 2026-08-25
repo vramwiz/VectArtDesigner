@@ -5,10 +5,11 @@ unit VectArtDesignerCanvas;
 interface
 
 uses
-  System.Classes, System.Types, Vcl.Controls, VectArtDesignerCanvasInteraction,
+  System.Classes, System.SysUtils, System.Types, Vcl.Controls, Vcl.Graphics,
+  VectArtDesignerCanvasInteraction,
   VectArtDesignerDocument, VectArtDesignerEditHistory,
   VectArtDesignerEditorState, VectArtDesignerSelectionGeometry,
-  VectArtDesignerShapeCreation;
+  VectArtDesignerShapeCreation, VectArtDesignerRenderer;
 
 type
   TVectArtCanvasControl = class(TCustomControl)
@@ -18,6 +19,10 @@ type
     FDocument: TVectArtDocument;
     FEditorState: TVectArtEditorState;
     FInteraction: TVectArtCanvasInteraction;
+    FReferenceBackground: TBitmap;
+    FRenderedDocument: TBitmap;
+    FRenderBuffer: TVectArtRenderBuffer;
+    FRenderedRevision: Int64;
     FShapeCreation: TVectArtShapeCreation;
     FPanning: Boolean;
     FPanOffset: TPointF;
@@ -32,6 +37,8 @@ type
     procedure SetDocument(const Value: TVectArtDocument);
     procedure SetEditorState(const Value: TVectArtEditorState);
     function GetEditHistory: TVectArtEditHistory;
+    function HasReferenceBackground: Boolean;
+    procedure UpdateRenderedDocument;
     procedure SetEditHistory(const Value: TVectArtEditHistory);
   protected
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
@@ -46,6 +53,9 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    // 外部ホストのRGBA8画像をDocumentに含めない参照背景として設定する。
+    procedure SetReferenceBackgroundRgba(const Pixels: TBytes;
+      Width, Height: Integer);
     property CanvasBounds: TRect read FCanvasBounds;
     property Document: TVectArtDocument read FDocument write SetDocument;
     property EditHistory: TVectArtEditHistory read GetEditHistory
@@ -62,7 +72,7 @@ const
 implementation
 
 uses
-  System.Math, Winapi.Windows, Vcl.Direct2D, Vcl.Graphics;
+  System.Math, Winapi.D2D1, Winapi.Windows, Vcl.Direct2D;
 
 const
   CANVAS_MARGIN         = 32;
@@ -77,22 +87,20 @@ const
   MIN_VIEW_ZOOM         = 0.25;
   VIEW_ZOOM_STEP        = 1.2;
 
-function BlendColor(Foreground, Background: TColor;
-  Opacity: Single): TColor;
+procedure DrawPremultipliedBitmap(Target: TCanvas; const Bounds: TRect;
+  Bitmap: Vcl.Graphics.TBitmap);
 var
-  BackColor: TColor;
-  ForeColor: TColor;
+  Blend: BLENDFUNCTION;
 begin
-  ForeColor := ColorToRGB(Foreground);
-  BackColor := ColorToRGB(Background);
-  Opacity := EnsureRange(Opacity, 0.0, 1.0);
-  Result := RGB(
-    Round(GetRValue(ForeColor) * Opacity +
-      GetRValue(BackColor) * (1 - Opacity)),
-    Round(GetGValue(ForeColor) * Opacity +
-      GetGValue(BackColor) * (1 - Opacity)),
-    Round(GetBValue(ForeColor) * Opacity +
-      GetBValue(BackColor) * (1 - Opacity)));
+  if (Bitmap = nil) or (Bitmap.Width <= 0) or (Bitmap.Height <= 0) then
+    Exit;
+  Blend.BlendOp := AC_SRC_OVER;
+  Blend.BlendFlags := 0;
+  Blend.SourceConstantAlpha := 255;
+  Blend.AlphaFormat := AC_SRC_ALPHA;
+  AlphaBlend(Target.Handle, Bounds.Left, Bounds.Top,
+    Bounds.Width, Bounds.Height, Bitmap.Canvas.Handle,
+    0, 0, Bitmap.Width, Bitmap.Height, Blend);
 end;
 
 constructor TVectArtCanvasControl.Create(AOwner: TComponent);
@@ -103,6 +111,12 @@ begin
   DoubleBuffered := True;
   FDirect2DEnabled := TDirect2DCanvas.Supported;
   FInteraction := TVectArtCanvasInteraction.Create;
+  FReferenceBackground := Vcl.Graphics.TBitmap.Create;
+  FReferenceBackground.PixelFormat := pf32bit;
+  FRenderedDocument := Vcl.Graphics.TBitmap.Create;
+  FRenderedDocument.PixelFormat := pf32bit;
+  FRenderBuffer := TVectArtRenderBuffer.Create;
+  FRenderedRevision := -1;
   FShapeCreation := TVectArtShapeCreation.Create;
   FPanOffset := TPointF.Zero;
   FViewZoom := 1.0;
@@ -111,9 +125,19 @@ end;
 
 destructor TVectArtCanvasControl.Destroy;
 begin
+  FRenderBuffer.Free;
+  FRenderedDocument.Free;
+  FReferenceBackground.Free;
   FShapeCreation.Free;
   FInteraction.Free;
   inherited Destroy;
+end;
+
+function TVectArtCanvasControl.HasReferenceBackground: Boolean;
+begin
+  Result := (FReferenceBackground <> nil) and
+    (FReferenceBackground.Width > 0) and
+    (FReferenceBackground.Height > 0);
 end;
 
 procedure TVectArtCanvasControl.CalculateCanvasBounds;
@@ -334,6 +358,7 @@ end;
 procedure TVectArtCanvasControl.Paint;
 begin
   CalculateCanvasBounds;
+  UpdateRenderedDocument;
   if FDirect2DEnabled then
     try
       PaintDirect2D;
@@ -342,6 +367,51 @@ begin
       FDirect2DEnabled := False;
     end;
   PaintGDI;
+end;
+
+procedure TVectArtCanvasControl.UpdateRenderedDocument;
+var
+  Alpha: Integer;
+  Destination: PByte;
+  Height: Integer;
+  Source: PVectArtRgbaPixel;
+  Width: Integer;
+  X: Integer;
+  Y: Integer;
+begin
+  if (FDocument = nil) or (FDocument.CanvasLayer = nil) then
+  begin
+    FRenderedDocument.SetSize(0, 0);
+    FRenderedRevision := -1;
+    Exit;
+  end;
+  Width := Max(FDocument.CanvasLayer.Width, 1);
+  Height := Max(FDocument.CanvasLayer.Height, 1);
+  if (FRenderedRevision = FDocument.Revision) and
+    (FRenderedDocument.Width = Width) and
+    (FRenderedDocument.Height = Height) then
+    Exit;
+
+  RenderVectArtDocument(FDocument, FRenderBuffer, Width, Height);
+  FRenderedDocument.PixelFormat := pf32bit;
+  FRenderedDocument.SetSize(Width, Height);
+  FRenderedDocument.AlphaFormat := afPremultiplied;
+  Source := FRenderBuffer.Data;
+  for Y := 0 to Height - 1 do
+  begin
+    Destination := FRenderedDocument.ScanLine[Y];
+    for X := 0 to Width - 1 do
+    begin
+      Alpha := Source^.A;
+      Destination[0] := (Integer(Source^.B) * Alpha + 127) div 255;
+      Destination[1] := (Integer(Source^.G) * Alpha + 127) div 255;
+      Destination[2] := (Integer(Source^.R) * Alpha + 127) div 255;
+      Destination[3] := Alpha;
+      Inc(Destination, 4);
+      Inc(Source);
+    end;
+  end;
+  FRenderedRevision := FDocument.Revision;
 end;
 
 procedure TVectArtCanvasControl.PaintDirect2D;
@@ -353,6 +423,9 @@ var
   ColumnEnd: Integer;
   ColumnStart: Integer;
   Direct2DCanvas: TDirect2DCanvas;
+  DocumentBitmap: ID2D1Bitmap;
+  ReferenceBitmap: ID2D1Bitmap;
+  ReferenceRect: TD2D1RectF;
   Handle: TVectArtSelectionHandle;
   I: Integer;
   Layer: TVectArtLayer;
@@ -384,7 +457,18 @@ begin
       CanvasLayer := nil;
       if FDocument <> nil then
         CanvasLayer := FDocument.CanvasLayer;
-      if (CanvasLayer <> nil) and CanvasLayer.Visible and
+      if HasReferenceBackground then
+      begin
+        ReferenceBitmap := Direct2DCanvas.CreateBitmap(FReferenceBackground);
+        if ReferenceBitmap = nil then
+          raise EInvalidOp.Create('Direct2D reference background creation failed');
+        ReferenceRect := D2D1RectF(FCanvasBounds.Left, FCanvasBounds.Top,
+          FCanvasBounds.Right, FCanvasBounds.Bottom);
+        Direct2DCanvas.RenderTarget.DrawBitmap(ReferenceBitmap,
+          @ReferenceRect);
+        ReferenceBitmap := nil;
+      end
+      else if (CanvasLayer <> nil) and CanvasLayer.Visible and
         not CanvasLayer.Transparent then
       begin
         Direct2DCanvas.Brush.Color := CanvasLayer.BackgroundColor;
@@ -421,6 +505,19 @@ begin
         end;
       end;
 
+      if (FRenderedDocument.Width > 0) and
+        (FRenderedDocument.Height > 0) then
+      begin
+        DocumentBitmap := Direct2DCanvas.CreateBitmap(FRenderedDocument);
+        if DocumentBitmap = nil then
+          raise EInvalidOp.Create('Direct2D document bitmap creation failed');
+        ReferenceRect := D2D1RectF(FCanvasBounds.Left, FCanvasBounds.Top,
+          FCanvasBounds.Right, FCanvasBounds.Bottom);
+        Direct2DCanvas.RenderTarget.DrawBitmap(DocumentBitmap,
+          @ReferenceRect);
+        DocumentBitmap := nil;
+      end;
+
       if FDocument <> nil then
         for I := 1 to FDocument.LayerCount - 1 do
         begin
@@ -433,11 +530,6 @@ begin
             FCanvasBounds.Top + Round(RectangleLayer.Bounds.Top * FZoom),
             FCanvasBounds.Left + Round(RectangleLayer.Bounds.Right * FZoom),
             FCanvasBounds.Top + Round(RectangleLayer.Bounds.Bottom * FZoom));
-          Direct2DCanvas.Brush.Color := RectangleLayer.FillColor;
-          Direct2DCanvas.Brush.Handle.SetOpacity(
-            EnsureRange(RectangleLayer.Opacity, 0.0, 1.0));
-          Direct2DCanvas.FillRect(LayerRect);
-          Direct2DCanvas.Brush.Handle.SetOpacity(1.0);
           if FDocument.IsLayerSelected(I) then
           begin
             SelectionLocked := SelectionLocked or Layer.Locked;
@@ -492,7 +584,6 @@ end;
 
 procedure TVectArtCanvasControl.PaintGDI;
 var
-  CanvasBackground: TColor;
   CanvasLayer: TVectArtCanvasLayer;
   CreationRect: TRect;
   CellRect: TRect;
@@ -525,13 +616,15 @@ begin
   Canvas.FillRect(ShadowBounds);
 
   CanvasLayer := nil;
-  CanvasBackground := clWhite;
   if FDocument <> nil then
     CanvasLayer := FDocument.CanvasLayer;
-  if (CanvasLayer <> nil) and CanvasLayer.Visible and
+  if HasReferenceBackground then
+  begin
+    Canvas.StretchDraw(FCanvasBounds, FReferenceBackground);
+  end
+  else if (CanvasLayer <> nil) and CanvasLayer.Visible and
     not CanvasLayer.Transparent then
   begin
-    CanvasBackground := CanvasLayer.BackgroundColor;
     Canvas.Brush.Color := CanvasLayer.BackgroundColor;
     Canvas.FillRect(FCanvasBounds);
   end
@@ -566,6 +659,8 @@ begin
     end;
   end;
 
+  DrawPremultipliedBitmap(Canvas, FCanvasBounds, FRenderedDocument);
+
   if FDocument <> nil then
     for I := 1 to FDocument.LayerCount - 1 do
     begin
@@ -578,9 +673,6 @@ begin
         FCanvasBounds.Top + Round(RectangleLayer.Bounds.Top * FZoom),
         FCanvasBounds.Left + Round(RectangleLayer.Bounds.Right * FZoom),
         FCanvasBounds.Top + Round(RectangleLayer.Bounds.Bottom * FZoom));
-      Canvas.Brush.Color := BlendColor(RectangleLayer.FillColor,
-        CanvasBackground, RectangleLayer.Opacity);
-      Canvas.FillRect(LayerRect);
       if FDocument.IsLayerSelected(I) then
       begin
         SelectionLocked := SelectionLocked or Layer.Locked;
@@ -625,6 +717,41 @@ begin
   end;
 end;
 
+procedure TVectArtCanvasControl.SetReferenceBackgroundRgba(
+  const Pixels: TBytes; Width, Height: Integer);
+var
+  Destination: PByte;
+  Source: PByte;
+  X: Integer;
+  Y: Integer;
+begin
+  FReferenceBackground.SetSize(0, 0);
+  if (Width <= 0) or (Height <= 0) or
+    (Length(Pixels) <> NativeInt(Width) * Height * 4) then
+  begin
+    Invalidate;
+    Exit;
+  end;
+  FReferenceBackground.PixelFormat := pf32bit;
+  FReferenceBackground.SetSize(Width, Height);
+  FReferenceBackground.AlphaFormat := afIgnored;
+  Source := @Pixels[0];
+  for Y := 0 to Height - 1 do
+  begin
+    Destination := FReferenceBackground.ScanLine[Y];
+    for X := 0 to Width - 1 do
+    begin
+      Destination[0] := Source[2];
+      Destination[1] := Source[1];
+      Destination[2] := Source[0];
+      Destination[3] := 255;
+      Inc(Destination, 4);
+      Inc(Source, 4);
+    end;
+  end;
+  Invalidate;
+end;
+
 procedure TVectArtCanvasControl.Resize;
 begin
   inherited Resize;
@@ -637,6 +764,7 @@ begin
   if FDocument = Value then
     Exit;
   FDocument := Value;
+  FRenderedRevision := -1;
   FPanOffset := TPointF.Zero;
   FViewZoom := 1.0;
   CalculateCanvasBounds;

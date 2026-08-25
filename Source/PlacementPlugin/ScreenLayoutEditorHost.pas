@@ -3,16 +3,21 @@ unit ScreenLayoutEditorHost;
 
 interface
 
+uses
+  System.SysUtils;
+
 function EditScreenLayout(const SerializedData: string;
+  const BackgroundPixels: TBytes; BackgroundWidth, BackgroundHeight: Integer;
   out UpdatedData, ErrorMessage: string): Boolean;
 
 implementation
 
 uses
-  System.SysUtils, Vcl.Forms, VectArtDesignerDocumentJson,
+  Vcl.Forms, VectArtDesignerDocumentJson,
   VectArtDesignerMainForm;
 
 function EditScreenLayout(const SerializedData: string;
+  const BackgroundPixels: TBytes; BackgroundWidth, BackgroundHeight: Integer;
   out UpdatedData, ErrorMessage: string): Boolean;
 var
   EditorForm: TMainForm;
@@ -24,8 +29,12 @@ begin
   try
     try
       EditorForm := TMainForm.Create(nil);
-      EditorForm.Caption := '【画面レイアウト】 - 編集';
+      EditorForm.Caption := '画面レイアウト - 編集';
       EditorForm.Position := poScreenCenter;
+      EditorForm.SetCanvasSettingsVisible(False);
+      EditorForm.SetFileMenuVisible(False);
+      EditorForm.SetReferenceBackgroundRgba(BackgroundPixels,
+        BackgroundWidth, BackgroundHeight);
       if (SerializedData <> '') and
         not TryDeserializeVectArtDocument(SerializedData,
           EditorForm.Document, ErrorMessage) then

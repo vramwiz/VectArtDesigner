@@ -66,6 +66,7 @@ type
   private
     FLayers: TObjectList<TVectArtLayer>;
     FOnChanged: TNotifyEvent;
+    FRevision: Int64;
     FSelectedIndex: Integer;
     FSelectedLayers: TList<Integer>;
     function GetCanvasLayer: TVectArtCanvasLayer;
@@ -81,6 +82,7 @@ type
     function InsertRectangle(Index: Integer;
       const Data: TVectArtRectangleData): Integer;
     function IsLayerSelected(Index: Integer): Boolean;
+    procedure SetCanvasSize(AWidth, AHeight: Integer);
     procedure SetRectangleBounds(Index: Integer; const Value: TRectF);
     procedure SetRectangleFillColor(Index: Integer; Value: TColor);
     procedure SetLayerLocked(Index: Integer; Value: Boolean);
@@ -94,6 +96,7 @@ type
     property LayerCount: Integer read GetLayerCount;
     property Layers[Index: Integer]: TVectArtLayer read GetLayer; default;
     property OnChanged: TNotifyEvent read FOnChanged write FOnChanged;
+    property Revision: Int64 read FRevision;
     property SelectedIndex: Integer read FSelectedIndex write SetSelectedIndex;
     property SelectionCount: Integer read GetSelectionCount;
   end;
@@ -145,28 +148,13 @@ end;
 { TVectArtDocument }
 
 constructor TVectArtDocument.Create;
-const
-  FIRST_RECT_SIZE = 480;
-  FIRST_RECT_COLOR = TColor($00E2904A); // RGB #4A90E2
-  SECOND_RECT_COLOR = TColor($005C6CE6); // RGB #E66C5C
-var
-  Left: Single;
-  Top: Single;
 begin
   inherited Create;
   FLayers := TObjectList<TVectArtLayer>.Create(True);
   FSelectedLayers := TList<Integer>.Create;
   FLayers.Add(TVectArtCanvasLayer.Create(DEFAULT_CANVAS_WIDTH,
     DEFAULT_CANVAS_HEIGHT, clWhite));
-  Left := (DEFAULT_CANVAS_WIDTH - FIRST_RECT_SIZE) / 2;
-  Top := (DEFAULT_CANVAS_HEIGHT - FIRST_RECT_SIZE) / 2;
-  FLayers.Add(TVectArtRectangleLayer.Create('Rectangle 1',
-    TRectF.Create(Left, Top, Left + FIRST_RECT_SIZE,
-      Top + FIRST_RECT_SIZE), FIRST_RECT_COLOR));
-  FLayers.Add(TVectArtRectangleLayer.Create('Rectangle 2',
-    TRectF.Create(180, 650, 700, 910), SECOND_RECT_COLOR));
-  FSelectedIndex := FLayers.Count - 1;
-  FSelectedLayers.Add(FSelectedIndex);
+  FSelectedIndex := -1;
 end;
 
 destructor TVectArtDocument.Destroy;
@@ -178,6 +166,7 @@ end;
 
 procedure TVectArtDocument.Changed;
 begin
+  Inc(FRevision);
   if Assigned(FOnChanged) then
     FOnChanged(Self);
 end;
@@ -294,6 +283,22 @@ end;
 function TVectArtDocument.IsLayerSelected(Index: Integer): Boolean;
 begin
   Result := FSelectedLayers.Contains(Index);
+end;
+
+procedure TVectArtDocument.SetCanvasSize(AWidth, AHeight: Integer);
+var
+  Canvas: TVectArtCanvasLayer;
+begin
+  Canvas := GetCanvasLayer;
+  if Canvas = nil then
+    Exit;
+  AWidth := Max(AWidth, 1);
+  AHeight := Max(AHeight, 1);
+  if (Canvas.Width = AWidth) and (Canvas.Height = AHeight) then
+    Exit;
+  Canvas.Width := AWidth;
+  Canvas.Height := AHeight;
+  Changed;
 end;
 
 procedure TVectArtDocument.SetSelectedIndex(const Value: Integer);

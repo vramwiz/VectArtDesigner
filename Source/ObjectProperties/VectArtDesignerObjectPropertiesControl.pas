@@ -24,6 +24,7 @@ type
     procedure ApplyColor;
     procedure ApplyGeometry;
     procedure ApplyOpacity;
+    procedure ClearEditValue(Edit: TEdit);
     procedure EditExit(Sender: TObject);
     procedure EditKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     function GetSelectedRectangleIndices: TArray<Integer>;
@@ -72,6 +73,14 @@ begin
   FColorEdit := NewDarkEdit;
   FOpacityEdit := NewDarkEdit;
   SetEditorsEnabled(False);
+end;
+
+procedure TVectArtObjectPropertiesControl.ClearEditValue(Edit: TEdit);
+begin
+  // TCustomEdit.ClearはHandleNeededを呼ぶ。フォーム接続前の初期更新では
+  // 親ウィンドウがまだないため、既定で空のEditはそのままにする。
+  if (Edit <> nil) and Edit.HandleAllocated then
+    Edit.Clear;
 end;
 
 procedure TVectArtObjectPropertiesControl.ApplyColor;
@@ -397,11 +406,11 @@ begin
           GetGValue(ColorValue), GetBValue(ColorValue)]);
       end
       else
-        FColorEdit.Clear;
+        ClearEditValue(FColorEdit);
       if CommonOpacity then
         FOpacityEdit.Text := FormatFloat('0.##', OpacityValue * 100)
       else
-        FOpacityEdit.Clear;
+        ClearEditValue(FOpacityEdit);
       SetEditorsEnabled(True);
       if SelectedLayersHaveLock then
       begin
@@ -414,12 +423,12 @@ begin
     end
     else
     begin
-      FXEdit.Clear;
-      FYEdit.Clear;
-      FWidthEdit.Clear;
-      FHeightEdit.Clear;
-      FColorEdit.Clear;
-      FOpacityEdit.Clear;
+      ClearEditValue(FXEdit);
+      ClearEditValue(FYEdit);
+      ClearEditValue(FWidthEdit);
+      ClearEditValue(FHeightEdit);
+      ClearEditValue(FColorEdit);
+      ClearEditValue(FOpacityEdit);
       SetEditorsEnabled(False);
     end;
   finally

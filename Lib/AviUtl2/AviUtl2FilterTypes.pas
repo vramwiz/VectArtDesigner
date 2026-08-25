@@ -12,6 +12,13 @@ type
   PEDIT_SECTION = ^TEDIT_SECTION;
   TFilterItemButtonCallback = procedure(Edit: PEDIT_SECTION); cdecl;
   TFILTER_ITEM_BUTTON_CALLBACK = TFilterItemButtonCallback;
+  TOBJECT_LAYER_FRAME = record
+    Layer: Integer;
+    StartFrame: Integer;
+    EndFrame: Integer;
+  end;
+  TGetObjectLayerFrameFunc = function(
+    Obj: OBJECT_HANDLE): TOBJECT_LAYER_FRAME; cdecl;
   TGetFocusObjectFunc = function: OBJECT_HANDLE; cdecl;
   TSetObjectItemValueFunc = function(Obj: OBJECT_HANDLE; Effect: LPCWSTR;
     Item: LPCWSTR; Value: PAnsiChar): LongBool; cdecl;
@@ -24,7 +31,7 @@ type
     CreateObjectFromAlias: Pointer;
     FindObject: Pointer;
     CountObjectEffect: Pointer;
-    GetObjectLayerFrame: Pointer;
+    GetObjectLayerFrame: TGetObjectLayerFrameFunc;
     GetObjectAlias: Pointer;
     GetObjectItemValue: TGetObjectItemValueFunc;
     SetObjectItemValue: TSetObjectItemValueFunc;
