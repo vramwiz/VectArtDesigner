@@ -25,7 +25,8 @@ implementation
 uses
   System.Classes, System.Generics.Collections, System.IOUtils, System.Math,
   System.SysUtils, System.Types, System.Variants, Vcl.Graphics, Winapi.Windows,
-  Xml.omnixmldom, Xml.XMLDoc, Xml.XMLIntf, Xml.xmldom;
+  VectArtDesignerGeometry, Xml.omnixmldom, Xml.XMLDoc, Xml.XMLIntf,
+  Xml.xmldom;
 
 const
   SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
@@ -73,8 +74,11 @@ function TryCreateVectArtSvg(Document: TVectArtDocument; out SvgText,
 var
   Builder: TStringBuilder;
   Canvas: TVectArtCanvasLayer;
+  DashIndex: Integer;
+  DashIntervals: TArray<Single>;
   I: Integer;
   Layer: TVectArtLayer;
+  Line: TVectArtLineLayer;
   Rectangle: TVectArtRectangleLayer;
 begin
   Result := False;
@@ -109,6 +113,40 @@ begin
       for I := 1 to Document.LayerCount - 1 do
       begin
         Layer := Document[I];
+        if Layer is TVectArtLineLayer then
+        begin
+          Line := TVectArtLineLayer(Layer);
+          Builder.Append('  <line x1="').Append(SvgNumber(Line.StartPoint.X))
+            .Append('" y1="').Append(SvgNumber(Line.StartPoint.Y))
+            .Append('" x2="').Append(SvgNumber(Line.EndPoint.X))
+            .Append('" y2="').Append(SvgNumber(Line.EndPoint.Y))
+            .Append('" fill="none" stroke="')
+            .Append(SvgColor(Line.StrokeColor)).Append('" stroke-width="')
+            .Append(SvgNumber(Line.StrokeWidth)).Append('" opacity="')
+            .Append(SvgNumber(Line.Opacity)).Append('" vad:stroke-color="')
+            .Append(Integer(Line.StrokeColor)).Append('" vad:stroke-style="')
+            .Append(Ord(Line.StrokeStyle)).Append('" vad:name="')
+            .Append(XmlEscape(Line.Name)).Append('" vad:locked="')
+            .Append(BooleanText(Line.Locked)).Append('"');
+          DashIntervals := VectArtStrokeDashIntervals(Line.StrokeStyle,
+            Line.StrokeWidth);
+          if Length(DashIntervals) > 0 then
+          begin
+            Builder.Append(' stroke-dasharray="');
+            for DashIndex := 0 to High(DashIntervals) do
+            begin
+              if DashIndex > 0 then
+                Builder.Append(' ');
+              Builder.Append(SvgNumber(DashIntervals[DashIndex]));
+            end;
+            Builder.Append('"');
+          end;
+          if not Line.Visible then
+            Builder.Append(' display="none"');
+          Builder.Append('><title>').Append(XmlEscape(Line.Name))
+            .AppendLine('</title></line>');
+          Continue;
+        end;
         if not (Layer is TVectArtRectangleLayer) then
           Continue;
         Rectangle := TVectArtRectangleLayer(Layer);
@@ -120,9 +158,42 @@ begin
           .Append('" opacity="').Append(SvgNumber(Rectangle.Opacity))
           .Append('" vad:fill-color="')
           .Append(Integer(Rectangle.FillColor))
-          .Append('" vad:name="').Append(XmlEscape(Rectangle.Name))
+          .Append('"');
+        if Rectangle.StrokeWidth > 0 then
+        begin
+          Builder.Append(' stroke="').Append(SvgColor(Rectangle.StrokeColor))
+            .Append('" stroke-width="').Append(SvgNumber(Rectangle.StrokeWidth))
+            .Append('" vad:stroke-color="')
+            .Append(Integer(Rectangle.StrokeColor))
+            .Append('" vad:stroke-style="')
+            .Append(Ord(Rectangle.StrokeStyle)).Append('"');
+          DashIntervals := VectArtStrokeDashIntervals(
+            Rectangle.StrokeStyle, Rectangle.StrokeWidth);
+          if Length(DashIntervals) > 0 then
+          begin
+            Builder.Append(' stroke-dasharray="');
+            for DashIndex := 0 to High(DashIntervals) do
+            begin
+              if DashIndex > 0 then
+                Builder.Append(' ');
+              Builder.Append(SvgNumber(DashIntervals[DashIndex]));
+            end;
+            Builder.Append('"');
+          end;
+        end
+        else
+          Builder.Append(' stroke="none"');
+        Builder
+          .Append(' vad:name="').Append(XmlEscape(Rectangle.Name))
           .Append('" vad:locked="').Append(BooleanText(Rectangle.Locked))
           .Append('"');
+        if not SameValue(Rectangle.RotationDegrees, 0.0) then
+          Builder.Append(' transform="rotate(')
+            .Append(SvgNumber(Rectangle.RotationDegrees)).Append(' ')
+            .Append(SvgNumber((Rectangle.Bounds.Left +
+              Rectangle.Bounds.Right) * 0.5)).Append(' ')
+            .Append(SvgNumber((Rectangle.Bounds.Top +
+              Rectangle.Bounds.Bottom) * 0.5)).Append(')"');
         if not Rectangle.Visible then
           Builder.Append(' display="none"');
         Builder.Append('><title>').Append(XmlEscape(Rectangle.Name))
@@ -306,6 +377,57 @@ begin
   Result := Format('Rectangle %d', [Index]);
 end;
 
+function TryParseRotation(const Node: IXMLNode; var Bounds: TRectF;
+  out Angle: Single): Boolean;
+var
+  CloseIndex: Integer;
+  Center: TPointF;
+  I: Integer;
+  NewCenter: TPointF;
+  OpenIndex: Integer;
+  Parts: TStringList;
+  Pivot: TPointF;
+  TransformText: string;
+begin
+  Angle := 0.0;
+  if not TryGetAttribute(Node, 'transform', TransformText) then
+    Exit(True);
+  TransformText := Trim(TransformText);
+  OpenIndex := TransformText.IndexOf('(');
+  CloseIndex := TransformText.LastIndexOf(')');
+  if (OpenIndex < 0) or (CloseIndex <= OpenIndex) or
+    not SameText(Trim(TransformText.Substring(0, OpenIndex)), 'rotate') then
+    Exit(False);
+  TransformText := TransformText.Substring(OpenIndex + 1,
+    CloseIndex - OpenIndex - 1).Replace(',', ' ');
+  Parts := TStringList.Create;
+  try
+    Parts.StrictDelimiter := True;
+    Parts.Delimiter := ' ';
+    Parts.DelimitedText := TransformText;
+    for I := Parts.Count - 1 downto 0 do
+      if Parts[I] = '' then
+        Parts.Delete(I);
+    Result := (Parts.Count in [1, 3]) and
+      TryParseSvgNumber(Parts[0], Angle);
+    if not Result then
+      Exit;
+    Pivot := TPointF.Create(0, 0);
+    if Parts.Count = 3 then
+      Result := TryParseSvgNumber(Parts[1], Pivot.X) and
+        TryParseSvgNumber(Parts[2], Pivot.Y);
+    if Result then
+    begin
+      Center := TPointF.Create((Bounds.Left + Bounds.Right) * 0.5,
+        (Bounds.Top + Bounds.Bottom) * 0.5);
+      NewCenter := RotatePointAround(Center, Pivot, Angle);
+      Bounds.Offset(NewCenter.X - Center.X, NewCenter.Y - Center.Y);
+    end;
+  finally
+    Parts.Free;
+  end;
+end;
+
 function TryParseRectangle(const Node: IXMLNode; Index: Integer;
   out Data: TVectArtRectangleData): Boolean;
 var
@@ -317,6 +439,10 @@ var
   LockedText: string;
   Opacity: Single;
   OpacityText: string;
+  StrokeInteger: Integer;
+  StrokeStyleInteger: Integer;
+  StrokeText: string;
+  StrokeWidth: Single;
   ValueText: string;
   VisibilityValue: string;
   Width: Single;
@@ -347,6 +473,34 @@ begin
     TryStrToInt(ValueText, FillInteger) and
     (ColorToRGB(TColor(FillInteger)) = ColorToRGB(Data.FillColor)) then
     Data.FillColor := TColor(FillInteger);
+  Data.StrokeColor := clBlack;
+  Data.StrokeStyle := vssSolid;
+  Data.StrokeWidth := 0.0;
+  StrokeText := 'none';
+  if TryGetPresentationValue(Node, 'stroke', StrokeText) and
+    not SameText(Trim(StrokeText), 'none') then
+  begin
+    if not TryParseSvgColor(StrokeText, Data.StrokeColor) then
+      Exit;
+    if TryGetAttribute(Node, 'vad:stroke-color', ValueText) and
+      TryStrToInt(ValueText, StrokeInteger) and
+      (ColorToRGB(TColor(StrokeInteger)) =
+       ColorToRGB(Data.StrokeColor)) then
+      Data.StrokeColor := TColor(StrokeInteger);
+    StrokeWidth := 1.0;
+    if TryGetPresentationValue(Node, 'stroke-width', ValueText) and
+      (not TryParseSvgNumber(ValueText, StrokeWidth) or (StrokeWidth < 0)) then
+      Exit;
+    Data.StrokeWidth := StrokeWidth;
+    if TryGetAttribute(Node, 'vad:stroke-style', ValueText) and
+      TryStrToInt(ValueText, StrokeStyleInteger) and
+      InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
+        Ord(High(TVectArtStrokeStyle))) then
+      Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
+    else if TryGetPresentationValue(Node, 'stroke-dasharray', ValueText) and
+      (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
+      Data.StrokeStyle := vssDashed;
+  end;
   Opacity := 1.0;
   if TryGetPresentationValue(Node, 'opacity', OpacityText) and
     not TryParseSvgNumber(OpacityText, Opacity) then
@@ -358,6 +512,73 @@ begin
   Data.Bounds := TRectF.Create(X, Y, X + Width, Y + Height);
   Data.Name := RectangleName(Node, Index);
   Data.Opacity := EnsureRange(Opacity * FillOpacity, 0.0, 1.0);
+  if not TryParseRotation(Node, Data.Bounds, Data.RotationDegrees) then
+    Exit;
+  Data.Visible := True;
+  if TryGetPresentationValue(Node, 'display', DisplayValue) then
+    Data.Visible := not SameText(Trim(DisplayValue), 'none');
+  if TryGetPresentationValue(Node, 'visibility', VisibilityValue) then
+    Data.Visible := Data.Visible and
+      not SameText(Trim(VisibilityValue), 'hidden') and
+      not SameText(Trim(VisibilityValue), 'collapse');
+  Data.Locked := False;
+  if TryGetAttribute(Node, 'vad:locked', LockedText) then
+    TryParseBoolean(LockedText, Data.Locked);
+  Result := True;
+end;
+
+function TryParseLine(const Node: IXMLNode; Index: Integer;
+  out Data: TVectArtLineData): Boolean;
+var
+  DisplayValue: string;
+  LockedText: string;
+  OpacityText: string;
+  StrokeInteger: Integer;
+  StrokeStyleInteger: Integer;
+  StrokeText: string;
+  ValueText: string;
+  VisibilityValue: string;
+begin
+  Result := TryGetAttribute(Node, 'x1', ValueText) and
+    TryParseSvgNumber(ValueText, Data.StartPoint.X) and
+    TryGetAttribute(Node, 'y1', ValueText) and
+    TryParseSvgNumber(ValueText, Data.StartPoint.Y) and
+    TryGetAttribute(Node, 'x2', ValueText) and
+    TryParseSvgNumber(ValueText, Data.EndPoint.X) and
+    TryGetAttribute(Node, 'y2', ValueText) and
+    TryParseSvgNumber(ValueText, Data.EndPoint.Y);
+  if not Result then
+    Exit;
+  StrokeText := 'black';
+  TryGetPresentationValue(Node, 'stroke', StrokeText);
+  if SameText(Trim(StrokeText), 'none') or
+    not TryParseSvgColor(StrokeText, Data.StrokeColor) then
+    Exit(False);
+  if TryGetAttribute(Node, 'vad:stroke-color', ValueText) and
+    TryStrToInt(ValueText, StrokeInteger) and
+    (ColorToRGB(TColor(StrokeInteger)) =
+     ColorToRGB(Data.StrokeColor)) then
+    Data.StrokeColor := TColor(StrokeInteger);
+  Data.StrokeWidth := 1.0;
+  if TryGetPresentationValue(Node, 'stroke-width', ValueText) and
+    (not TryParseSvgNumber(ValueText, Data.StrokeWidth) or
+     (Data.StrokeWidth <= 0)) then
+    Exit(False);
+  Data.StrokeStyle := vssSolid;
+  if TryGetAttribute(Node, 'vad:stroke-style', ValueText) and
+    TryStrToInt(ValueText, StrokeStyleInteger) and
+    InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
+      Ord(High(TVectArtStrokeStyle))) then
+    Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
+  else if TryGetPresentationValue(Node, 'stroke-dasharray', ValueText) and
+    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
+    Data.StrokeStyle := vssDashed;
+  Data.Opacity := 1.0;
+  if TryGetPresentationValue(Node, 'opacity', OpacityText) and
+    not TryParseSvgNumber(OpacityText, Data.Opacity) then
+    Exit(False);
+  Data.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
+  Data.Name := RectangleName(Node, Index);
   Data.Visible := True;
   if TryGetPresentationValue(Node, 'display', DisplayValue) then
     Data.Visible := not SameText(Trim(DisplayValue), 'none');
@@ -432,7 +653,11 @@ var
   Child: IXMLNode;
   Data: TVectArtRectangleData;
   Discarded: TVectArtRectangleData;
+  DiscardedLine: TVectArtLineData;
   I: Integer;
+  LayerOrder: TList<Integer>;
+  LineData: TVectArtLineData;
+  Lines: TList<TVectArtLineData>;
   RectangleData: TList<TVectArtRectangleData>;
   Root: IXMLNode;
   SelectedIndex: Integer;
@@ -445,6 +670,8 @@ begin
   Result := False;
   ErrorMessage := '';
   RectangleData := TList<TVectArtRectangleData>.Create;
+  Lines := TList<TVectArtLineData>.Create;
+  LayerOrder := TList<Integer>.Create;
   try
     try
       if Document = nil then
@@ -480,23 +707,42 @@ begin
       for I := 0 to Root.ChildNodes.Count - 1 do
       begin
         Child := Root.ChildNodes[I];
-        if (Child.NodeType = ntElement) and
-          SameText(LocalNodeName(Child), 'rect') and
+        if Child.NodeType <> ntElement then
+          Continue;
+        if SameText(LocalNodeName(Child), 'rect') and
           TryParseRectangle(Child, RectangleData.Count + 1, Data) then
+        begin
           RectangleData.Add(Data);
+          LayerOrder.Add(RectangleData.Count);
+        end
+        else if SameText(LocalNodeName(Child), 'line') and
+          TryParseLine(Child, Lines.Count + 1, LineData) then
+        begin
+          Lines.Add(LineData);
+          LayerOrder.Add(-Lines.Count);
+        end;
       end;
 
       Canvas := Document.CanvasLayer;
       if Canvas = nil then
         raise EInvalidOp.Create('Document canvas is missing');
       while Document.LayerCount > 1 do
-        Document.RemoveRectangle(Document.LayerCount - 1, Discarded);
+        if Document[Document.LayerCount - 1] is TVectArtRectangleLayer then
+          Document.RemoveRectangle(Document.LayerCount - 1, Discarded)
+        else if Document[Document.LayerCount - 1] is TVectArtLineLayer then
+          Document.RemoveLine(Document.LayerCount - 1, DiscardedLine)
+        else
+          raise EInvalidOp.Create('Document contains an unsupported layer');
       Canvas.Width := CanvasWidth;
       Canvas.Height := CanvasHeight;
       Canvas.BackgroundColor := BackgroundColor;
       Canvas.Transparent := Transparent;
-      for Data in RectangleData do
-        Document.InsertRectangle(Document.LayerCount, Data);
+      for I in LayerOrder do
+        if I > 0 then
+          Document.InsertRectangle(Document.LayerCount,
+            RectangleData[I - 1])
+        else
+          Document.InsertLine(Document.LayerCount, Lines[-I - 1]);
       Document.SelectedIndex := SelectedIndex;
       Document.Changed;
       Result := True;
@@ -505,6 +751,8 @@ begin
         ErrorMessage := E.Message;
     end;
   finally
+    LayerOrder.Free;
+    Lines.Free;
     RectangleData.Free;
   end;
 end;

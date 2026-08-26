@@ -63,15 +63,17 @@ begin
     SaveAsClick);
 
   FOpenDialog := TOpenDialog.Create(Self);
-  FOpenDialog.DefaultExt := 'svg';
-  FOpenDialog.Filter := 'SVGファイル (*.svg)|*.svg|MIFファイル (*.mif)|*.mif|' +
+  FOpenDialog.DefaultExt := '';
+  FOpenDialog.Filter := '対応ファイル (*.mif;*.svg)|*.mif;*.svg|' +
+    'MIFファイル (*.mif)|*.mif|SVGファイル (*.svg)|*.svg|' +
     'すべてのファイル (*.*)|*.*';
   FOpenDialog.Options := FOpenDialog.Options + [ofFileMustExist, ofPathMustExist];
   FOpenDialog.Title := 'デザインファイルを開く';
 
   FSaveDialog := TSaveDialog.Create(Self);
   FSaveDialog.DefaultExt := 'svg';
-  FSaveDialog.Filter := FOpenDialog.Filter;
+  FSaveDialog.Filter := 'SVGファイル (*.svg)|*.svg|' +
+    'MIFファイル (*.mif)|*.mif|すべてのファイル (*.*)|*.*';
   FSaveDialog.Options := FSaveDialog.Options +
     [ofOverwritePrompt, ofPathMustExist];
   FSaveDialog.Title := 'デザインファイルを保存';

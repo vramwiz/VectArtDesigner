@@ -27,6 +27,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    // ボタンと同じ判定・履歴処理でレイヤー操作を実行する。
+    procedure RunLayerAction(Action: TVectArtLayerAction);
     procedure RefreshState;
     property Document: TVectArtDocument read GetDocument write SetDocument;
     property EditHistory: TVectArtEditHistory read GetEditHistory
@@ -67,6 +69,12 @@ destructor TVectArtLayerActionsControl.Destroy;
 begin
   FOperations.Free;
   inherited Destroy;
+end;
+
+procedure TVectArtLayerActionsControl.RunLayerAction(
+  Action: TVectArtLayerAction);
+begin
+  FOperations.Execute(Action);
 end;
 
 procedure TVectArtLayerActionsControl.DrawButton(Index: Integer);

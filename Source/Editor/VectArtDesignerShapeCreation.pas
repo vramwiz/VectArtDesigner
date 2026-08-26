@@ -20,7 +20,9 @@ type
     FStartPoint: TPoint;
     FZoom: Single;
     function ClampToCanvas(const Point: TPoint): TPoint;
+    procedure CreateLine;
     procedure CreateRectangle;
+    function NextLineName: string;
     function NextRectangleName: string;
   public
     procedure Configure(ADocument: TVectArtDocument;
@@ -32,6 +34,7 @@ type
     function MouseUp(Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer): Boolean;
     function PreviewRect: TRect;
+    function PreviewLine(out StartPoint, EndPoint: TPoint): Boolean;
     property Active: Boolean read FActive;
   end;
 
@@ -43,6 +46,38 @@ uses
 
 const
   MIN_DRAG_SIZE = 3;
+
+procedure TVectArtShapeCreation.CreateLine;
+var
+  AfterSelection: TArray<Integer>;
+  BeforeSelection: TArray<Integer>;
+  Data: TVectArtLineData;
+  Index: Integer;
+begin
+  if Hypot(FCurrentPoint.X - FStartPoint.X,
+    FCurrentPoint.Y - FStartPoint.Y) < MIN_DRAG_SIZE then
+    Exit;
+  Data.StartPoint := TPointF.Create(
+    (FStartPoint.X - FCanvasBounds.Left) / FZoom,
+    (FStartPoint.Y - FCanvasBounds.Top) / FZoom);
+  Data.EndPoint := TPointF.Create(
+    (FCurrentPoint.X - FCanvasBounds.Left) / FZoom,
+    (FCurrentPoint.Y - FCanvasBounds.Top) / FZoom);
+  Data.Locked := False;
+  Data.Name := NextLineName;
+  Data.Opacity := FEditorState.RectangleOpacity;
+  Data.StrokeColor := FEditorState.RectangleStrokeColor;
+  Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
+  Data.StrokeWidth := Max(FEditorState.RectangleStrokeWidth, 1.0);
+  Data.Visible := True;
+  BeforeSelection := FDocument.GetSelectedLayerIndices;
+  Index := FDocument.InsertLine(FDocument.LayerCount, Data);
+  FDocument.SetSelectedLayers([Index]);
+  AfterSelection := FDocument.GetSelectedLayerIndices;
+  if FEditHistory <> nil then
+    FEditHistory.AddApplied(TVectArtInsertLineCommand.Create(FDocument,
+      Index, Data, BeforeSelection, AfterSelection));
+end;
 
 function TVectArtShapeCreation.ClampToCanvas(const Point: TPoint): TPoint;
 begin
@@ -89,6 +124,10 @@ begin
   Data.Locked := False;
   Data.Name := NextRectangleName;
   Data.Opacity := FEditorState.RectangleOpacity;
+  Data.RotationDegrees := 0.0;
+  Data.StrokeColor := FEditorState.RectangleStrokeColor;
+  Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
+  Data.StrokeWidth := FEditorState.RectangleStrokeWidth;
   Data.Visible := True;
   BeforeSelection := FDocument.GetSelectedLayerIndices;
   Index := FDocument.InsertRectangle(FDocument.LayerCount, Data);
@@ -104,7 +143,7 @@ function TVectArtShapeCreation.MouseDown(Button: TMouseButton;
 begin
   Result := (Button = mbLeft) and (FDocument <> nil) and
     (FEditorState <> nil) and
-    (FEditorState.CurrentTool = vetRectangle) and (FZoom > 0) and
+    (FEditorState.CurrentTool in [vetRectangle, vetLine]) and (FZoom > 0) and
     PtInRect(FCanvasBounds, Point(X, Y));
   if not Result then
     Exit;
@@ -137,8 +176,44 @@ begin
     Exit;
   FCurrentPoint := ClampToCanvas(Point(X, Y));
   FModifiers := Shift;
-  CreateRectangle;
+  if FEditorState.CurrentTool = vetLine then
+    CreateLine
+  else
+    CreateRectangle;
   FActive := False;
+end;
+
+function TVectArtShapeCreation.NextLineName: string;
+var
+  Candidate: string;
+  Found: Boolean;
+  I: Integer;
+  Number: Integer;
+begin
+  Number := 1;
+  repeat
+    Candidate := 'Line ' + Number.ToString;
+    Found := False;
+    for I := 1 to FDocument.LayerCount - 1 do
+      if SameText(FDocument[I].Name, Candidate) then
+      begin
+        Found := True;
+        Break;
+      end;
+    Inc(Number);
+  until not Found;
+  Result := Candidate;
+end;
+
+function TVectArtShapeCreation.PreviewLine(out StartPoint,
+  EndPoint: TPoint): Boolean;
+begin
+  Result := FActive and (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetLine);
+  if not Result then
+    Exit;
+  StartPoint := FStartPoint;
+  EndPoint := FCurrentPoint;
 end;
 
 function TVectArtShapeCreation.NextRectangleName: string;
@@ -175,7 +250,8 @@ var
   TargetX: Integer;
   TargetY: Integer;
 begin
-  if not FActive then
+  if not FActive or (FEditorState = nil) or
+    (FEditorState.CurrentTool <> vetRectangle) then
     Exit(TRect.Empty);
   DeltaX := FCurrentPoint.X - FStartPoint.X;
   DeltaY := FCurrentPoint.Y - FStartPoint.Y;

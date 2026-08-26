@@ -12,6 +12,7 @@ uses
     'Lib\TextRenderer\TextRendererSkiaRuntime.pas',
   VectArtDesignerDocument in
     'Source\Core\VectArtDesignerDocument.pas',
+  VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerRenderer in
     'Source\Rendering\VectArtDesignerRenderer.pas';
 
@@ -30,6 +31,7 @@ end;
 
 var
   Data: TVectArtRectangleData;
+  LineData: TVectArtLineData;
   Destination: TVectArtRenderBuffer;
   Document: TVectArtDocument;
   I: NativeInt;
@@ -52,6 +54,10 @@ begin
     Data.Locked := False;
     Data.Name := 'Rectangle 1';
     Data.Opacity := 0.5;
+    Data.RotationDegrees := 0.0;
+    Data.StrokeColor := clBlack;
+    Data.StrokeStyle := vssSolid;
+    Data.StrokeWidth := 0.0;
     Data.Visible := True;
     Document.InsertRectangle(Document.LayerCount, Data);
     RenderVectArtDocument(Document, Rendered, 8, 8);
@@ -62,6 +68,14 @@ begin
       'Rectangle opacity differs');
     Require(PixelAt(Rendered, 0, 0)^.A = 0,
       'Outside rectangle is not transparent');
+
+    Document.SetRectangleBounds(1, TRectF.Create(1, 3, 7, 5));
+    Document.SetRectangleRotation(1, 90.0);
+    RenderVectArtDocument(Document, Rendered, 8, 8);
+    Require(PixelAt(Rendered, 4, 1)^.A > 0,
+      'Rotated rectangle was not drawn at the rotated position');
+    Require(PixelAt(Rendered, 1, 4)^.A = 0,
+      'Rotated rectangle still occupies the unrotated position');
 
     Destination.SetSize(8, 8);
     Pixel := Destination.Data;
@@ -78,6 +92,33 @@ begin
     Require((Pixel^.R >= 127) and (Pixel^.R <= 128) and
       (Pixel^.B >= 127) and (Pixel^.B <= 128) and (Pixel^.A = 255),
       'RGBA source-over composition differs');
+
+    Document.SetRectangleBounds(1, TRectF.Create(2, 2, 6, 6));
+    Document.SetRectangleRotation(1, 0.0);
+    Document.SetRectangleFillColor(1, clWhite);
+    Document.SetLayerOpacity(1, 1.0);
+    Document.SetRectangleStroke(1, clBlack, 2.0, vssSolid);
+    RenderVectArtDocument(Document, Rendered, 8, 8);
+    Pixel := PixelAt(Rendered, 2, 4);
+    Require((Pixel^.R <= 5) and (Pixel^.G <= 5) and (Pixel^.B <= 5) and
+      (Pixel^.A >= 250), 'Rectangle stroke was not rendered');
+    Pixel := PixelAt(Rendered, 4, 4);
+    Require((Pixel^.R >= 250) and (Pixel^.G >= 250) and (Pixel^.B >= 250),
+      'Rectangle fill was not kept separate from the stroke');
+    LineData.StartPoint := TPointF.Create(0, 0);
+    LineData.EndPoint := TPointF.Create(7, 7);
+    LineData.Locked := False;
+    LineData.Name := 'Line 1';
+    LineData.Opacity := 1.0;
+    LineData.StrokeColor := clRed;
+    LineData.StrokeStyle := vssSolid;
+    LineData.StrokeWidth := 2.0;
+    LineData.Visible := True;
+    Document.InsertLine(Document.LayerCount, LineData);
+    RenderVectArtDocument(Document, Rendered, 8, 8);
+    Pixel := PixelAt(Rendered, 0, 0);
+    Require((Pixel^.R >= 200) and (Pixel^.A > 0),
+      'Line was not rendered');
     Writeln('VectArt shared renderer: PASS');
   finally
     Destination.Free;

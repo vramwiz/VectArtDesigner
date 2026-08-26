@@ -5,7 +5,8 @@ interface
 
 uses
   System.Classes, VectArtDesignerContext, VectArtDesignerLayerActions,
-  VectArtDesignerLayerList, VectArtDesignerToolFrames;
+  VectArtDesignerLayerList, VectArtDesignerLayerOperations,
+  VectArtDesignerToolFrames;
 
 type
   TLayerPanelFrame = class(TToolPlaceholderFrame)
@@ -16,6 +17,7 @@ type
     procedure SetContext(const Value: IVectArtDesignerContext);
   public
     constructor Create(AOwner: TComponent); override;
+    procedure RunLayerAction(Action: TVectArtLayerAction);
     procedure RefreshFromDocument;
     // Contextを交換すると、一覧と操作バーへ同じサービス一式を接続する。
     property Context: IVectArtDesignerContext read FContext write SetContext;
@@ -45,6 +47,11 @@ begin
   FLayerActions.Align := alBottom;
   FLayerActions.Height := 34;
   FLayerActions.BringToFront;
+end;
+
+procedure TLayerPanelFrame.RunLayerAction(Action: TVectArtLayerAction);
+begin
+  FLayerActions.RunLayerAction(Action);
 end;
 
 procedure TLayerPanelFrame.RefreshFromDocument;

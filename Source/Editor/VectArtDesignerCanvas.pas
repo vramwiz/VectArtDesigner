@@ -72,7 +72,8 @@ const
 implementation
 
 uses
-  System.Math, Winapi.D2D1, Winapi.Windows, Vcl.Direct2D;
+  System.Math, Winapi.D2D1, Winapi.Windows, Vcl.Direct2D,
+  VectArtDesignerGeometry;
 
 const
   CANVAS_MARGIN         = 32;
@@ -265,7 +266,7 @@ begin
       Exit;
     end;
     if (FEditorState <> nil) and
-      (FEditorState.CurrentTool = vetRectangle) then
+      (FEditorState.CurrentTool in [vetRectangle, vetLine]) then
     begin
       Cursor := crCross;
       Exit;
@@ -310,7 +311,7 @@ begin
     Exit;
   end;
   if (FEditorState <> nil) and
-    (FEditorState.CurrentTool = vetRectangle) then
+    (FEditorState.CurrentTool in [vetRectangle, vetLine]) then
   begin
     Cursor := crCross;
     Exit;
@@ -350,6 +351,7 @@ begin
     MouseCapture := False;
     FInteraction.Configure(FDocument, FCanvasBounds, FZoom);
     Cursor := FInteraction.CursorAt(X, Y);
+    Invalidate;
     Exit;
   end;
   inherited MouseUp(Button, Shift, X, Y);
@@ -427,17 +429,26 @@ var
   ReferenceBitmap: ID2D1Bitmap;
   ReferenceRect: TD2D1RectF;
   Handle: TVectArtSelectionHandle;
+  RotationHandleIndex: Integer;
   I: Integer;
   Layer: TVectArtLayer;
   LayerRect: TRect;
+  LineLayer: TVectArtLineLayer;
+  LineEnd: TPoint;
+  LineStart: TPoint;
+  LogicalQuad: TVectArtQuad;
+  PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
+  RotatedBounds: TRectF;
   RangeRect: TRect;
   Row: Integer;
   RowEnd: Integer;
   RowStart: Integer;
   SelectionGeometry: TVectArtSelectionGeometry;
+  SelectionFrameOffsetPixels: Integer;
   SelectionLayerRect: TRect;
   SelectionLocked: Boolean;
+  ScreenQuad: TVectArtScreenQuad;
   ShadowBounds: TRect;
   VisibleCanvasBounds: TRect;
 begin
@@ -446,6 +457,7 @@ begin
     Direct2DCanvas.BeginDraw;
     try
       SelectionLayerRect := TRect.Empty;
+      SelectionFrameOffsetPixels := SelectionFrameOffset(0, FZoom);
       SelectionLocked := False;
       Direct2DCanvas.Brush.Color := COLOR_EDITOR_SURROUND;
       Direct2DCanvas.FillRect(ClientRect);
@@ -522,14 +534,46 @@ begin
         for I := 1 to FDocument.LayerCount - 1 do
         begin
           Layer := FDocument[I];
-          if not Layer.Visible or not (Layer is TVectArtRectangleLayer) then
+          if not Layer.Visible or
+            not ((Layer is TVectArtRectangleLayer) or
+              (Layer is TVectArtLineLayer) or
+              (Layer is TVectArtPathLayer)) then
             Continue;
-          RectangleLayer := TVectArtRectangleLayer(Layer);
-          LayerRect := Rect(
-            FCanvasBounds.Left + Round(RectangleLayer.Bounds.Left * FZoom),
-            FCanvasBounds.Top + Round(RectangleLayer.Bounds.Top * FZoom),
-            FCanvasBounds.Left + Round(RectangleLayer.Bounds.Right * FZoom),
-            FCanvasBounds.Top + Round(RectangleLayer.Bounds.Bottom * FZoom));
+          if Layer is TVectArtRectangleLayer then
+          begin
+            RectangleLayer := TVectArtRectangleLayer(Layer);
+            RotatedBounds := QuadBounds(RectangleCorners(
+              RectangleLayer.Bounds, RectangleLayer.RotationDegrees));
+            SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
+              SelectionFrameOffset(RectangleLayer.StrokeWidth, FZoom));
+          end
+          else if Layer is TVectArtLineLayer then
+          begin
+            LineLayer := TVectArtLineLayer(Layer);
+            RotatedBounds := TRectF.Create(Min(LineLayer.StartPoint.X,
+              LineLayer.EndPoint.X), Min(LineLayer.StartPoint.Y,
+              LineLayer.EndPoint.Y), Max(LineLayer.StartPoint.X,
+              LineLayer.EndPoint.X), Max(LineLayer.StartPoint.Y,
+              LineLayer.EndPoint.Y));
+            SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
+              SelectionFrameOffset(LineLayer.StrokeWidth, FZoom));
+          end
+          else
+          begin
+            PathLayer := TVectArtPathLayer(Layer);
+            RotatedBounds := PointsBounds(PathLayer.Points);
+            SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
+              SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
+          end;
+          LayerRect := Rect(FCanvasBounds.Left +
+            Round(RotatedBounds.Left * FZoom), FCanvasBounds.Top +
+            Round(RotatedBounds.Top * FZoom), FCanvasBounds.Left +
+            Round(RotatedBounds.Right * FZoom), FCanvasBounds.Top +
+            Round(RotatedBounds.Bottom * FZoom));
+          if LayerRect.Width = 0 then
+            Inc(LayerRect.Right);
+          if LayerRect.Height = 0 then
+            Inc(LayerRect.Bottom);
           if FDocument.IsLayerSelected(I) then
           begin
             SelectionLocked := SelectionLocked or Layer.Locked;
@@ -546,19 +590,70 @@ begin
       if (SelectionLayerRect.Width > 0) and
         (SelectionLayerRect.Height > 0) then
       begin
-        SelectionGeometry := BuildSelectionGeometry(SelectionLayerRect);
-        // Direct2DのFrameRectはPenではなくBrushを使う。
+        if (FDocument.SelectionCount = 1) and
+          (FDocument.SelectedIndex > 0) and
+          (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+        begin
+          LineLayer := TVectArtLineLayer(
+            FDocument[FDocument.SelectedIndex]);
+          SelectionGeometry := BuildLineSelectionGeometry(Point(
+            FCanvasBounds.Left + Round(LineLayer.StartPoint.X * FZoom),
+            FCanvasBounds.Top + Round(LineLayer.StartPoint.Y * FZoom)),
+            Point(FCanvasBounds.Left + Round(LineLayer.EndPoint.X * FZoom),
+            FCanvasBounds.Top + Round(LineLayer.EndPoint.Y * FZoom)));
+        end
+        else if (FDocument.SelectionCount = 1) and
+          (FDocument.SelectedIndex > 0) and
+          (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
+          SelectionGeometry := BuildPathSelectionGeometry(
+            SelectionLayerRect, SelectionFrameOffsetPixels)
+        else if not FInteraction.AxisAlignedSelection and
+          (FDocument.SelectionCount = 1) and
+          (FDocument.SelectedIndex > 0) and
+          (FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) then
+        begin
+          RectangleLayer := TVectArtRectangleLayer(
+            FDocument[FDocument.SelectedIndex]);
+          LogicalQuad := RectangleCorners(RectangleLayer.Bounds,
+            RectangleLayer.RotationDegrees);
+          for I := 0 to High(ScreenQuad) do
+            ScreenQuad[I] := Point(FCanvasBounds.Left +
+              Round(LogicalQuad[I].X * FZoom), FCanvasBounds.Top +
+              Round(LogicalQuad[I].Y * FZoom));
+          SelectionGeometry := BuildRotatedSelectionGeometry(ScreenQuad,
+            SelectionFrameOffsetPixels);
+        end
+        else
+          SelectionGeometry := BuildSelectionGeometry(SelectionLayerRect,
+            SelectionFrameOffsetPixels);
         Direct2DCanvas.Brush.Style := bsSolid;
         Direct2DCanvas.Brush.Color := COLOR_SELECTION;
-        Direct2DCanvas.FrameRect(SelectionGeometry.FrameRect);
+        Direct2DCanvas.Pen.Color := COLOR_SELECTION;
+        if SelectionGeometry.DrawFrame then
+          Direct2DCanvas.Polyline(SelectionGeometry.FramePoints);
         if not SelectionLocked then
+        begin
           for Handle := vshTopLeft to vshLeft do
-          begin
-            Direct2DCanvas.Brush.Color := clWhite;
-            Direct2DCanvas.FillRect(SelectionGeometry.Handles[Handle]);
-            Direct2DCanvas.Brush.Color := COLOR_SELECTION;
-            Direct2DCanvas.FrameRect(SelectionGeometry.Handles[Handle]);
-          end;
+            if not SelectionGeometry.Handles[Handle].IsEmpty then
+            begin
+              Direct2DCanvas.Brush.Color := clWhite;
+              Direct2DCanvas.FillRect(SelectionGeometry.Handles[Handle]);
+              Direct2DCanvas.Brush.Color := COLOR_SELECTION;
+              Direct2DCanvas.FrameRect(SelectionGeometry.Handles[Handle]);
+            end;
+          if (FDocument.SelectionCount = 1) and
+            (FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) and
+            not FInteraction.AxisAlignedSelection then
+            for RotationHandleIndex := 0 to 3 do
+            begin
+              Direct2DCanvas.Brush.Color := TColor($00F0C060);
+              Direct2DCanvas.FillRect(
+                SelectionGeometry.RotationHandles[RotationHandleIndex]);
+              Direct2DCanvas.Brush.Color := COLOR_SELECTION;
+              Direct2DCanvas.FrameRect(
+                SelectionGeometry.RotationHandles[RotationHandleIndex]);
+            end;
+        end;
       end;
       if FInteraction.RangeSelecting then
       begin
@@ -573,6 +668,12 @@ begin
         Direct2DCanvas.Brush.Style := bsSolid;
         Direct2DCanvas.Brush.Color := COLOR_SELECTION;
         Direct2DCanvas.FrameRect(CreationRect);
+      end;
+      if FShapeCreation.PreviewLine(LineStart, LineEnd) then
+      begin
+        Direct2DCanvas.Pen.Color := COLOR_SELECTION;
+        Direct2DCanvas.MoveTo(LineStart.X, LineStart.Y);
+        Direct2DCanvas.LineTo(LineEnd.X, LineEnd.Y);
       end;
     finally
       Direct2DCanvas.EndDraw;
@@ -591,21 +692,31 @@ var
   ColumnEnd: Integer;
   ColumnStart: Integer;
   Handle: TVectArtSelectionHandle;
+  RotationHandleIndex: Integer;
   I: Integer;
   Layer: TVectArtLayer;
   LayerRect: TRect;
+  LineLayer: TVectArtLineLayer;
+  LineEnd: TPoint;
+  LineStart: TPoint;
+  LogicalQuad: TVectArtQuad;
+  PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
+  RotatedBounds: TRectF;
   RangeRect: TRect;
   Row: Integer;
   RowEnd: Integer;
   RowStart: Integer;
   SelectionGeometry: TVectArtSelectionGeometry;
+  SelectionFrameOffsetPixels: Integer;
   SelectionLayerRect: TRect;
   SelectionLocked: Boolean;
+  ScreenQuad: TVectArtScreenQuad;
   ShadowBounds: TRect;
   VisibleCanvasBounds: TRect;
 begin
   SelectionLayerRect := TRect.Empty;
+  SelectionFrameOffsetPixels := SelectionFrameOffset(0, FZoom);
   SelectionLocked := False;
   Canvas.Brush.Style := bsSolid;
   Canvas.Brush.Color := COLOR_EDITOR_SURROUND;
@@ -665,14 +776,46 @@ begin
     for I := 1 to FDocument.LayerCount - 1 do
     begin
       Layer := FDocument[I];
-      if not Layer.Visible or not (Layer is TVectArtRectangleLayer) then
+      if not Layer.Visible or
+        not ((Layer is TVectArtRectangleLayer) or
+          (Layer is TVectArtLineLayer) or
+          (Layer is TVectArtPathLayer)) then
         Continue;
-      RectangleLayer := TVectArtRectangleLayer(Layer);
-      LayerRect := Rect(
-        FCanvasBounds.Left + Round(RectangleLayer.Bounds.Left * FZoom),
-        FCanvasBounds.Top + Round(RectangleLayer.Bounds.Top * FZoom),
-        FCanvasBounds.Left + Round(RectangleLayer.Bounds.Right * FZoom),
-        FCanvasBounds.Top + Round(RectangleLayer.Bounds.Bottom * FZoom));
+      if Layer is TVectArtRectangleLayer then
+      begin
+        RectangleLayer := TVectArtRectangleLayer(Layer);
+        RotatedBounds := QuadBounds(RectangleCorners(RectangleLayer.Bounds,
+          RectangleLayer.RotationDegrees));
+        SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
+          SelectionFrameOffset(RectangleLayer.StrokeWidth, FZoom));
+      end
+      else if Layer is TVectArtLineLayer then
+      begin
+        LineLayer := TVectArtLineLayer(Layer);
+        RotatedBounds := TRectF.Create(Min(LineLayer.StartPoint.X,
+          LineLayer.EndPoint.X), Min(LineLayer.StartPoint.Y,
+          LineLayer.EndPoint.Y), Max(LineLayer.StartPoint.X,
+          LineLayer.EndPoint.X), Max(LineLayer.StartPoint.Y,
+          LineLayer.EndPoint.Y));
+        SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
+          SelectionFrameOffset(LineLayer.StrokeWidth, FZoom));
+      end
+      else
+      begin
+        PathLayer := TVectArtPathLayer(Layer);
+        RotatedBounds := PointsBounds(PathLayer.Points);
+        SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
+          SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
+      end;
+      LayerRect := Rect(FCanvasBounds.Left +
+        Round(RotatedBounds.Left * FZoom), FCanvasBounds.Top +
+        Round(RotatedBounds.Top * FZoom), FCanvasBounds.Left +
+        Round(RotatedBounds.Right * FZoom), FCanvasBounds.Top +
+        Round(RotatedBounds.Bottom * FZoom));
+      if LayerRect.Width = 0 then
+        Inc(LayerRect.Right);
+      if LayerRect.Height = 0 then
+        Inc(LayerRect.Bottom);
       if FDocument.IsLayerSelected(I) then
       begin
         SelectionLocked := SelectionLocked or Layer.Locked;
@@ -688,18 +831,69 @@ begin
     end;
   if (SelectionLayerRect.Width > 0) and (SelectionLayerRect.Height > 0) then
   begin
-    SelectionGeometry := BuildSelectionGeometry(SelectionLayerRect);
+    if (FDocument.SelectionCount = 1) and
+      (FDocument.SelectedIndex > 0) and
+      (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+    begin
+      LineLayer := TVectArtLineLayer(FDocument[FDocument.SelectedIndex]);
+      SelectionGeometry := BuildLineSelectionGeometry(Point(
+        FCanvasBounds.Left + Round(LineLayer.StartPoint.X * FZoom),
+        FCanvasBounds.Top + Round(LineLayer.StartPoint.Y * FZoom)), Point(
+        FCanvasBounds.Left + Round(LineLayer.EndPoint.X * FZoom),
+        FCanvasBounds.Top + Round(LineLayer.EndPoint.Y * FZoom)));
+    end
+    else if (FDocument.SelectionCount = 1) and
+      (FDocument.SelectedIndex > 0) and
+      (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
+      SelectionGeometry := BuildPathSelectionGeometry(SelectionLayerRect,
+        SelectionFrameOffsetPixels)
+    else if not FInteraction.AxisAlignedSelection and
+      (FDocument.SelectionCount = 1) and
+      (FDocument.SelectedIndex > 0) and
+      (FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) then
+    begin
+      RectangleLayer := TVectArtRectangleLayer(
+        FDocument[FDocument.SelectedIndex]);
+      LogicalQuad := RectangleCorners(RectangleLayer.Bounds,
+        RectangleLayer.RotationDegrees);
+      for I := 0 to High(ScreenQuad) do
+        ScreenQuad[I] := Point(FCanvasBounds.Left +
+          Round(LogicalQuad[I].X * FZoom), FCanvasBounds.Top +
+          Round(LogicalQuad[I].Y * FZoom));
+      SelectionGeometry := BuildRotatedSelectionGeometry(ScreenQuad,
+        SelectionFrameOffsetPixels);
+    end
+    else
+      SelectionGeometry := BuildSelectionGeometry(SelectionLayerRect,
+        SelectionFrameOffsetPixels);
     Canvas.Brush.Style := bsSolid;
     Canvas.Brush.Color := COLOR_SELECTION;
-    Canvas.FrameRect(SelectionGeometry.FrameRect);
+    Canvas.Pen.Color := COLOR_SELECTION;
+    if SelectionGeometry.DrawFrame then
+      Canvas.Polyline(SelectionGeometry.FramePoints);
     if not SelectionLocked then
+    begin
       for Handle := vshTopLeft to vshLeft do
-      begin
-        Canvas.Brush.Color := clWhite;
-        Canvas.FillRect(SelectionGeometry.Handles[Handle]);
-        Canvas.Brush.Color := COLOR_SELECTION;
-        Canvas.FrameRect(SelectionGeometry.Handles[Handle]);
-      end;
+        if not SelectionGeometry.Handles[Handle].IsEmpty then
+        begin
+          Canvas.Brush.Color := clWhite;
+          Canvas.FillRect(SelectionGeometry.Handles[Handle]);
+          Canvas.Brush.Color := COLOR_SELECTION;
+          Canvas.FrameRect(SelectionGeometry.Handles[Handle]);
+        end;
+      if (FDocument.SelectionCount = 1) and
+        (FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) and
+        not FInteraction.AxisAlignedSelection then
+        for RotationHandleIndex := 0 to 3 do
+        begin
+          Canvas.Brush.Color := TColor($00F0C060);
+          Canvas.FillRect(SelectionGeometry.RotationHandles[
+            RotationHandleIndex]);
+          Canvas.Brush.Color := COLOR_SELECTION;
+          Canvas.FrameRect(SelectionGeometry.RotationHandles[
+            RotationHandleIndex]);
+        end;
+    end;
   end;
   if FInteraction.RangeSelecting then
   begin
@@ -714,6 +908,12 @@ begin
     Canvas.Brush.Style := bsSolid;
     Canvas.Brush.Color := COLOR_SELECTION;
     Canvas.FrameRect(CreationRect);
+  end;
+  if FShapeCreation.PreviewLine(LineStart, LineEnd) then
+  begin
+    Canvas.Pen.Color := COLOR_SELECTION;
+    Canvas.MoveTo(LineStart.X, LineStart.Y);
+    Canvas.LineTo(LineEnd.X, LineEnd.Y);
   end;
 end;
 

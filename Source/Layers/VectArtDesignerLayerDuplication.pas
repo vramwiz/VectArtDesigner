@@ -82,6 +82,10 @@ begin
         RectangleData.Locked := False;
         RectangleData.Name := CopyName(RectangleLayer.Name, UsedNames);
         RectangleData.Opacity := RectangleLayer.Opacity;
+        RectangleData.RotationDegrees := RectangleLayer.RotationDegrees;
+        RectangleData.StrokeColor := RectangleLayer.StrokeColor;
+        RectangleData.StrokeStyle := RectangleLayer.StrokeStyle;
+        RectangleData.StrokeWidth := RectangleLayer.StrokeWidth;
         RectangleData.Visible := RectangleLayer.Visible;
         DataList.Add(RectangleData);
       end;

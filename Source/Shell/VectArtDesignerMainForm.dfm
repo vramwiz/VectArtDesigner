@@ -33,7 +33,7 @@ object MainForm: TMainForm
       Left = 0
       Top = 0
       Width = 239
-      Height = 15
+      Height = 30
       Align = alLeft
       Caption = 'File     Edit                    Object     Layout     Help'
       Font.Charset = DEFAULT_CHARSET
@@ -43,6 +43,7 @@ object MainForm: TMainForm
       Font.Style = []
       ParentFont = False
       Layout = tlCenter
+      ExplicitHeight = 15
     end
     object pnlViewMenuButton: TPanel
       Left = 92
@@ -76,8 +77,8 @@ object MainForm: TMainForm
     object lblShortcutItems: TLabel
       Left = 0
       Top = 0
-      Width = 228
-      Height = 15
+      Width = 1180
+      Height = 42
       Align = alClient
       Caption = 'Shortcuts:  New   Open   Save   Undo   Redo'
       Font.Charset = DEFAULT_CHARSET
@@ -87,6 +88,8 @@ object MainForm: TMainForm
       Font.Style = []
       ParentFont = False
       Layout = tlCenter
+      ExplicitWidth = 228
+      ExplicitHeight = 15
     end
   end
   object pnlStatusBar: TPanel
@@ -104,8 +107,8 @@ object MainForm: TMainForm
     object lblStatus: TLabel
       Left = 0
       Top = 0
-      Width = 144
-      Height = 15
+      Width = 1180
+      Height = 24
       Align = alClient
       Caption = 'Ready   Canvas: 1920 x 1080'
       Font.Charset = DEFAULT_CHARSET
@@ -115,6 +118,8 @@ object MainForm: TMainForm
       Font.Style = []
       ParentFont = False
       Layout = tlCenter
+      ExplicitWidth = 144
+      ExplicitHeight = 15
     end
   end
   object pnlWorkspace: TPanel

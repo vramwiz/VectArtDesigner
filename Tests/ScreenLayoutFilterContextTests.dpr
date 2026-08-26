@@ -13,6 +13,7 @@ uses
   TextRendererSkiaBootstrap in 'Lib\TextRenderer\TextRendererSkiaBootstrap.pas',
   TextRendererSkiaRuntime in 'Lib\TextRenderer\TextRendererSkiaRuntime.pas',
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
+  VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerDocumentJson in 'Source\Persistence\VectArtDesignerDocumentJson.pas',
   VectArtDesignerRenderer in 'Source\Rendering\VectArtDesignerRenderer.pas';
 
@@ -111,6 +112,10 @@ begin
     Data.Locked := False;
     Data.Name := 'Rectangle 1';
     Data.Opacity := 0.5;
+    Data.RotationDegrees := 0.0;
+    Data.StrokeColor := clBlack;
+    Data.StrokeStyle := vssSolid;
+    Data.StrokeWidth := 0.0;
     Data.Visible := True;
     SourceDocument.InsertRectangle(SourceDocument.LayerCount, Data);
     Serialized := SerializeVectArtDocument(SourceDocument);

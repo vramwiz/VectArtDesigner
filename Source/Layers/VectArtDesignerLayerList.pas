@@ -44,6 +44,7 @@ begin
   Color := COLOR_LIST_BACKGROUND;
   ControlStyle := ControlStyle + [csOpaque];
   DoubleBuffered := True;
+  TabStop := True;
   FDirect2DEnabled := TDirect2DCanvas.Supported;
   FRenderer := TVectArtLayerRenderer.Create;
 end;
@@ -64,6 +65,8 @@ var
 begin
   if (Button = mbLeft) and (FDocument <> nil) then
   begin
+    if CanFocus then
+      SetFocus;
     Index := FRenderer.LayerIndexAt(ClientRect, Y);
     if Index >= 0 then
     begin

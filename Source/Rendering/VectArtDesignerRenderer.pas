@@ -108,13 +108,20 @@ procedure RenderVectArtDocument(Document: TVectArtDocument;
 var
   Canvas: ISkCanvas;
   CanvasLayer: TVectArtCanvasLayer;
+  DashIntervals: TArray<Single>;
   I: Integer;
+  J: Integer;
   ImageInfo: TSkImageInfo;
   Layer: TVectArtLayer;
+  LineLayer: TVectArtLineLayer;
   Paint: ISkPaint;
+  Path: ISkPath;
+  PathBuilder: ISkPathBuilder;
+  PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
   ScaleX: Single;
   ScaleY: Single;
+  StrokePaint: ISkPaint;
   Surface: ISkSurface;
 begin
   if Document = nil then
@@ -143,19 +150,101 @@ begin
   ScaleY := Height / Max(CanvasLayer.Height, 1);
   Paint := TSkPaint.Create(TSkPaintStyle.Fill);
   Paint.AntiAlias := True;
+  StrokePaint := TSkPaint.Create(TSkPaintStyle.Stroke);
+  StrokePaint.AntiAlias := True;
+  Canvas.Scale(ScaleX, ScaleY);
   for I := 1 to Document.LayerCount - 1 do
   begin
     Layer := Document[I];
-    if not Layer.Visible or not (Layer is TVectArtRectangleLayer) then
+    if not Layer.Visible then
+      Continue;
+    if Layer is TVectArtLineLayer then
+    begin
+      LineLayer := TVectArtLineLayer(Layer);
+      StrokePaint.Color := VclColorToAlphaColor(LineLayer.StrokeColor,
+        LineLayer.Opacity);
+      StrokePaint.StrokeWidth := Max(LineLayer.StrokeWidth, 0.1);
+      DashIntervals := VectArtStrokeDashIntervals(LineLayer.StrokeStyle,
+        LineLayer.StrokeWidth);
+      if Length(DashIntervals) > 0 then
+        StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0)
+      else
+        StrokePaint.PathEffect := nil;
+      if VectArtStrokeUsesRoundCaps(LineLayer.StrokeStyle) then
+        StrokePaint.StrokeCap := TSkStrokeCap.Round
+      else
+        StrokePaint.StrokeCap := TSkStrokeCap.Butt;
+      Canvas.DrawLine(LineLayer.StartPoint, LineLayer.EndPoint, StrokePaint);
+      Continue;
+    end;
+    if Layer is TVectArtPathLayer then
+    begin
+      PathLayer := TVectArtPathLayer(Layer);
+      if Length(PathLayer.Points) < 2 then
+        Continue;
+      PathBuilder := TSkPathBuilder.Create;
+      PathBuilder.MoveTo(PathLayer.Points[0]);
+      for J := 1 to High(PathLayer.Points) do
+        PathBuilder.LineTo(PathLayer.Points[J]);
+      if PathLayer.Closed then
+        PathBuilder.Close;
+      Path := PathBuilder.Detach;
+      if PathLayer.Filled and PathLayer.Closed then
+      begin
+        Paint.Color := VclColorToAlphaColor(PathLayer.FillColor,
+          PathLayer.Opacity);
+        Canvas.DrawPath(Path, Paint);
+      end;
+      if PathLayer.StrokeWidth > 0 then
+      begin
+        StrokePaint.Color := VclColorToAlphaColor(PathLayer.StrokeColor,
+          PathLayer.Opacity);
+        StrokePaint.StrokeWidth := PathLayer.StrokeWidth;
+        DashIntervals := VectArtStrokeDashIntervals(PathLayer.StrokeStyle,
+          PathLayer.StrokeWidth);
+        if Length(DashIntervals) > 0 then
+          StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0)
+        else
+          StrokePaint.PathEffect := nil;
+        if VectArtStrokeUsesRoundCaps(PathLayer.StrokeStyle) then
+          StrokePaint.StrokeCap := TSkStrokeCap.Round
+        else
+          StrokePaint.StrokeCap := TSkStrokeCap.Butt;
+        Canvas.DrawPath(Path, StrokePaint);
+      end;
+      Continue;
+    end;
+    if not (Layer is TVectArtRectangleLayer) then
       Continue;
     RectangleLayer := TVectArtRectangleLayer(Layer);
     Paint.Color := VclColorToAlphaColor(RectangleLayer.FillColor,
       RectangleLayer.Opacity);
-    Canvas.DrawRect(TRectF.Create(
-      RectangleLayer.Bounds.Left * ScaleX,
-      RectangleLayer.Bounds.Top * ScaleY,
-      RectangleLayer.Bounds.Right * ScaleX,
-      RectangleLayer.Bounds.Bottom * ScaleY), Paint);
+    Canvas.Save;
+    try
+      Canvas.Rotate(RectangleLayer.RotationDegrees,
+        (RectangleLayer.Bounds.Left + RectangleLayer.Bounds.Right) * 0.5,
+        (RectangleLayer.Bounds.Top + RectangleLayer.Bounds.Bottom) * 0.5);
+      Canvas.DrawRect(RectangleLayer.Bounds, Paint);
+      if RectangleLayer.StrokeWidth > 0 then
+      begin
+        StrokePaint.Color := VclColorToAlphaColor(RectangleLayer.StrokeColor,
+          RectangleLayer.Opacity);
+        StrokePaint.StrokeWidth := RectangleLayer.StrokeWidth;
+        DashIntervals := VectArtStrokeDashIntervals(
+          RectangleLayer.StrokeStyle, RectangleLayer.StrokeWidth);
+        if Length(DashIntervals) > 0 then
+          StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0)
+        else
+          StrokePaint.PathEffect := nil;
+        if VectArtStrokeUsesRoundCaps(RectangleLayer.StrokeStyle) then
+          StrokePaint.StrokeCap := TSkStrokeCap.Round
+        else
+          StrokePaint.StrokeCap := TSkStrokeCap.Butt;
+        Canvas.DrawRect(RectangleLayer.Bounds, StrokePaint);
+      end;
+    finally
+      Canvas.Restore;
+    end;
   end;
   Surface.Flush;
 end;

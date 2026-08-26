@@ -73,6 +73,7 @@ var
   Column: Integer;
   DetailText: string;
   LockRect: TRect;
+  LineLayer: TVectArtLineLayer;
   RectangleLayer: TVectArtRectangleLayer;
   RectangleRect: TRect;
   Row: Integer;
@@ -151,8 +152,36 @@ begin
       ACanvas.Brush.Color := BlendThumbnailColor(RectangleLayer.FillColor,
         RectangleLayer.Opacity * 0.35);
     ACanvas.FillRect(RectangleRect);
-    ACanvas.Pen.Color := TColor($00707070);
+    if RectangleLayer.StrokeWidth > 0 then
+    begin
+      ACanvas.Pen.Color := BlendThumbnailColor(RectangleLayer.StrokeColor,
+        RectangleLayer.Opacity);
+      ACanvas.Pen.Width := Max(Round(RectangleLayer.StrokeWidth), 1);
+      if RectangleLayer.StrokeStyle <> vssSolid then
+        ACanvas.Pen.Style := psDash
+      else
+        ACanvas.Pen.Style := psSolid;
+    end
+    else
+      ACanvas.Pen.Color := TColor($00707070);
     ACanvas.FrameRect(RectangleRect);
+    ACanvas.Pen.Style := psSolid;
+    ACanvas.Pen.Width := 1;
+  end;
+  if Layer is TVectArtLineLayer then
+  begin
+    LineLayer := TVectArtLineLayer(Layer);
+    ACanvas.Pen.Color := BlendThumbnailColor(LineLayer.StrokeColor,
+      LineLayer.Opacity);
+    ACanvas.Pen.Width := Max(Round(LineLayer.StrokeWidth), 1);
+    if LineLayer.StrokeStyle <> vssSolid then
+      ACanvas.Pen.Style := psDash
+    else
+      ACanvas.Pen.Style := psSolid;
+    ACanvas.MoveTo(ThumbnailRect.Left + 8, ThumbnailRect.Bottom - 8);
+    ACanvas.LineTo(ThumbnailRect.Right - 8, ThumbnailRect.Top + 8);
+    ACanvas.Pen.Style := psSolid;
+    ACanvas.Pen.Width := 1;
   end;
   ACanvas.Brush.Style := bsClear;
   ACanvas.Pen.Color := COLOR_THUMB_BORDER;
@@ -166,11 +195,13 @@ begin
   if Layer is TVectArtCanvasLayer then
     DetailText := Format('%d x %d  %d%%', [TVectArtCanvasLayer(Layer).Width,
       TVectArtCanvasLayer(Layer).Height, Round(Layer.Opacity * 100)])
-  else
+  else if Layer is TVectArtRectangleLayer then
     DetailText := Format('%d x %d  %d%%',
       [Round(TVectArtRectangleLayer(Layer).Bounds.Width),
        Round(TVectArtRectangleLayer(Layer).Bounds.Height),
-       Round(Layer.Opacity * 100)]);
+       Round(Layer.Opacity * 100)])
+  else
+    DetailText := Format('Line  %d%%', [Round(Layer.Opacity * 100)]);
   ACanvas.Font.Height := -11;
   ACanvas.Font.Color := COLOR_TEXT_SECONDARY;
   ACanvas.TextOut(TextX, ItemRect.Top + 43, DetailText);
@@ -206,6 +237,7 @@ var
   Column: Integer;
   DetailText: string;
   LockRect: TRect;
+  LineLayer: TVectArtLineLayer;
   RectangleLayer: TVectArtRectangleLayer;
   RectangleRect: TRect;
   Row: Integer;
@@ -284,8 +316,40 @@ begin
       ACanvas.Brush.Handle.SetOpacity(RectangleLayer.Opacity * 0.35);
     ACanvas.FillRect(RectangleRect);
     ACanvas.Brush.Handle.SetOpacity(1.0);
-    ACanvas.Pen.Color := TColor($00707070);
+    if RectangleLayer.StrokeWidth > 0 then
+    begin
+      if Layer.Visible then
+        ACanvas.Pen.Color := BlendThumbnailColor(RectangleLayer.StrokeColor,
+          RectangleLayer.Opacity)
+      else
+        ACanvas.Pen.Color := BlendThumbnailColor(RectangleLayer.StrokeColor,
+          RectangleLayer.Opacity * 0.35);
+      ACanvas.Pen.Width := Max(Round(RectangleLayer.StrokeWidth), 1);
+      if RectangleLayer.StrokeStyle <> vssSolid then
+        ACanvas.Pen.Style := psDash
+      else
+        ACanvas.Pen.Style := psSolid;
+    end
+    else
+      ACanvas.Pen.Color := TColor($00707070);
     ACanvas.FrameRect(RectangleRect);
+    ACanvas.Pen.Style := psSolid;
+    ACanvas.Pen.Width := 1;
+  end;
+  if Layer is TVectArtLineLayer then
+  begin
+    LineLayer := TVectArtLineLayer(Layer);
+    ACanvas.Pen.Color := BlendThumbnailColor(LineLayer.StrokeColor,
+      LineLayer.Opacity);
+    ACanvas.Pen.Width := Max(Round(LineLayer.StrokeWidth), 1);
+    if LineLayer.StrokeStyle <> vssSolid then
+      ACanvas.Pen.Style := psDash
+    else
+      ACanvas.Pen.Style := psSolid;
+    ACanvas.MoveTo(ThumbnailRect.Left + 8, ThumbnailRect.Bottom - 8);
+    ACanvas.LineTo(ThumbnailRect.Right - 8, ThumbnailRect.Top + 8);
+    ACanvas.Pen.Style := psSolid;
+    ACanvas.Pen.Width := 1;
   end;
   ACanvas.Brush.Style := bsClear;
   ACanvas.Pen.Color := COLOR_THUMB_BORDER;
@@ -299,11 +363,13 @@ begin
   if Layer is TVectArtCanvasLayer then
     DetailText := Format('%d x %d  %d%%', [TVectArtCanvasLayer(Layer).Width,
       TVectArtCanvasLayer(Layer).Height, Round(Layer.Opacity * 100)])
-  else
+  else if Layer is TVectArtRectangleLayer then
     DetailText := Format('%d x %d  %d%%',
       [Round(TVectArtRectangleLayer(Layer).Bounds.Width),
        Round(TVectArtRectangleLayer(Layer).Bounds.Height),
-       Round(Layer.Opacity * 100)]);
+       Round(Layer.Opacity * 100)])
+  else
+    DetailText := Format('Line  %d%%', [Round(Layer.Opacity * 100)]);
   ACanvas.Font.Height := -11;
   ACanvas.Font.Color := COLOR_TEXT_SECONDARY;
   ACanvas.TextOut(TextX, ItemRect.Top + 43, DetailText);

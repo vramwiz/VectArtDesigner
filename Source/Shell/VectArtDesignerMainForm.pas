@@ -11,6 +11,7 @@ uses
   VectArtDesignerDocument,
   VectArtDesignerEditHistory, VectArtDesignerEditorState,
   VectArtDesignerEditorWorkspaceFrame, VectArtDesignerLayerPanelFrame,
+  VectArtDesignerLayerOperations,
   VectArtDesignerEditActionsUI, VectArtDesignerFileActionsUI,
   VectArtDesignerMifContainer, VectArtDesignerMifDocument,
   VectArtDesignerObjectPropertiesFrame, VectArtDesignerToolFrames,
@@ -476,6 +477,9 @@ begin
   if (FEditorState <> nil) and
     (FEditorState.CurrentTool = vetRectangle) then
     lblStatus.Caption := 'Ready   Tool: Rectangle   Canvas: ' + CanvasSize
+  else if (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetLine) then
+    lblStatus.Caption := 'Ready   Tool: Line   Canvas: ' + CanvasSize
   else
     lblStatus.Caption := 'Ready   Tool: Select   Canvas: ' + CanvasSize;
 end;
@@ -500,6 +504,17 @@ begin
       FEditHistory.Redo
     else
       Exit;
+    Key := 0;
+    Exit;
+  end;
+  if (Key = VK_DELETE) and not (ssCtrl in Shift) and
+    not (ssAlt in Shift) and (FDocument <> nil) and
+    (FDocument.SelectionCount > 0) and (FLayerFrame <> nil) and
+    (((FEditorFrame <> nil) and
+      (GetFocus = FEditorFrame.CanvasControl.Handle)) or
+     (GetFocus = FLayerFrame.LayerList.Handle)) then
+  begin
+    FLayerFrame.RunLayerAction(vlaDelete);
     Key := 0;
     Exit;
   end;

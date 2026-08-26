@@ -63,12 +63,82 @@ position4 = 左下
 
 位置・幅・高さ・回転・反転は4頂点座標で表現される。
 
+`四角_回転.mif`で、回転したRectangleの4頂点が
+`(187,109) (323,145) (306,211) (170,175)`として保存されることを確認した。
+第1頂点から第2頂点の角度は約14.826度で、4頂点の平均`(246.5,160)`が回転中心になる。
+同じオブジェクトの`vector original position1..4`は未回転の基準矩形を保持し、
+`vector matrix a..f`は基準矩形から回転後4頂点へのアフィン変換を保持する。
+
 通常値として、
 ```text
 waDAimage alpha  = 255
 waDAimage hidden = 0
 ```
 を確認。
+
+### 2.1 Rectangleの線
+
+`白い塗りつぶし四角.mif`、`白い塗りつぶし四角に黒い枠.mif`、
+`白い塗りつぶし四角に黒い複雑な点線の枠.mif`の比較から、次を確認した。
+
+```text
+waDAvector enable stroke texture = 0: 線なし / 1: 線あり
+waDAvector stroke style          = 0～8: 線種コンボの上から順
+waDAvector stroke width          = 8バイトのビッグエンディアン倍精度値
+```
+
+線色は対象imageの3つ後ろにあるストローク用texture IPNGの
+`waDAtexture color1`へ`0x00BBGGRR`で保存される。確認サンプルの線幅は`1.0`、線色は黒だった。
+元アプリの線種コンボ画像とstyle 3サンプルを対応させ、現行モデルでは次の順で保持する。
+
+```text
+0 実線
+1 点線
+2 短い破線
+3 ダッシュ・ドット
+4 ダッシュ・ドット・ドット
+5 間隔の広い点線
+6 中間長の破線
+7 長いダッシュ・ドット
+8 長い破線
+```
+
+### 2.2 直線
+
+`線.mif`では直線が`object type=image`、`object subtype=vector`、
+`vector element type=6`として保存されている。確認値は次のとおり。
+
+```text
+vector closed              = 0
+vector original position1  = (848, 452)
+vector original position3  = (1082, 460)
+vector matrix a..f          = 単位行列
+vector stroke width        = 100.0
+vector stroke style        = 8
+vector start stroke marker = 1
+vector end stroke marker   = 9
+vector start/end marker size = 11
+```
+
+マーカーを除いた線本体は、基準矩形の左右中央`(848,456)`から`(1082,456)`として復元できる。
+回転・拡縮された直線は、この2点へ`vector matrix a..f`を適用して端点を求める。
+現行Writerは同じelement typeと確認済み31×1のvectorペイロードを使用し、マーカーなしで保存する。
+
+### 2.3 連続直線と多角形
+
+`連続直線.mif`と`多角形.mif`も`vector element type=6`を使用する。直線との区別は
+element typeではなく、補助の`object type=vector` PNGに格納されたコマンド数と
+`vector closed`で行う。PNGは高さ1pxで、RGBAの各チャンネルをバイト列として使用している。
+
+先頭4バイトはリトルエンディアンのレコード数で、後続は1レコード60バイト。確認済みの
+コマンド値は1が開始点、2が直線頂点、3が閉じる操作であり、座標はコマンド値に続く
+2個のリトルエンディアンDoubleとして格納される。WebArtのPNGは各4バイト内でR/Bが
+入れ替わっているため、デコード後にB,G,R,Aの順へ戻してから解釈する。
+
+- `連続直線.mif`: 176レコード、`vector closed=0`
+- `多角形.mif`の対象パス: 5頂点、`vector closed=1`
+
+各頂点には`vector matrix a..f`を適用してDocument座標へ変換する。
 
 ## 3. 数値の保存形式
 多くの数値はPNG内の独自`waDA`チャンクに保存される。PNGチャンクの構造は次のとおり。

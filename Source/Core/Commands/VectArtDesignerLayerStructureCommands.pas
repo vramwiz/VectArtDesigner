@@ -22,6 +22,21 @@ type
     procedure Undo; override;
   end;
 
+  TVectArtInsertLineCommand = class(TVectArtEditCommand)
+  private
+    FAfterSelection: TArray<Integer>;
+    FBeforeSelection: TArray<Integer>;
+    FData: TVectArtLineData;
+    FDocument: TVectArtDocument;
+    FIndex: Integer;
+  public
+    constructor Create(ADocument: TVectArtDocument; Index: Integer;
+      const Data: TVectArtLineData; const BeforeSelection,
+      AfterSelection: TArray<Integer>);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
   TVectArtDeleteRectangleCommand = class(TVectArtEditCommand)
   private
     FAfterSelection: TArray<Integer>;
@@ -32,6 +47,36 @@ type
   public
     constructor Create(ADocument: TVectArtDocument; Index: Integer;
       const Data: TVectArtRectangleData; const BeforeSelection,
+      AfterSelection: TArray<Integer>);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
+  TVectArtDeleteLineCommand = class(TVectArtEditCommand)
+  private
+    FAfterSelection: TArray<Integer>;
+    FBeforeSelection: TArray<Integer>;
+    FData: TVectArtLineData;
+    FDocument: TVectArtDocument;
+    FIndex: Integer;
+  public
+    constructor Create(ADocument: TVectArtDocument; Index: Integer;
+      const Data: TVectArtLineData; const BeforeSelection,
+      AfterSelection: TArray<Integer>);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
+  TVectArtDeletePathCommand = class(TVectArtEditCommand)
+  private
+    FAfterSelection: TArray<Integer>;
+    FBeforeSelection: TArray<Integer>;
+    FData: TVectArtPathData;
+    FDocument: TVectArtDocument;
+    FIndex: Integer;
+  public
+    constructor Create(ADocument: TVectArtDocument; Index: Integer;
+      const Data: TVectArtPathData; const BeforeSelection,
       AfterSelection: TArray<Integer>);
     procedure Execute; override;
     procedure Undo; override;
@@ -53,6 +98,38 @@ type
   end;
 
 implementation
+
+{ TVectArtInsertLineCommand }
+
+constructor TVectArtInsertLineCommand.Create(ADocument: TVectArtDocument;
+  Index: Integer; const Data: TVectArtLineData; const BeforeSelection,
+  AfterSelection: TArray<Integer>);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FIndex := Index;
+  FData := Data;
+  FBeforeSelection := Copy(BeforeSelection);
+  FAfterSelection := Copy(AfterSelection);
+end;
+
+procedure TVectArtInsertLineCommand.Execute;
+begin
+  if FDocument = nil then
+    Exit;
+  FIndex := FDocument.InsertLine(FIndex, FData);
+  FDocument.SetSelectedLayers(FAfterSelection);
+end;
+
+procedure TVectArtInsertLineCommand.Undo;
+var
+  RemovedData: TVectArtLineData;
+begin
+  if FDocument = nil then
+    Exit;
+  FDocument.RemoveLine(FIndex, RemovedData);
+  FDocument.SetSelectedLayers(FBeforeSelection);
+end;
 
 { TVectArtInsertRectangleCommand }
 
@@ -84,6 +161,69 @@ begin
   if FDocument = nil then
     Exit;
   FDocument.RemoveRectangle(FIndex, RemovedData);
+  FDocument.SetSelectedLayers(FBeforeSelection);
+end;
+
+{ TVectArtDeleteRectangleCommand }
+
+constructor TVectArtDeleteLineCommand.Create(ADocument: TVectArtDocument;
+  Index: Integer; const Data: TVectArtLineData; const BeforeSelection,
+  AfterSelection: TArray<Integer>);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FIndex := Index;
+  FData := Data;
+  FBeforeSelection := Copy(BeforeSelection);
+  FAfterSelection := Copy(AfterSelection);
+end;
+
+procedure TVectArtDeleteLineCommand.Execute;
+var
+  RemovedData: TVectArtLineData;
+begin
+  if FDocument = nil then
+    Exit;
+  FDocument.RemoveLine(FIndex, RemovedData);
+  FDocument.SetSelectedLayers(FAfterSelection);
+end;
+
+procedure TVectArtDeleteLineCommand.Undo;
+begin
+  if FDocument = nil then
+    Exit;
+  FIndex := FDocument.InsertLine(FIndex, FData);
+  FDocument.SetSelectedLayers(FBeforeSelection);
+end;
+
+constructor TVectArtDeletePathCommand.Create(ADocument: TVectArtDocument;
+  Index: Integer; const Data: TVectArtPathData; const BeforeSelection,
+  AfterSelection: TArray<Integer>);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FIndex := Index;
+  FData := Data;
+  FData.Points := Copy(Data.Points);
+  FBeforeSelection := Copy(BeforeSelection);
+  FAfterSelection := Copy(AfterSelection);
+end;
+
+procedure TVectArtDeletePathCommand.Execute;
+var
+  RemovedData: TVectArtPathData;
+begin
+  if FDocument = nil then
+    Exit;
+  FDocument.RemovePath(FIndex, RemovedData);
+  FDocument.SetSelectedLayers(FAfterSelection);
+end;
+
+procedure TVectArtDeletePathCommand.Undo;
+begin
+  if FDocument = nil then
+    Exit;
+  FIndex := FDocument.InsertPath(FIndex, FData);
   FDocument.SetSelectedLayers(FBeforeSelection);
 end;
 

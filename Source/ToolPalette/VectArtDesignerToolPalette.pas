@@ -81,9 +81,14 @@ begin
     Canvas.LineTo(CenterX - 9, CenterY + 10);
     Canvas.LineTo(CenterX - 8, CenterY - 11);
   end
-  else
+  else if Index = 1 then
     Canvas.Rectangle(CenterX - 10, CenterY - 8, CenterX + 10,
-      CenterY + 8);
+      CenterY + 8)
+  else
+  begin
+    Canvas.MoveTo(CenterX - 11, CenterY + 8);
+    Canvas.LineTo(CenterX + 11, CenterY - 8);
+  end;
 end;
 
 procedure TVectArtToolPaletteControl.MouseDown(Button: TMouseButton;
@@ -92,7 +97,7 @@ var
   I: Integer;
 begin
   if (Button = mbLeft) and (FEditorState <> nil) then
-    for I := 0 to 1 do
+    for I := 0 to 2 do
       if PtInRect(ButtonRect(I), Point(X, Y)) then
       begin
         FEditorState.CurrentTool := TVectArtEditorTool(I);
@@ -107,7 +112,7 @@ var
 begin
   Canvas.Brush.Color := COLOR_BACKGROUND;
   Canvas.FillRect(ClientRect);
-  for I := 0 to 1 do
+  for I := 0 to 2 do
     DrawButton(I);
 end;
 

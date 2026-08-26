@@ -132,6 +132,7 @@
         <DCCReference Include="Source\Shell\VectArtDesignerEditActionsUI.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerCanvasSettingsDialog.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerDocument.pas"/>
+        <DCCReference Include="Source\Core\VectArtDesignerGeometry.pas"/>
         <DCCReference Include="Source\Rendering\VectArtDesignerRenderer.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerContext.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerEditorState.pas"/>

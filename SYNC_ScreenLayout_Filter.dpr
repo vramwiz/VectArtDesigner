@@ -23,6 +23,7 @@ uses
   VectArtDesignerEditActionsUI in 'Source\Shell\VectArtDesignerEditActionsUI.pas',
   VectArtDesignerCanvasSettingsDialog in 'Source\Shell\VectArtDesignerCanvasSettingsDialog.pas',
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
+  VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerRenderer in 'Source\Rendering\VectArtDesignerRenderer.pas',
   VectArtDesignerContext in 'Source\Core\VectArtDesignerContext.pas',
   VectArtDesignerEditorState in 'Source\Core\VectArtDesignerEditorState.pas',

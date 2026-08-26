@@ -7,6 +7,7 @@ uses
   System.Types,
   Vcl.Graphics,
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
+  VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerLayerRenderer in
     'Source\Layers\VectArtDesignerLayerRenderer.pas';
 
@@ -44,6 +45,10 @@ begin
     Data.Locked := False;
     Data.Name := 'Rectangle 1';
     Data.Opacity := 1.0;
+    Data.RotationDegrees := 0.0;
+    Data.StrokeColor := clBlack;
+    Data.StrokeStyle := vssSolid;
+    Data.StrokeWidth := 0.0;
     Data.Visible := True;
     Document.InsertRectangle(Document.LayerCount, Data);
     Data.Name := 'Rectangle 2';

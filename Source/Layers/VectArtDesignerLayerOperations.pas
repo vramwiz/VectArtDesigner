@@ -70,6 +70,19 @@ begin
     Data.Opacity := FEditorState.RectangleOpacity
   else
     Data.Opacity := 1.0;
+  Data.RotationDegrees := 0.0;
+  if FEditorState <> nil then
+  begin
+    Data.StrokeColor := FEditorState.RectangleStrokeColor;
+    Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
+    Data.StrokeWidth := FEditorState.RectangleStrokeWidth;
+  end
+  else
+  begin
+    Data.StrokeColor := clBlack;
+    Data.StrokeStyle := vssSolid;
+    Data.StrokeWidth := 0.0;
+  end;
   Data.Visible := True;
   BeforeSelection := FDocument.GetSelectedLayerIndices;
   Index := FDocument.InsertRectangle(FDocument.LayerCount, Data);
@@ -121,23 +134,56 @@ var
   BeforeSelection: TArray<Integer>;
   Command: TVectArtCompoundCommand;
   Data: TVectArtRectangleData;
+  LineData: TVectArtLineData;
+  PathData: TVectArtPathData;
   I: Integer;
+  SelectedIndices: TArray<Integer>;
+  SelectionIndex: Integer;
 begin
   Command := nil;
   if FEditHistory <> nil then
     Command := TVectArtCompoundCommand.Create;
-  for I := FDocument.LayerCount - 1 downto 1 do
-    if FDocument.IsLayerSelected(I) then
+  // RemoveRectangle は選択が空になると隣接レイヤーを自動選択するため、
+  // 削除中の現在選択ではなく、操作開始時の選択だけを対象にする。
+  SelectedIndices := FDocument.GetSelectedLayerIndices;
+  for SelectionIndex := High(SelectedIndices) downto 0 do
+  begin
+    I := SelectedIndices[SelectionIndex];
+    if (I > 0) and (I < FDocument.LayerCount) then
     begin
       BeforeSelection := FDocument.GetSelectedLayerIndices;
-      if FDocument.RemoveRectangle(I, Data) then
+      if FDocument[I] is TVectArtRectangleLayer then
       begin
-        AfterSelection := FDocument.GetSelectedLayerIndices;
-        if Command <> nil then
-          Command.Add(TVectArtDeleteRectangleCommand.Create(FDocument, I,
-            Data, BeforeSelection, AfterSelection));
+        if FDocument.RemoveRectangle(I, Data) then
+        begin
+          AfterSelection := FDocument.GetSelectedLayerIndices;
+          if Command <> nil then
+            Command.Add(TVectArtDeleteRectangleCommand.Create(FDocument, I,
+              Data, BeforeSelection, AfterSelection));
+        end;
+      end
+      else if FDocument[I] is TVectArtLineLayer then
+      begin
+        if FDocument.RemoveLine(I, LineData) then
+        begin
+          AfterSelection := FDocument.GetSelectedLayerIndices;
+          if Command <> nil then
+            Command.Add(TVectArtDeleteLineCommand.Create(FDocument, I,
+              LineData, BeforeSelection, AfterSelection));
+        end;
+      end
+      else if FDocument[I] is TVectArtPathLayer then
+      begin
+        if FDocument.RemovePath(I, PathData) then
+        begin
+          AfterSelection := FDocument.GetSelectedLayerIndices;
+          if Command <> nil then
+            Command.Add(TVectArtDeletePathCommand.Create(FDocument, I,
+              PathData, BeforeSelection, AfterSelection));
+        end;
       end;
     end;
+  end;
   if (Command <> nil) and (Command.Count > 0) then
     FEditHistory.AddApplied(Command)
   else
@@ -233,7 +279,9 @@ begin
   for I := 0 to FDocument.LayerCount - 1 do
     if FDocument.IsLayerSelected(I) and
       ((I = 0) or FDocument[I].Locked or
-       not (FDocument[I] is TVectArtRectangleLayer)) then
+       not ((FDocument[I] is TVectArtRectangleLayer) or
+         (FDocument[I] is TVectArtLineLayer) or
+         (FDocument[I] is TVectArtPathLayer))) then
       Exit(False);
 end;
 

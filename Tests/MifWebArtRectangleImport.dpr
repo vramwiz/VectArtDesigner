@@ -14,6 +14,7 @@ uses
     'Lib\TextRenderer\TextRendererSkiaRuntime.pas',
   VectArtDesignerDocument in
     'Source\Core\VectArtDesignerDocument.pas',
+  VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerDocumentJson in
     'Source\Persistence\VectArtDesignerDocumentJson.pas',
   VectArtDesignerRenderer in
@@ -78,6 +79,30 @@ begin
         'Fill color differs');
       Require(SameValue(Rectangle.Opacity, 1.0), 'Opacity differs');
       Require(Rectangle.Visible, 'Visibility differs');
+    end;
+    if InputFileName.Contains('_' + #$56DE#$8EE2) then
+    begin
+      Rectangle := TVectArtRectangleLayer(Document[1]);
+      Require(SameValue(Rectangle.RotationDegrees, 14.826, 0.1),
+        'Rotated MIF angle differs');
+      Require(SameValue((Rectangle.Bounds.Left + Rectangle.Bounds.Right) *
+        0.5, 246.5, 0.1), 'Rotated MIF center X differs');
+      Require(SameValue((Rectangle.Bounds.Top + Rectangle.Bounds.Bottom) *
+        0.5, 160.0, 0.1), 'Rotated MIF center Y differs');
+    end;
+    if InputFileName.Contains(#$9ED2#$3044#$67A0) then
+    begin
+      Rectangle := TVectArtRectangleLayer(Document[1]);
+      Require(ColorToRGB(Rectangle.StrokeColor) = ColorToRGB(clBlack),
+        'MIF stroke color differs');
+      Require(SameValue(Rectangle.StrokeWidth, 1.0, 0.000001),
+        'MIF stroke width differs');
+      if InputFileName.Contains(#$8907#$96D1#$306A#$70B9#$7DDA) then
+        Require(Rectangle.StrokeStyle = vssDashed,
+          'MIF dashed stroke style differs')
+      else
+        Require(Rectangle.StrokeStyle = vssSolid,
+          'MIF solid stroke style differs');
     end;
     Require(TryCreateVectArtMifFromDocument(Document, Container,
       SavedContainer, ErrorMessage), ErrorMessage);

@@ -9,6 +9,20 @@ uses
   VectArtDesignerEditHistory, VectArtDesignerEditorState;
 
 type
+  // Parent未接続のFrame内でItemsへ触れるとTComboBoxがHandleを要求するため、
+  // 選択肢の生成を実際のCreateWndまで遅延する。
+  TVectArtStrokeStyleCombo = class(TComboBox)
+  private
+    FPendingItemIndex: Integer;
+  protected
+    procedure CreateWnd; override;
+    procedure DrawItem(Index: Integer; Rect: TRect;
+      State: TOwnerDrawState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    procedure SetPendingItemIndex(Value: Integer);
+  end;
+
   TVectArtObjectPropertiesControl = class(TCustomControl)
   private
     FColorEdit: TEdit;
@@ -17,6 +31,9 @@ type
     FEditorState: TVectArtEditorState;
     FHeightEdit: TEdit;
     FOpacityEdit: TEdit;
+    FStrokeColorEdit: TEdit;
+    FStrokeStyleCombo: TVectArtStrokeStyleCombo;
+    FStrokeWidthEdit: TEdit;
     FUpdating: Boolean;
     FWidthEdit: TEdit;
     FXEdit: TEdit;
@@ -24,12 +41,17 @@ type
     procedure ApplyColor;
     procedure ApplyGeometry;
     procedure ApplyOpacity;
+    procedure ApplyStrokeColor;
+    procedure ApplyStrokeStyle(Sender: TObject);
+    procedure ApplyStrokeWidth;
     procedure ClearEditValue(Edit: TEdit);
     procedure EditExit(Sender: TObject);
     procedure EditKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     function GetSelectedRectangleIndices: TArray<Integer>;
+    function GetSelectedStrokeIndices: TArray<Integer>;
     function SelectedLayersHaveLock: Boolean;
     function NewDarkEdit: TEdit;
+    function NewDarkCombo: TVectArtStrokeStyleCombo;
     function SelectedBounds(out Bounds: TRectF): Boolean;
     procedure SetDocument(const Value: TVectArtDocument);
     procedure SetEditorsEnabled(Value: Boolean);
@@ -60,6 +82,101 @@ const
   EDIT_HEIGHT = 25;
   MIN_OBJECT_SIZE = 1.0;
 
+constructor TVectArtStrokeStyleCombo.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FPendingItemIndex := 0;
+end;
+
+procedure TVectArtStrokeStyleCombo.CreateWnd;
+var
+  ChangeEvent: TNotifyEvent;
+begin
+  inherited CreateWnd;
+  ChangeEvent := OnChange;
+  OnChange := nil;
+  try
+    Items.BeginUpdate;
+    try
+      Items.Clear;
+      Items.Add('Solid');
+      Items.Add('Dotted');
+      Items.Add('Short dash');
+      Items.Add('Dash-dot');
+      Items.Add('Dash-dot-dot');
+      Items.Add('Sparse dotted');
+      Items.Add('Medium dash');
+      Items.Add('Long dash-dot');
+      Items.Add('Long dash');
+      ItemIndex := FPendingItemIndex;
+    finally
+      Items.EndUpdate;
+    end;
+  finally
+    OnChange := ChangeEvent;
+  end;
+end;
+
+procedure TVectArtStrokeStyleCombo.DrawItem(Index: Integer; Rect: TRect;
+  State: TOwnerDrawState);
+var
+  DashIndex: Integer;
+  DrawSegment: Boolean;
+  Intervals: TArray<Single>;
+  SegmentLength: Integer;
+  StyleValue: TVectArtStrokeStyle;
+  X: Integer;
+  Y: Integer;
+begin
+  if odSelected in State then
+    Canvas.Brush.Color := TColor($00D77800)
+  else
+    Canvas.Brush.Color := COLOR_EDIT;
+  Canvas.FillRect(Rect);
+  if not InRange(Index, Ord(Low(TVectArtStrokeStyle)),
+    Ord(High(TVectArtStrokeStyle))) then
+    Exit;
+  StyleValue := TVectArtStrokeStyle(Index);
+  Canvas.Pen.Color := COLOR_TEXT;
+  Canvas.Pen.Width := 2;
+  Canvas.Pen.Style := psSolid;
+  Canvas.Brush.Color := COLOR_TEXT;
+  Y := (Rect.Top + Rect.Bottom) div 2;
+  X := Rect.Left + 5;
+  Intervals := VectArtStrokeDashIntervals(StyleValue, 2.0);
+  if Length(Intervals) = 0 then
+  begin
+    Canvas.MoveTo(X, Y);
+    Canvas.LineTo(Rect.Right - 5, Y);
+    Exit;
+  end;
+  DashIndex := 0;
+  DrawSegment := True;
+  while X < Rect.Right - 5 do
+  begin
+    SegmentLength := Max(Round(Intervals[DashIndex]), 1);
+    if DrawSegment then
+      if VectArtStrokeUsesRoundCaps(StyleValue) and
+        (SegmentLength <= 2) then
+        Canvas.Ellipse(X - 1, Y - 1, X + 2, Y + 2)
+      else
+      begin
+        Canvas.MoveTo(X, Y);
+        Canvas.LineTo(Min(X + SegmentLength, Rect.Right - 5), Y);
+      end;
+    Inc(X, SegmentLength);
+    DashIndex := (DashIndex + 1) mod Length(Intervals);
+    DrawSegment := not DrawSegment;
+  end;
+end;
+
+procedure TVectArtStrokeStyleCombo.SetPendingItemIndex(Value: Integer);
+begin
+  FPendingItemIndex := Value;
+  if HandleAllocated then
+    ItemIndex := Value;
+end;
+
 constructor TVectArtObjectPropertiesControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -71,8 +188,200 @@ begin
   FWidthEdit := NewDarkEdit;
   FHeightEdit := NewDarkEdit;
   FColorEdit := NewDarkEdit;
+  FStrokeColorEdit := NewDarkEdit;
+  FStrokeWidthEdit := NewDarkEdit;
+  FStrokeStyleCombo := NewDarkCombo;
   FOpacityEdit := NewDarkEdit;
   SetEditorsEnabled(False);
+end;
+
+procedure TVectArtObjectPropertiesControl.ApplyStrokeColor;
+var
+  Blue: Integer;
+  Command: TVectArtCompoundCommand;
+  Green: Integer;
+  I: Integer;
+  LayerIndex: Integer;
+  LayerIndices: TArray<Integer>;
+  NewColor: TColor;
+  OldColor: TColor;
+  RectangleLayer: TVectArtRectangleLayer;
+  Red: Integer;
+  Value: Integer;
+begin
+  if FUpdating or (FDocument = nil) or
+    (FDocument.SelectionCount = 0) or SelectedLayersHaveLock then
+    Exit;
+  if not TryStrToInt('$' + StringReplace(Trim(FStrokeColorEdit.Text), '#', '', []),
+    Value) or (Value < 0) or (Value > $FFFFFF) then
+  begin
+    RefreshFromDocument;
+    Exit;
+  end;
+  Red := (Value shr 16) and $FF;
+  Green := (Value shr 8) and $FF;
+  Blue := Value and $FF;
+  NewColor := RGB(Red, Green, Blue);
+  LayerIndices := GetSelectedStrokeIndices;
+  Command := nil;
+  if FEditHistory <> nil then
+    Command := TVectArtCompoundCommand.Create;
+  for I := 0 to High(LayerIndices) do
+  begin
+    LayerIndex := LayerIndices[I];
+    if FDocument[LayerIndex] is TVectArtLineLayer then
+    begin
+      OldColor := TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor;
+      FDocument.SetLineStroke(LayerIndex, NewColor,
+        TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth,
+        TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle);
+      RectangleLayer := nil;
+    end
+    else
+    begin
+      RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
+      OldColor := RectangleLayer.StrokeColor;
+      FDocument.SetRectangleStroke(LayerIndex, NewColor,
+        RectangleLayer.StrokeWidth, RectangleLayer.StrokeStyle);
+    end;
+    if (Command <> nil) and (OldColor <> NewColor) then
+      if FDocument[LayerIndex] is TVectArtLineLayer then
+        Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
+          OldColor, TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth,
+          TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle, NewColor,
+          TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth,
+          TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle))
+      else
+        Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
+          OldColor, RectangleLayer.StrokeWidth, RectangleLayer.StrokeStyle,
+          NewColor, RectangleLayer.StrokeWidth, RectangleLayer.StrokeStyle));
+  end;
+  if (Command <> nil) and (Command.Count > 0) then
+    FEditHistory.AddApplied(Command)
+  else
+    Command.Free;
+  if FEditorState <> nil then
+    FEditorState.RectangleStrokeColor := NewColor;
+end;
+
+procedure TVectArtObjectPropertiesControl.ApplyStrokeStyle(Sender: TObject);
+var
+  Command: TVectArtCompoundCommand;
+  I: Integer;
+  LayerIndex: Integer;
+  LayerIndices: TArray<Integer>;
+  NewStyle: TVectArtStrokeStyle;
+  OldStyle: TVectArtStrokeStyle;
+  RectangleLayer: TVectArtRectangleLayer;
+begin
+  if FUpdating or (FDocument = nil) or (FDocument.SelectionCount = 0) or
+    SelectedLayersHaveLock or (FStrokeStyleCombo.ItemIndex < 0) then
+    Exit;
+  if not InRange(FStrokeStyleCombo.ItemIndex,
+    Ord(Low(TVectArtStrokeStyle)), Ord(High(TVectArtStrokeStyle))) then
+    Exit;
+  NewStyle := TVectArtStrokeStyle(FStrokeStyleCombo.ItemIndex);
+  LayerIndices := GetSelectedStrokeIndices;
+  Command := nil;
+  if FEditHistory <> nil then
+    Command := TVectArtCompoundCommand.Create;
+  for I := 0 to High(LayerIndices) do
+  begin
+    LayerIndex := LayerIndices[I];
+    if FDocument[LayerIndex] is TVectArtLineLayer then
+    begin
+      OldStyle := TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle;
+      FDocument.SetLineStroke(LayerIndex,
+        TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor,
+        TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth, NewStyle);
+      RectangleLayer := nil;
+    end
+    else
+    begin
+      RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
+      OldStyle := RectangleLayer.StrokeStyle;
+      FDocument.SetRectangleStroke(LayerIndex, RectangleLayer.StrokeColor,
+        RectangleLayer.StrokeWidth, NewStyle);
+    end;
+    if (Command <> nil) and (OldStyle <> NewStyle) then
+      if FDocument[LayerIndex] is TVectArtLineLayer then
+        Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
+          TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor,
+          TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth, OldStyle,
+          TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor,
+          TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth, NewStyle))
+      else
+        Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
+          RectangleLayer.StrokeColor, RectangleLayer.StrokeWidth, OldStyle,
+          RectangleLayer.StrokeColor, RectangleLayer.StrokeWidth, NewStyle));
+  end;
+  if (Command <> nil) and (Command.Count > 0) then
+    FEditHistory.AddApplied(Command)
+  else
+    Command.Free;
+  if FEditorState <> nil then
+    FEditorState.RectangleStrokeStyle := NewStyle;
+end;
+
+procedure TVectArtObjectPropertiesControl.ApplyStrokeWidth;
+var
+  Command: TVectArtCompoundCommand;
+  I: Integer;
+  LayerIndex: Integer;
+  LayerIndices: TArray<Integer>;
+  NewWidth: Double;
+  OldWidth: Single;
+  RectangleLayer: TVectArtRectangleLayer;
+begin
+  if FUpdating or (FDocument = nil) or (FDocument.SelectionCount = 0) or
+    SelectedLayersHaveLock then
+    Exit;
+  if not TryStrToFloat(Trim(FStrokeWidthEdit.Text), NewWidth) then
+  begin
+    RefreshFromDocument;
+    Exit;
+  end;
+  NewWidth := Max(NewWidth, 0.0);
+  LayerIndices := GetSelectedStrokeIndices;
+  Command := nil;
+  if FEditHistory <> nil then
+    Command := TVectArtCompoundCommand.Create;
+  for I := 0 to High(LayerIndices) do
+  begin
+    LayerIndex := LayerIndices[I];
+    if FDocument[LayerIndex] is TVectArtLineLayer then
+    begin
+      OldWidth := TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth;
+      FDocument.SetLineStroke(LayerIndex,
+        TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor, NewWidth,
+        TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle);
+      RectangleLayer := nil;
+    end
+    else
+    begin
+      RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
+      OldWidth := RectangleLayer.StrokeWidth;
+      FDocument.SetRectangleStroke(LayerIndex, RectangleLayer.StrokeColor,
+        NewWidth, RectangleLayer.StrokeStyle);
+    end;
+    if (Command <> nil) and not SameValue(OldWidth, NewWidth) then
+      if FDocument[LayerIndex] is TVectArtLineLayer then
+        Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
+          TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor, OldWidth,
+          TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle,
+          TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor, NewWidth,
+          TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle))
+      else
+        Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
+          RectangleLayer.StrokeColor, OldWidth, RectangleLayer.StrokeStyle,
+          RectangleLayer.StrokeColor, NewWidth, RectangleLayer.StrokeStyle));
+  end;
+  if (Command <> nil) and (Command.Count > 0) then
+    FEditHistory.AddApplied(Command)
+  else
+    Command.Free;
+  if FEditorState <> nil then
+    FEditorState.RectangleStrokeWidth := NewWidth;
 end;
 
 procedure TVectArtObjectPropertiesControl.ClearEditValue(Edit: TEdit);
@@ -234,10 +543,31 @@ procedure TVectArtObjectPropertiesControl.EditExit(Sender: TObject);
 begin
   if Sender = FColorEdit then
     ApplyColor
+  else if Sender = FStrokeColorEdit then
+    ApplyStrokeColor
+  else if Sender = FStrokeWidthEdit then
+    ApplyStrokeWidth
   else if Sender = FOpacityEdit then
     ApplyOpacity
   else
     ApplyGeometry;
+end;
+
+function TVectArtObjectPropertiesControl.NewDarkCombo:
+  TVectArtStrokeStyleCombo;
+begin
+  Result := TVectArtStrokeStyleCombo.Create(Self);
+  Result.Parent := Self;
+  Result.Style := csOwnerDrawFixed;
+  Result.ItemHeight := 22;
+  Result.DropDownCount := 9;
+  Result.Color := COLOR_EDIT;
+  Result.Font.Name := 'Segoe UI';
+  Result.Font.Height := -12;
+  Result.Font.Color := COLOR_TEXT;
+  Result.ParentColor := False;
+  Result.ParentFont := False;
+  Result.OnChange := ApplyStrokeStyle;
 end;
 
 procedure TVectArtObjectPropertiesControl.EditKeyDown(Sender: TObject;
@@ -290,6 +620,26 @@ begin
   end;
 end;
 
+function TVectArtObjectPropertiesControl.GetSelectedStrokeIndices:
+  TArray<Integer>;
+var
+  I: Integer;
+  Indices: TList<Integer>;
+begin
+  Indices := TList<Integer>.Create;
+  try
+    if FDocument <> nil then
+      for I := 1 to FDocument.LayerCount - 1 do
+        if FDocument.IsLayerSelected(I) and
+          ((FDocument[I] is TVectArtRectangleLayer) or
+           (FDocument[I] is TVectArtLineLayer)) then
+          Indices.Add(I);
+    Result := Indices.ToArray;
+  finally
+    Indices.Free;
+  end;
+end;
+
 function TVectArtObjectPropertiesControl.SelectedLayersHaveLock: Boolean;
 var
   I: Integer;
@@ -328,10 +678,23 @@ begin
   Canvas.TextOut(12, 91, 'Width');
   Canvas.TextOut((ClientWidth div 2) + 4, 91, 'Height');
   Canvas.TextOut(12, 139, 'Fill color');
-  Canvas.TextOut(12, 190, 'Opacity (%)');
+  Canvas.TextOut(12, 190, 'Stroke color');
+  Canvas.TextOut(12, 239, 'Stroke width (0 = none)');
+  Canvas.TextOut((ClientWidth div 2) + 4, 239, 'Stroke style');
+  Canvas.TextOut(12, 288, 'Opacity (%)');
   SwatchRect := Rect(ClientWidth - 42, 158, ClientWidth - 12, 183);
   ColorValue := COLOR_EDIT;
   if TryStrToInt('$' + StringReplace(Trim(FColorEdit.Text), '#', '', []),
+    HexValue) and (HexValue >= 0) and (HexValue <= $FFFFFF) then
+    ColorValue := RGB((HexValue shr 16) and $FF,
+      (HexValue shr 8) and $FF, HexValue and $FF);
+  Canvas.Brush.Color := ColorValue;
+  Canvas.FillRect(SwatchRect);
+  Canvas.Brush.Color := COLOR_LABEL;
+  Canvas.FrameRect(SwatchRect);
+  SwatchRect := Rect(ClientWidth - 42, 207, ClientWidth - 12, 232);
+  ColorValue := COLOR_EDIT;
+  if TryStrToInt('$' + StringReplace(Trim(FStrokeColorEdit.Text), '#', '', []),
     HexValue) and (HexValue >= 0) and (HexValue <= $FFFFFF) then
     ColorValue := RGB((HexValue shr 16) and $FF,
       (HexValue shr 8) and $FF, HexValue and $FF);
@@ -347,10 +710,17 @@ var
   ColorValue: TColor;
   CommonColor: Boolean;
   CommonOpacity: Boolean;
+  CommonStrokeColor: Boolean;
+  CommonStrokeStyle: Boolean;
+  CommonStrokeWidth: Boolean;
   I: Integer;
   LayerIndices: TArray<Integer>;
+  LineLayer: TVectArtLineLayer;
   OpacityValue: Single;
   RectangleLayer: TVectArtRectangleLayer;
+  StrokeColorValue: TColor;
+  StrokeStyleValue: TVectArtStrokeStyle;
+  StrokeWidthValue: Single;
 begin
   FUpdating := True;
   try
@@ -368,6 +738,13 @@ begin
       FColorEdit.Text := Format('#%.2x%.2x%.2x', [GetRValue(ColorValue),
         GetGValue(ColorValue), GetBValue(ColorValue)]);
       FOpacityEdit.Text := FormatFloat('0.##', RectangleLayer.Opacity * 100);
+      StrokeColorValue := ColorToRGB(RectangleLayer.StrokeColor);
+      FStrokeColorEdit.Text := Format('#%.2x%.2x%.2x',
+        [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
+         GetBValue(StrokeColorValue)]);
+      FStrokeWidthEdit.Text := FormatFloat('0.##', RectangleLayer.StrokeWidth);
+      FStrokeStyleCombo.SetPendingItemIndex(
+        Ord(RectangleLayer.StrokeStyle));
       SetEditorsEnabled(True);
       if RectangleLayer.Locked then
       begin
@@ -376,6 +753,39 @@ begin
         FWidthEdit.Enabled := False;
         FHeightEdit.Enabled := False;
         FColorEdit.Enabled := False;
+        FStrokeColorEdit.Enabled := False;
+        FStrokeWidthEdit.Enabled := False;
+        FStrokeStyleCombo.Enabled := False;
+      end;
+    end
+    else if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
+      (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+    begin
+      LineLayer := TVectArtLineLayer(FDocument[FDocument.SelectedIndex]);
+      FXEdit.Text := FormatFloat('0.##', LineLayer.StartPoint.X);
+      FYEdit.Text := FormatFloat('0.##', LineLayer.StartPoint.Y);
+      FWidthEdit.Text := FormatFloat('0.##', LineLayer.EndPoint.X);
+      FHeightEdit.Text := FormatFloat('0.##', LineLayer.EndPoint.Y);
+      ClearEditValue(FColorEdit);
+      FOpacityEdit.Text := FormatFloat('0.##', LineLayer.Opacity * 100);
+      StrokeColorValue := ColorToRGB(LineLayer.StrokeColor);
+      FStrokeColorEdit.Text := Format('#%.2x%.2x%.2x',
+        [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
+         GetBValue(StrokeColorValue)]);
+      FStrokeWidthEdit.Text := FormatFloat('0.##', LineLayer.StrokeWidth);
+      FStrokeStyleCombo.SetPendingItemIndex(Ord(LineLayer.StrokeStyle));
+      SetEditorsEnabled(True);
+      FXEdit.Enabled := False;
+      FYEdit.Enabled := False;
+      FWidthEdit.Enabled := False;
+      FHeightEdit.Enabled := False;
+      FColorEdit.Enabled := False;
+      FOpacityEdit.Enabled := False;
+      if LineLayer.Locked then
+      begin
+        FStrokeColorEdit.Enabled := False;
+        FStrokeWidthEdit.Enabled := False;
+        FStrokeStyleCombo.Enabled := False;
       end;
     end
     else if (FDocument <> nil) and (FDocument.SelectionCount > 1) and
@@ -389,8 +799,14 @@ begin
       RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndices[0]]);
       ColorValue := RectangleLayer.FillColor;
       OpacityValue := RectangleLayer.Opacity;
+      StrokeColorValue := RectangleLayer.StrokeColor;
+      StrokeStyleValue := RectangleLayer.StrokeStyle;
+      StrokeWidthValue := RectangleLayer.StrokeWidth;
       CommonColor := True;
       CommonOpacity := True;
+      CommonStrokeColor := True;
+      CommonStrokeStyle := True;
+      CommonStrokeWidth := True;
       for I := 1 to High(LayerIndices) do
       begin
         RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndices[I]]);
@@ -398,6 +814,12 @@ begin
           (RectangleLayer.FillColor = ColorValue);
         CommonOpacity := CommonOpacity and
           SameValue(RectangleLayer.Opacity, OpacityValue);
+        CommonStrokeColor := CommonStrokeColor and
+          (RectangleLayer.StrokeColor = StrokeColorValue);
+        CommonStrokeStyle := CommonStrokeStyle and
+          (RectangleLayer.StrokeStyle = StrokeStyleValue);
+        CommonStrokeWidth := CommonStrokeWidth and
+          SameValue(RectangleLayer.StrokeWidth, StrokeWidthValue);
       end;
       if CommonColor then
       begin
@@ -411,6 +833,25 @@ begin
         FOpacityEdit.Text := FormatFloat('0.##', OpacityValue * 100)
       else
         ClearEditValue(FOpacityEdit);
+      if CommonStrokeColor then
+      begin
+        StrokeColorValue := ColorToRGB(StrokeColorValue);
+        FStrokeColorEdit.Text := Format('#%.2x%.2x%.2x',
+          [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
+           GetBValue(StrokeColorValue)]);
+      end
+      else
+        ClearEditValue(FStrokeColorEdit);
+      if CommonStrokeWidth then
+        FStrokeWidthEdit.Text := FormatFloat('0.##', StrokeWidthValue)
+      else
+        ClearEditValue(FStrokeWidthEdit);
+      if CommonStrokeStyle then
+      begin
+        FStrokeStyleCombo.SetPendingItemIndex(Ord(StrokeStyleValue));
+      end
+      else
+        FStrokeStyleCombo.SetPendingItemIndex(-1);
       SetEditorsEnabled(True);
       if SelectedLayersHaveLock then
       begin
@@ -419,6 +860,9 @@ begin
         FWidthEdit.Enabled := False;
         FHeightEdit.Enabled := False;
         FColorEdit.Enabled := False;
+        FStrokeColorEdit.Enabled := False;
+        FStrokeWidthEdit.Enabled := False;
+        FStrokeStyleCombo.Enabled := False;
       end;
     end
     else
@@ -428,6 +872,9 @@ begin
       ClearEditValue(FWidthEdit);
       ClearEditValue(FHeightEdit);
       ClearEditValue(FColorEdit);
+      ClearEditValue(FStrokeColorEdit);
+      ClearEditValue(FStrokeWidthEdit);
+      FStrokeStyleCombo.SetPendingItemIndex(-1);
       ClearEditValue(FOpacityEdit);
       SetEditorsEnabled(False);
     end;
@@ -479,7 +926,11 @@ begin
   FHeightEdit.SetBounds((ClientWidth div 2) + 4, 107, ColumnWidth,
     EDIT_HEIGHT);
   FColorEdit.SetBounds(12, 158, Max(ClientWidth - 66, 48), EDIT_HEIGHT);
-  FOpacityEdit.SetBounds(12, 207, Max(ClientWidth - 24, 48), EDIT_HEIGHT);
+  FStrokeColorEdit.SetBounds(12, 207, Max(ClientWidth - 66, 48), EDIT_HEIGHT);
+  FStrokeWidthEdit.SetBounds(12, 256, ColumnWidth, EDIT_HEIGHT);
+  FStrokeStyleCombo.SetBounds((ClientWidth div 2) + 4, 256, ColumnWidth,
+    EDIT_HEIGHT);
+  FOpacityEdit.SetBounds(12, 305, Max(ClientWidth - 24, 48), EDIT_HEIGHT);
 end;
 
 procedure TVectArtObjectPropertiesControl.SetDocument(
@@ -498,6 +949,9 @@ begin
   FWidthEdit.Enabled := Value;
   FHeightEdit.Enabled := Value;
   FColorEdit.Enabled := Value;
+  FStrokeColorEdit.Enabled := Value;
+  FStrokeWidthEdit.Enabled := Value;
+  FStrokeStyleCombo.Enabled := Value;
   FOpacityEdit.Enabled := Value;
 end;
 
