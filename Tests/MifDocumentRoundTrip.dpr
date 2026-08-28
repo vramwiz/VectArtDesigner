@@ -175,6 +175,13 @@ begin
     LineData.StartPoint := TPointF.Create(80, 300);
     LineData.EndPoint := TPointF.Create(500, 210);
     LineData.Locked := False;
+    LineData.LineCap := vlcRound;
+    LineData.AntiAlias := False;
+    LineData.EndMarker := vlmSlash;
+    LineData.EndMarkerSize := 9.0;
+    LineData.StartMarker := vlmConcaveArrow;
+    LineData.StartMarkerSize := 6.0;
+    LineData.LineJoin := vljBevel;
     LineData.Name := 'MIF line';
     LineData.Opacity := 0.8;
     LineData.StrokeColor := TColor($00CC4400);
@@ -264,6 +271,20 @@ begin
       0.000001), 'Line width differs');
     Require(TargetLine.StrokeStyle = LineData.StrokeStyle,
       'Line style differs');
+    Require(TargetLine.LineCap = LineData.LineCap,
+      'Line cap differs');
+    Require(TargetLine.LineJoin = LineData.LineJoin,
+      'Line join differs');
+    Require(TargetLine.AntiAlias = LineData.AntiAlias,
+      'Line anti-alias differs');
+    Require(TargetLine.EndMarker = LineData.EndMarker,
+      'Line end marker differs');
+    Require(TargetLine.StartMarker = LineData.StartMarker,
+      'Line start marker differs');
+    Require(SameValue(TargetLine.EndMarkerSize, LineData.EndMarkerSize),
+      'Line end marker size differs');
+    Require(SameValue(TargetLine.StartMarkerSize, LineData.StartMarkerSize),
+      'Line start marker size differs');
     TargetPath := TVectArtPathLayer(TargetDocument[3]);
     Require((Length(TargetPath.Points) = Length(PathData.Points)) and
       TargetPath.Closed and TargetPath.Filled, 'Path properties differ');

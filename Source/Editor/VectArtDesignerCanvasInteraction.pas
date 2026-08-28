@@ -75,6 +75,9 @@ type
       const ACanvasBounds: TRect; AZoom: Single);
     function CursorAt(X, Y: Integer): TCursor;
     function MouseDown(Button: TMouseButton; X, Y: Integer): Boolean;
+      overload;
+    function MouseDown(Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer): Boolean; overload;
     function MouseMove(Shift: TShiftState; X, Y: Integer): Boolean;
     function MouseUp(Button: TMouseButton): Boolean;
     function SelectedPathVertexRects: TArray<TRect>;
@@ -930,6 +933,12 @@ end;
 
 function TVectArtCanvasInteraction.MouseDown(Button: TMouseButton;
   X, Y: Integer): Boolean;
+begin
+  Result := MouseDown(Button, [], X, Y);
+end;
+
+function TVectArtCanvasInteraction.MouseDown(Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer): Boolean;
 var
   CenterX: Single;
   CenterY: Single;
@@ -943,6 +952,15 @@ begin
   Result := False;
   if (Button <> mbLeft) or (FDocument = nil) or (FZoom <= 0) then
     Exit;
+  if ssCtrl in Shift then
+  begin
+    FDragLayerIndex := HitTestLayer(X, Y);
+    if FDragLayerIndex > 0 then
+      FDocument.ToggleSelectedLayer(FDragLayerIndex);
+    FDragLayerIndex := -1;
+    // 選択だけでドラッグは開始しないため、Canvasへマウスキャプチャを要求しない。
+    Exit(False);
+  end;
   FPathVertexIndex := HitTestPathVertex(X, Y);
   if (FPathVertexIndex >= 0) and not SelectionContainsLockedLayer then
   begin

@@ -70,6 +70,88 @@ begin
     Result := 'false';
 end;
 
+function SvgLineCap(Value: TVectArtLineCap): string;
+begin
+  case Value of
+    vlcSquare: Result := 'square';
+    vlcRound: Result := 'round';
+  else
+    Result := 'butt';
+  end;
+end;
+
+function SvgLineJoin(Value: TVectArtLineJoin): string;
+begin
+  case Value of
+    vljBevel: Result := 'bevel';
+    vljRound: Result := 'round';
+  else
+    Result := 'miter';
+  end;
+end;
+
+function LineMarkerName(Value: TVectArtLineMarker): string;
+begin
+  case Value of
+    vlmArrow: Result := 'arrow';
+    vlmOpenArrow: Result := 'open-arrow';
+    vlmWideArrow: Result := 'wide-arrow';
+    vlmCircle: Result := 'circle';
+    vlmDiamond: Result := 'diamond';
+    vlmConcaveArrow: Result := 'concave-arrow';
+    vlmSmallArrow: Result := 'small-arrow';
+    vlmSlash: Result := 'slash';
+    vlmStar: Result := 'star';
+  else
+    Result := 'none';
+  end;
+end;
+
+function TryParseLineMarkerName(const Value: string;
+  out Marker: TVectArtLineMarker): Boolean;
+var
+  Candidate: TVectArtLineMarker;
+begin
+  for Candidate := Low(TVectArtLineMarker) to High(TVectArtLineMarker) do
+    if SameText(Trim(Value), LineMarkerName(Candidate)) then
+    begin
+      Marker := Candidate;
+      Exit(True);
+    end;
+  Result := False;
+end;
+
+function SvgMarkerBody(Value: TVectArtLineMarker; MarkerSize: Single): string;
+var
+  OutlineWidth: string;
+begin
+  OutlineWidth := SvgNumber(6.0 / Max(MarkerSize, 1.0));
+  case Value of
+    vlmOpenArrow:
+      Result := '<path d="M 0 0 L 4 2 L 0 4" fill="none" stroke="context-stroke" stroke-width="' +
+        OutlineWidth + '"/>';
+    vlmArrow:
+      Result := '<path d="M 0 0 L 4 2 L 0 4 z" fill="context-stroke"/>';
+    vlmWideArrow:
+      Result := '<path d="M 0 -0.5 L 4 2 L 0 4.5 z" fill="context-stroke"/>';
+    vlmCircle:
+      Result := '<circle cx="2" cy="2" r="2" fill="context-stroke"/>';
+    vlmDiamond:
+      Result := '<path d="M 0 2 L 2 0 L 4 2 L 2 4 z" fill="context-stroke"/>';
+    vlmConcaveArrow:
+      Result := '<path d="M 0 0 L 4 2 L 0 4 L 1.4 2 z" fill="context-stroke"/>';
+    vlmSmallArrow:
+      Result := '<path d="M 1 1 L 4 2 L 1 3 z" fill="context-stroke"/>';
+    vlmSlash:
+      Result := '<path d="M 2 0 L 2 4" fill="none" stroke="context-stroke" stroke-width="' +
+        OutlineWidth + '"/>';
+    vlmStar:
+      Result := '<path d="M 4 2 L 2.65 2.47 L 2.62 3.9 L 1.75 2.76 L 0.38 3.18 L 1.2 2 L 0.38 0.82 L 1.75 1.24 L 2.62 0.1 L 2.65 1.53 z" fill="context-stroke"/>';
+  else
+    Result := '';
+  end;
+end;
+
 function TryCreateVectArtSvg(Document: TVectArtDocument; out SvgText,
   ErrorMessage: string): Boolean;
 var
@@ -114,6 +196,27 @@ begin
         Builder.Append(' style="background-color:')
           .Append(SvgColor(Canvas.BackgroundColor)).Append('"');
       Builder.AppendLine('>');
+      Builder.AppendLine('  <defs>');
+      for I := 1 to Document.LayerCount - 1 do
+        if Document[I] is TVectArtLineLayer then
+        begin
+          Line := TVectArtLineLayer(Document[I]);
+          if Line.EndMarker <> vlmNone then
+            Builder.Append('    <marker id="vad-end-marker-').Append(I)
+              .Append('" markerWidth="').Append(SvgNumber(Line.EndMarkerSize))
+              .Append('" markerHeight="').Append(SvgNumber(Line.EndMarkerSize))
+              .Append('" refX="4" refY="2" viewBox="-1 -1 6 6" orient="auto" markerUnits="strokeWidth">')
+              .Append(SvgMarkerBody(Line.EndMarker, Line.EndMarkerSize))
+              .AppendLine('</marker>');
+          if Line.StartMarker <> vlmNone then
+            Builder.Append('    <marker id="vad-start-marker-').Append(I)
+              .Append('" markerWidth="').Append(SvgNumber(Line.StartMarkerSize))
+              .Append('" markerHeight="').Append(SvgNumber(Line.StartMarkerSize))
+              .Append('" refX="4" refY="2" viewBox="-1 -1 6 6" orient="auto-start-reverse" markerUnits="strokeWidth">')
+              .Append(SvgMarkerBody(Line.StartMarker, Line.StartMarkerSize))
+              .AppendLine('</marker>');
+        end;
+      Builder.AppendLine('  </defs>');
       for I := 1 to Document.LayerCount - 1 do
       begin
         Layer := Document[I];
@@ -160,9 +263,23 @@ begin
             .Append(SvgNumber(Line.StrokeWidth)).Append('" opacity="')
             .Append(SvgNumber(Line.Opacity)).Append('" vad:stroke-color="')
             .Append(Integer(Line.StrokeColor)).Append('" vad:stroke-style="')
-            .Append(Ord(Line.StrokeStyle)).Append('" vad:name="')
+            .Append(Ord(Line.StrokeStyle)).Append('" stroke-linecap="')
+            .Append(SvgLineCap(Line.LineCap)).Append('" stroke-linejoin="')
+            .Append(SvgLineJoin(Line.LineJoin)).Append('" vad:name="')
             .Append(XmlEscape(Line.Name)).Append('" vad:locked="')
             .Append(BooleanText(Line.Locked)).Append('"');
+          if not Line.AntiAlias then
+            Builder.Append(' shape-rendering="crispEdges"');
+          if Line.EndMarker <> vlmNone then
+            Builder.Append(' marker-end="url(#vad-end-marker-').Append(I)
+              .Append(')" vad:end-marker="').Append(LineMarkerName(Line.EndMarker))
+              .Append('" vad:end-marker-size="')
+              .Append(SvgNumber(Line.EndMarkerSize)).Append('"');
+          if Line.StartMarker <> vlmNone then
+            Builder.Append(' marker-start="url(#vad-start-marker-').Append(I)
+              .Append(')" vad:start-marker="').Append(LineMarkerName(Line.StartMarker))
+              .Append('" vad:start-marker-size="')
+              .Append(SvgNumber(Line.StartMarkerSize)).Append('"');
           DashIntervals := VectArtStrokeDashIntervals(Line.StrokeStyle,
             Line.StrokeWidth);
           if Length(DashIntervals) > 0 then
@@ -776,6 +893,8 @@ function TryParseLine(const Node: IXMLNode; Index: Integer;
   out Data: TVectArtLineData): Boolean;
 var
   DisplayValue: string;
+  LineCapText: string;
+  LineJoinText: string;
   LockedText: string;
   OpacityText: string;
   StrokeInteger: Integer;
@@ -818,6 +937,36 @@ begin
   else if TryGetPresentationValue(Node, 'stroke-dasharray', ValueText) and
     (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
     Data.StrokeStyle := vssDashed;
+  Data.LineCap := vlcButt;
+  if TryGetPresentationValue(Node, 'stroke-linecap', LineCapText) then
+    if SameText(Trim(LineCapText), 'square') then
+      Data.LineCap := vlcSquare
+    else if SameText(Trim(LineCapText), 'round') then
+      Data.LineCap := vlcRound;
+  Data.LineJoin := vljMiter;
+  if TryGetPresentationValue(Node, 'stroke-linejoin', LineJoinText) then
+    if SameText(Trim(LineJoinText), 'bevel') then
+      Data.LineJoin := vljBevel
+    else if SameText(Trim(LineJoinText), 'round') then
+      Data.LineJoin := vljRound;
+  Data.AntiAlias := True;
+  if TryGetPresentationValue(Node, 'shape-rendering', ValueText) and
+    SameText(Trim(ValueText), 'crispEdges') then
+    Data.AntiAlias := False;
+  Data.EndMarker := vlmNone;
+  Data.EndMarkerSize := 4.0;
+  if TryGetAttribute(Node, 'vad:end-marker', ValueText) then
+    TryParseLineMarkerName(ValueText, Data.EndMarker);
+  if TryGetAttribute(Node, 'vad:end-marker-size', ValueText) then
+    if not TryParseSvgNumber(ValueText, Data.EndMarkerSize) or
+      (Data.EndMarkerSize < 1.0) then Data.EndMarkerSize := 4.0;
+  Data.StartMarker := vlmNone;
+  Data.StartMarkerSize := 4.0;
+  if TryGetAttribute(Node, 'vad:start-marker', ValueText) then
+    TryParseLineMarkerName(ValueText, Data.StartMarker);
+  if TryGetAttribute(Node, 'vad:start-marker-size', ValueText) then
+    if not TryParseSvgNumber(ValueText, Data.StartMarkerSize) or
+      (Data.StartMarkerSize < 1.0) then Data.StartMarkerSize := 4.0;
   Data.Opacity := 1.0;
   if TryGetPresentationValue(Node, 'opacity', OpacityText) and
     not TryParseSvgNumber(OpacityText, Data.Opacity) then

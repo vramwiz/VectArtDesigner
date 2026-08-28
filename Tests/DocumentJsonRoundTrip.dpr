@@ -63,6 +63,13 @@ begin
     LineData.StartPoint := TPointF.Create(20, 30);
     LineData.EndPoint := TPointF.Create(220, 130);
     LineData.Locked := False;
+    LineData.LineCap := vlcSquare;
+    LineData.AntiAlias := False;
+    LineData.EndMarker := vlmCircle;
+    LineData.EndMarkerSize := 9.0;
+    LineData.StartMarker := vlmDiamond;
+    LineData.StartMarkerSize := 6.0;
+    LineData.LineJoin := vljBevel;
     LineData.Name := 'Line 1';
     LineData.Opacity := 0.75;
     LineData.StrokeColor := clRed;
@@ -128,7 +135,14 @@ begin
       'Line points differ');
     Require((TargetLine.StrokeColor = LineData.StrokeColor) and
       SameValue(TargetLine.StrokeWidth, LineData.StrokeWidth) and
-      (TargetLine.StrokeStyle = LineData.StrokeStyle),
+      (TargetLine.StrokeStyle = LineData.StrokeStyle) and
+      (TargetLine.LineCap = LineData.LineCap) and
+      (TargetLine.LineJoin = LineData.LineJoin) and
+      (TargetLine.AntiAlias = LineData.AntiAlias) and
+      (TargetLine.EndMarker = LineData.EndMarker) and
+      (TargetLine.StartMarker = LineData.StartMarker) and
+      SameValue(TargetLine.EndMarkerSize, LineData.EndMarkerSize) and
+      SameValue(TargetLine.StartMarkerSize, LineData.StartMarkerSize),
       'Line stroke differs');
     TargetPath := TVectArtPathLayer(TargetDocument[3]);
     Require((Length(TargetPath.Points) = 3) and TargetPath.Closed and

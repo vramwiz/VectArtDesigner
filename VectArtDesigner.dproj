@@ -129,8 +129,13 @@
         </DCCReference>
         <DCCReference Include="Lib\DarkMenu\VectArtDarkPopupMenu.pas"/>
         <DCCReference Include="Lib\ShortcutAction\ShortcutAction.pas"/>
+        <DCCReference Include="Lib\HorizontalTrackBar\HorizontalTrackBarRenderer.pas"/>
+        <DCCReference Include="Lib\HorizontalTrackBar\HorizontalTrackBarControl.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerFileActionsUI.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerEditActionsUI.pas"/>
+        <DCCReference Include="Source\ObjectProperties\VectArtDesignerStrokeStyleCombo.pas"/>
+        <DCCReference Include="Source\Shell\VectArtDesignerLineToolbar.pas"/>
+        <DCCReference Include="Source\Shell\VectArtDesignerLineStyleControls.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerCanvasSettingsDialog.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerDocument.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerGeometry.pas"/>

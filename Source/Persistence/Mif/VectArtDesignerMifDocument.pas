@@ -497,14 +497,49 @@ var
   DashIntervals: TArray<Single>;
   Height: Integer;
   ImageInfo: TSkImageInfo;
+  MarkerGeometry: TVectArtMarkerGeometry;
   Padding: Single;
   Paint: ISkPaint;
   Pixels: TArray<TVectArtRgbaPixel>;
   RGBColor: TColor;
   Surface: ISkSurface;
   Width: Integer;
+
+  procedure DrawMarker(Marker: TVectArtLineMarker; const Tip,
+    InsidePoint: TPointF; MarkerSize: Single);
+  var
+    I: Integer;
+    MarkerPathBuilder: ISkPathBuilder;
+  begin
+    MarkerGeometry := BuildLineMarkerGeometry(Ord(Marker), Tip, InsidePoint,
+      Line.StrokeWidth, MarkerSize);
+    if Length(MarkerGeometry.PrimaryPoints) < 2 then Exit;
+    MarkerPathBuilder := TSkPathBuilder.Create;
+    MarkerPathBuilder.MoveTo(MarkerGeometry.PrimaryPoints[0].X -
+      PlacementBounds.Left, MarkerGeometry.PrimaryPoints[0].Y -
+      PlacementBounds.Top);
+    for I := 1 to High(MarkerGeometry.PrimaryPoints) do
+      MarkerPathBuilder.LineTo(MarkerGeometry.PrimaryPoints[I].X -
+        PlacementBounds.Left, MarkerGeometry.PrimaryPoints[I].Y -
+        PlacementBounds.Top);
+    if MarkerGeometry.PrimaryClosed then MarkerPathBuilder.Close;
+    Paint.PathEffect := nil;
+    if MarkerGeometry.Filled then
+      Paint.Style := TSkPaintStyle.Fill
+    else
+    begin
+      Paint.Style := TSkPaintStyle.Stroke;
+      Paint.StrokeCap := TSkStrokeCap.Round;
+      Paint.StrokeWidth := Max(Line.StrokeWidth, 0.1);
+    end;
+    Canvas.DrawPath(MarkerPathBuilder.Detach, Paint);
+  end;
 begin
-  Padding := Max(Line.StrokeWidth * 0.5 + 2, 2.0);
+  if (Line.StartMarker <> vlmNone) or (Line.EndMarker <> vlmNone) then
+    Padding := Max(Max(Line.StartMarkerSize, Line.EndMarkerSize) *
+      Max(Line.StrokeWidth, 2.0) + 2, 6.0)
+  else
+    Padding := Max(Line.StrokeWidth * 0.5 + 2, 2.0);
   PlacementBounds := TRectF.Create(Min(Line.StartPoint.X, Line.EndPoint.X) -
     Padding, Min(Line.StartPoint.Y, Line.EndPoint.Y) - Padding,
     Max(Line.StartPoint.X, Line.EndPoint.X) + Padding,
@@ -521,7 +556,7 @@ begin
   Canvas := Surface.Canvas;
   Canvas.Clear(TAlphaColorRec.Null);
   Paint := TSkPaint.Create(TSkPaintStyle.Stroke);
-  Paint.AntiAlias := True;
+  Paint.AntiAlias := Line.AntiAlias;
   RGBColor := ColorToRGB(Line.StrokeColor);
   Paint.Color := TAlphaColor($FF000000 or
     (Cardinal(GetRValue(RGBColor)) shl 16) or
@@ -534,11 +569,26 @@ begin
   if VectArtStrokeUsesRoundCaps(Line.StrokeStyle) then
     Paint.StrokeCap := TSkStrokeCap.Round
   else
-    Paint.StrokeCap := TSkStrokeCap.Butt;
+    case Line.LineCap of
+      vlcSquare: Paint.StrokeCap := TSkStrokeCap.Square;
+      vlcRound: Paint.StrokeCap := TSkStrokeCap.Round;
+    else
+      Paint.StrokeCap := TSkStrokeCap.Butt;
+    end;
+  case Line.LineJoin of
+    vljBevel: Paint.StrokeJoin := TSkStrokeJoin.Bevel;
+    vljRound: Paint.StrokeJoin := TSkStrokeJoin.Round;
+  else
+    Paint.StrokeJoin := TSkStrokeJoin.Miter;
+  end;
   Canvas.DrawLine(TPointF.Create(Line.StartPoint.X - PlacementBounds.Left,
     Line.StartPoint.Y - PlacementBounds.Top), TPointF.Create(
     Line.EndPoint.X - PlacementBounds.Left,
     Line.EndPoint.Y - PlacementBounds.Top), Paint);
+  DrawMarker(Line.StartMarker, Line.StartPoint, Line.EndPoint,
+    Line.StartMarkerSize);
+  DrawMarker(Line.EndMarker, Line.EndPoint, Line.StartPoint,
+    Line.EndMarkerSize);
   Surface.Flush;
   Result := EncodeRgba(@Pixels[0], Width, Height);
   AddPhysicalDimensions(Result);
@@ -900,6 +950,40 @@ begin
   AddWadaString(Result, 'vector effect object type', 'none');
 end;
 
+function LineMarkerToMif(Value: TVectArtLineMarker): Integer;
+begin
+  case Value of
+    vlmOpenArrow: Result := 1;
+    vlmArrow: Result := 2;
+    vlmWideArrow: Result := 3;
+    vlmCircle: Result := 4;
+    vlmDiamond: Result := 5;
+    vlmConcaveArrow: Result := 6;
+    vlmSmallArrow: Result := 7;
+    vlmSlash: Result := 8;
+    vlmStar: Result := 9;
+  else
+    Result := 0;
+  end;
+end;
+
+function MifToLineMarker(Value: Integer): TVectArtLineMarker;
+begin
+  case Value of
+    1: Result := vlmOpenArrow;
+    2: Result := vlmArrow;
+    3: Result := vlmWideArrow;
+    4: Result := vlmCircle;
+    5: Result := vlmDiamond;
+    6: Result := vlmConcaveArrow;
+    7: Result := vlmSmallArrow;
+    8: Result := vlmSlash;
+    9: Result := vlmStar;
+  else
+    Result := vlmNone;
+  end;
+end;
+
 function CreateLineImagePng(Line: TVectArtLineLayer): TBytes;
 const
   ORIGINAL_LEFT = 848;
@@ -923,15 +1007,19 @@ begin
   AddImagePlacementMetadata(Result, PlacementBounds,
     Round(Line.Opacity * 255), not Line.Visible);
   AddWadaInteger(Result, 'vector closed', 0);
-  AddWadaInteger(Result, 'vector quality', 1);
+  AddWadaInteger(Result, 'vector quality', Ord(Line.AntiAlias));
   AddWadaInteger(Result, 'vector element type', 6);
   AddWadaInteger(Result, 'vector stroke style', Ord(Line.StrokeStyle));
-  AddWadaInteger(Result, 'vector stroke cap', 0);
-  AddWadaInteger(Result, 'vector stroke join', 2);
-  AddWadaInteger(Result, 'vector start stroke marker', 0);
-  AddWadaInteger(Result, 'vector end stroke marker', 0);
-  AddWadaInteger(Result, 'vector start marker size', 4);
-  AddWadaInteger(Result, 'vector end marker size', 4);
+  AddWadaInteger(Result, 'vector stroke cap', Ord(Line.LineCap));
+  AddWadaInteger(Result, 'vector stroke join', Ord(Line.LineJoin));
+  AddWadaInteger(Result, 'vector start stroke marker',
+    LineMarkerToMif(Line.StartMarker));
+  AddWadaInteger(Result, 'vector end stroke marker',
+    LineMarkerToMif(Line.EndMarker));
+  AddWadaInteger(Result, 'vector start marker size',
+    EnsureRange(Round(Line.StartMarkerSize), 1, 20));
+  AddWadaInteger(Result, 'vector end marker size',
+    EnsureRange(Round(Line.EndMarkerSize), 1, 20));
   AddWadaDouble(Result, 'vector stroke width', Line.StrokeWidth);
   MatrixA := (Line.EndPoint.X - Line.StartPoint.X) /
     (ORIGINAL_RIGHT - ORIGINAL_LEFT);
@@ -1282,6 +1370,8 @@ var
   DiscardedPath: TVectArtPathData;
   DiscardedImage: TVectArtImageData;
   ElementType: Int32;
+  EndMarker: Int32;
+  EndMarkerSize: Int32;
   FillColor: Int32;
   FillEnabled: Int32;
   Hidden: Int32;
@@ -1314,11 +1404,16 @@ var
   Rectangles: TList<TVectArtRectangleData>;
   Right: Int32;
   StrokeColor: Int32;
+  StrokeCap: Int32;
+  StrokeJoin: Int32;
+  StartMarker: Int32;
+  StartMarkerSize: Int32;
   StrokeEnabled: Int32;
   StrokeStyle: Int32;
   StrokeWidth: Double;
   Top: Int32;
   VectorPoints: TArray<TPointF>;
+  VectorQuality: Int32;
 begin
   Result := False;
   ErrorMessage := '';
@@ -1403,15 +1498,33 @@ begin
       TryReadPngInteger(Container[I].Data, 'image alpha', Alpha);
       TryReadPngInteger(Container[I].Data, 'image hidden', Hidden);
       StrokeEnabled := 0;
+      StartMarker := 0;
+      StartMarkerSize := 4;
       FillEnabled := 0;
+      EndMarker := 0;
+      EndMarkerSize := 4;
       StrokeStyle := 0;
+      StrokeCap := 0;
+      StrokeJoin := 0;
       StrokeWidth := 1.0;
+      VectorQuality := 1;
       TryReadPngInteger(Container[I].Data,
         'vector enable stroke texture', StrokeEnabled);
       TryReadPngInteger(Container[I].Data,
         'vector enable fill texture', FillEnabled);
       TryReadPngInteger(Container[I].Data, 'vector stroke style',
         StrokeStyle);
+      TryReadPngInteger(Container[I].Data, 'vector stroke cap', StrokeCap);
+      TryReadPngInteger(Container[I].Data, 'vector end stroke marker',
+        EndMarker);
+      TryReadPngInteger(Container[I].Data, 'vector start stroke marker',
+        StartMarker);
+      TryReadPngInteger(Container[I].Data, 'vector start marker size',
+        StartMarkerSize);
+      TryReadPngInteger(Container[I].Data, 'vector end marker size',
+        EndMarkerSize);
+      TryReadPngInteger(Container[I].Data, 'vector quality', VectorQuality);
+      TryReadPngInteger(Container[I].Data, 'vector stroke join', StrokeJoin);
       TryReadPngDouble(Container[I].Data, 'vector stroke width',
         StrokeWidth);
       StrokeColor := ColorToRGB(clBlack);
@@ -1504,6 +1617,21 @@ begin
           MatrixB * OriginalRight + MatrixD *
             ((OriginalTop + OriginalBottom) * 0.5) + MatrixF);
         LineData.Opacity := EnsureRange(Alpha / 255.0, 0.0, 1.0);
+        LineData.AntiAlias := VectorQuality <> 0;
+        LineData.EndMarker := MifToLineMarker(EndMarker);
+        LineData.EndMarkerSize := Max(EndMarkerSize, 1);
+        LineData.StartMarker := MifToLineMarker(StartMarker);
+        LineData.StartMarkerSize := Max(StartMarkerSize, 1);
+        if InRange(StrokeCap, Ord(Low(TVectArtLineCap)),
+          Ord(High(TVectArtLineCap))) then
+          LineData.LineCap := TVectArtLineCap(StrokeCap)
+        else
+          LineData.LineCap := vlcButt;
+        if InRange(StrokeJoin, Ord(Low(TVectArtLineJoin)),
+          Ord(High(TVectArtLineJoin))) then
+          LineData.LineJoin := TVectArtLineJoin(StrokeJoin)
+        else
+          LineData.LineJoin := vljMiter;
         LineData.StrokeColor := TColor(StrokeColor);
         if InRange(StrokeStyle, Ord(Low(TVectArtStrokeStyle)),
           Ord(High(TVectArtStrokeStyle))) then

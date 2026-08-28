@@ -12,6 +12,7 @@ uses
   VectArtDesignerDocument,
   VectArtDesignerEditHistory, VectArtDesignerEditorState,
   VectArtDesignerEditorWorkspaceFrame, VectArtDesignerLayerPanelFrame,
+  VectArtDesignerLineToolbar,
   VectArtDesignerLayerOperations,
   VectArtDesignerEditActionsUI, VectArtDesignerFileActionsUI,
   VectArtDesignerMifContainer, VectArtDesignerMifDocument,
@@ -52,6 +53,7 @@ type
     FEditHistory: TVectArtEditHistory;
     FFileActionsUI: TVectArtFileActionsUI;
     FLayerFrame: TLayerPanelFrame;
+    FLineToolbar: TVectArtLineToolbarControl;
     FObjectPropertiesFrame: TObjectPropertiesFrame;
     FSkiaAcquired: Boolean;
     FShortcuts: TShortcutAction;
@@ -203,6 +205,12 @@ begin
   FEditActionsUI.History := FEditHistory;
   FEditActionsUI.OnCanvasSettingsRequest := CanvasSettingsRequest;
   FEditActionsUI.OnOpenRequest := FileOpenShortcut;
+  FLineToolbar := TVectArtLineToolbarControl.CreateForHost(Self,
+    pnlShortcutBar);
+  FLineToolbar.Document := FDocument;
+  FLineToolbar.EditHistory := FEditHistory;
+  FLineToolbar.EditorState := FEditorState;
+  FLineToolbar.BringToFront;
   FViewMenu := TVectArtDarkPopupMenu.CreateForControls(Self, Self,
     pnlViewMenuButton, pnlViewMenuPopup);
   FMenuGroup := TVectArtDarkMenuGroup.Create(Self);
@@ -429,10 +437,14 @@ procedure TMainForm.DocumentChanged(Sender: TObject);
 begin
   if FEditorFrame <> nil then
     FEditorFrame.CanvasControl.Invalidate;
+  if (FDocument <> nil) and FDocument.IsInteractiveUpdate then
+    Exit;
   if FLayerFrame <> nil then
     FLayerFrame.RefreshFromDocument;
   if FObjectPropertiesFrame <> nil then
     FObjectPropertiesFrame.RefreshFromDocument;
+  if FLineToolbar <> nil then
+    FLineToolbar.RefreshState;
   EditorStateChanged(FEditorState);
 end;
 
@@ -476,6 +488,8 @@ begin
     FEditorFrame.CanvasControl.Invalidate;
   if FToolPaletteFrame <> nil then
     FToolPaletteFrame.RefreshState;
+  if FLineToolbar <> nil then
+    FLineToolbar.RefreshState;
   if (FDocument <> nil) and (FDocument.CanvasLayer <> nil) then
     CanvasSize := Format('%d x %d', [FDocument.CanvasLayer.Width,
       FDocument.CanvasLayer.Height])
@@ -535,6 +549,7 @@ procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   SaveLayoutSettings;
   FreeAndNil(FShortcuts);
+  FreeAndNil(FLineToolbar);
   FDockManager.Free;
   if FDocument <> nil then
     FDocument.OnChanged := nil;

@@ -55,8 +55,16 @@ begin
   Creation := TVectArtShapeCreation.Create;
   try
     EditorState.CurrentTool := vetLine;
-    EditorState.RectangleStrokeColor := clRed;
-    EditorState.RectangleStrokeWidth := 4.0;
+    EditorState.LineStrokeColor := clRed;
+    EditorState.LineCap := vlcRound;
+    EditorState.LineAntiAlias := False;
+    EditorState.LineEndMarker := vlmArrow;
+    EditorState.LineEndMarkerSize := 9.0;
+    EditorState.LineStartMarker := vlmArrow;
+    EditorState.LineStartMarkerSize := 6.0;
+    EditorState.LineJoin := vljBevel;
+    EditorState.LineStrokeWidth := 4.0;
+    EditorState.LineStrokeStyle := vssDashDot;
     Creation.Configure(Document, History, EditorState,
       Rect(0, 0, 1000, 1000), 1.0);
     Require(Creation.MouseDown(mbLeft, [], 100, 100),
@@ -69,7 +77,13 @@ begin
       (Document[1] is TVectArtLineLayer), 'Line layer was not created');
     Line := TVectArtLineLayer(Document[1]);
     Require((Line.StrokeColor = clRed) and
-      SameValue(Line.StrokeWidth, 4.0), 'Created line style differs');
+      SameValue(Line.StrokeWidth, 4.0) and
+      (Line.StrokeStyle = vssDashDot) and (Line.LineCap = vlcRound) and
+      (Line.LineJoin = vljBevel) and not Line.AntiAlias and
+      (Line.EndMarker = vlmArrow) and (Line.StartMarker = vlmArrow) and
+      SameValue(Line.EndMarkerSize, 9.0) and
+      SameValue(Line.StartMarkerSize, 6.0),
+      'Created line style differs');
 
     EditorState.CurrentTool := vetSelect;
     Interaction.EditHistory := History;

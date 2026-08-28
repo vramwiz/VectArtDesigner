@@ -132,6 +132,86 @@ type
     procedure Undo; override;
   end;
 
+  TVectArtLineCapCommand = class(TVectArtEditCommand)
+  private
+    FDocument: TVectArtDocument;
+    FLayerIndex: Integer;
+    FNewValue: TVectArtLineCap;
+    FOldValue: TVectArtLineCap;
+  public
+    constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
+      OldValue, NewValue: TVectArtLineCap);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
+  TVectArtLineAntiAliasCommand = class(TVectArtEditCommand)
+  private
+    FDocument: TVectArtDocument;
+    FLayerIndex: Integer;
+    FNewValue: Boolean;
+    FOldValue: Boolean;
+  public
+    constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
+      OldValue, NewValue: Boolean);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
+  TVectArtLineEndMarkerCommand = class(TVectArtEditCommand)
+  private
+    FDocument: TVectArtDocument;
+    FLayerIndex: Integer;
+    FNewValue: TVectArtLineMarker;
+    FOldValue: TVectArtLineMarker;
+  public
+    constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
+      OldValue, NewValue: TVectArtLineMarker);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
+  TVectArtLineStartMarkerCommand = class(TVectArtEditCommand)
+  private
+    FDocument: TVectArtDocument;
+    FLayerIndex: Integer;
+    FNewValue: TVectArtLineMarker;
+    FOldValue: TVectArtLineMarker;
+  public
+    constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
+      OldValue, NewValue: TVectArtLineMarker);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
+  TVectArtLineMarkerSizeCommand = class(TVectArtEditCommand)
+  private
+    FDocument: TVectArtDocument;
+    FLayerIndex: Integer;
+    FNewValue: Single;
+    FOldValue: Single;
+    FStartMarker: Boolean;
+    procedure ApplyValue(Value: Single);
+  public
+    constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
+      StartMarker: Boolean; OldValue, NewValue: Single);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
+  TVectArtLineJoinCommand = class(TVectArtEditCommand)
+  private
+    FDocument: TVectArtDocument;
+    FLayerIndex: Integer;
+    FNewValue: TVectArtLineJoin;
+    FOldValue: TVectArtLineJoin;
+  public
+    constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
+      OldValue, NewValue: TVectArtLineJoin);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
   TVectArtLayerBooleanCommand = class(TVectArtEditCommand)
   private
     FDocument: TVectArtDocument;
@@ -392,6 +472,147 @@ end;
 procedure TVectArtStrokeCommand.Undo;
 begin
   Apply(FOldColor, FOldWidth, FOldStyle);
+end;
+
+constructor TVectArtLineCapCommand.Create(ADocument: TVectArtDocument;
+  LayerIndex: Integer; OldValue, NewValue: TVectArtLineCap);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FLayerIndex := LayerIndex;
+  FOldValue := OldValue;
+  FNewValue := NewValue;
+end;
+
+procedure TVectArtLineCapCommand.Execute;
+begin
+  if FDocument <> nil then
+    FDocument.SetLineCap(FLayerIndex, FNewValue);
+end;
+
+procedure TVectArtLineCapCommand.Undo;
+begin
+  if FDocument <> nil then
+    FDocument.SetLineCap(FLayerIndex, FOldValue);
+end;
+
+constructor TVectArtLineJoinCommand.Create(ADocument: TVectArtDocument;
+  LayerIndex: Integer; OldValue, NewValue: TVectArtLineJoin);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FLayerIndex := LayerIndex;
+  FOldValue := OldValue;
+  FNewValue := NewValue;
+end;
+
+constructor TVectArtLineAntiAliasCommand.Create(ADocument: TVectArtDocument;
+  LayerIndex: Integer; OldValue, NewValue: Boolean);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FLayerIndex := LayerIndex;
+  FOldValue := OldValue;
+  FNewValue := NewValue;
+end;
+
+procedure TVectArtLineAntiAliasCommand.Execute;
+begin
+  if FDocument <> nil then
+    FDocument.SetLineAntiAlias(FLayerIndex, FNewValue);
+end;
+
+procedure TVectArtLineAntiAliasCommand.Undo;
+begin
+  if FDocument <> nil then
+    FDocument.SetLineAntiAlias(FLayerIndex, FOldValue);
+end;
+
+constructor TVectArtLineEndMarkerCommand.Create(ADocument: TVectArtDocument;
+  LayerIndex: Integer; OldValue, NewValue: TVectArtLineMarker);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FLayerIndex := LayerIndex;
+  FOldValue := OldValue;
+  FNewValue := NewValue;
+end;
+
+procedure TVectArtLineEndMarkerCommand.Execute;
+begin
+  if FDocument <> nil then
+    FDocument.SetLineEndMarker(FLayerIndex, FNewValue);
+end;
+
+procedure TVectArtLineEndMarkerCommand.Undo;
+begin
+  if FDocument <> nil then
+    FDocument.SetLineEndMarker(FLayerIndex, FOldValue);
+end;
+
+constructor TVectArtLineStartMarkerCommand.Create(
+  ADocument: TVectArtDocument; LayerIndex: Integer;
+  OldValue, NewValue: TVectArtLineMarker);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FLayerIndex := LayerIndex;
+  FOldValue := OldValue;
+  FNewValue := NewValue;
+end;
+
+procedure TVectArtLineStartMarkerCommand.Execute;
+begin
+  if FDocument <> nil then
+    FDocument.SetLineStartMarker(FLayerIndex, FNewValue);
+end;
+
+procedure TVectArtLineStartMarkerCommand.Undo;
+begin
+  if FDocument <> nil then
+    FDocument.SetLineStartMarker(FLayerIndex, FOldValue);
+end;
+
+procedure TVectArtLineMarkerSizeCommand.ApplyValue(Value: Single);
+begin
+  if FDocument = nil then Exit;
+  if FStartMarker then
+    FDocument.SetLineStartMarkerSize(FLayerIndex, Value)
+  else
+    FDocument.SetLineEndMarkerSize(FLayerIndex, Value);
+end;
+
+constructor TVectArtLineMarkerSizeCommand.Create(ADocument: TVectArtDocument;
+  LayerIndex: Integer; StartMarker: Boolean; OldValue, NewValue: Single);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FLayerIndex := LayerIndex;
+  FStartMarker := StartMarker;
+  FOldValue := OldValue;
+  FNewValue := NewValue;
+end;
+
+procedure TVectArtLineMarkerSizeCommand.Execute;
+begin
+  ApplyValue(FNewValue);
+end;
+
+procedure TVectArtLineMarkerSizeCommand.Undo;
+begin
+  ApplyValue(FOldValue);
+end;
+
+procedure TVectArtLineJoinCommand.Execute;
+begin
+  if FDocument <> nil then
+    FDocument.SetLineJoin(FLayerIndex, FNewValue);
+end;
+
+procedure TVectArtLineJoinCommand.Undo;
+begin
+  if FDocument <> nil then
+    FDocument.SetLineJoin(FLayerIndex, FOldValue);
 end;
 
 procedure TVectArtLayerBooleanCommand.ApplyValue(Value: Boolean);

@@ -9,6 +9,14 @@ uses
 type
   TVectArtQuad = array[0..3] of TPointF;
 
+  TVectArtMarkerGeometry = record
+    PrimaryPoints: TArray<TPointF>;
+    SecondaryPoints: TArray<TPointF>;
+    PrimaryClosed: Boolean;
+    SecondaryClosed: Boolean;
+    Filled: Boolean;
+  end;
+
 function NormalizeAngleDegrees(Value: Single): Single;
 function RotatePointAround(const Point, Center: TPointF;
   AngleDegrees: Single): TPointF;
@@ -20,6 +28,8 @@ function PointInRotatedRectangle(const Point: TPointF; const Bounds: TRectF;
   RotationDegrees: Single): Boolean;
 function PointInPolygon(const Point: TPointF;
   const Polygon: TArray<TPointF>): Boolean;
+function BuildLineMarkerGeometry(MarkerKind: Integer; const Tip,
+  InsidePoint: TPointF; StrokeWidth, MarkerSize: Single): TVectArtMarkerGeometry;
 
 implementation
 
@@ -129,6 +139,124 @@ begin
       Polygon[I].X) then
       Result := not Result;
     J := I;
+  end;
+end;
+
+function BuildLineMarkerGeometry(MarkerKind: Integer; const Tip,
+  InsidePoint: TPointF; StrokeWidth, MarkerSize: Single): TVectArtMarkerGeometry;
+var
+  Angle: Double;
+  Center: TPointF;
+  HalfWidth: Single;
+  I: Integer;
+  InnerRadius: Single;
+  LengthValue: Single;
+  Radius: Single;
+  UnitX: Single;
+  UnitY: Single;
+  Distance: Single;
+
+  function LocalPoint(Along, Across: Single): TPointF;
+  begin
+    Result := TPointF.Create(Tip.X + UnitX * Along - UnitY * Across,
+      Tip.Y + UnitY * Along + UnitX * Across);
+  end;
+
+begin
+  Result := Default(TVectArtMarkerGeometry);
+  if MarkerKind = 0 then Exit;
+  Distance := Hypot(InsidePoint.X - Tip.X, InsidePoint.Y - Tip.Y);
+  if Distance <= 0 then Exit;
+  UnitX := (InsidePoint.X - Tip.X) / Distance;
+  UnitY := (InsidePoint.Y - Tip.Y) / Distance;
+  MarkerSize := Max(MarkerSize, 1.0);
+  LengthValue := Max(StrokeWidth * MarkerSize, MarkerSize * 2);
+  HalfWidth := LengthValue * 0.45;
+  case MarkerKind of
+    2: // open arrow
+      begin
+        Result.PrimaryPoints := [LocalPoint(LengthValue, -HalfWidth), Tip,
+          LocalPoint(LengthValue, HalfWidth)];
+      end;
+    1: // filled arrow, retained internal ordinal
+      begin
+        Result.PrimaryPoints := [Tip,
+          LocalPoint(LengthValue, -HalfWidth),
+          LocalPoint(LengthValue, HalfWidth)];
+        Result.PrimaryClosed := True;
+        Result.Filled := True;
+      end;
+    3: // wide arrow
+      begin
+        Result.PrimaryPoints := [Tip,
+          LocalPoint(LengthValue * 0.72, -HalfWidth * 1.25),
+          LocalPoint(LengthValue * 0.72, HalfWidth * 1.25)];
+        Result.PrimaryClosed := True;
+        Result.Filled := True;
+      end;
+    4: // circle
+      begin
+        Radius := HalfWidth;
+        Center := LocalPoint(Radius, 0);
+        SetLength(Result.PrimaryPoints, 20);
+        for I := 0 to High(Result.PrimaryPoints) do
+        begin
+          Angle := I * 2 * Pi / Length(Result.PrimaryPoints);
+          Result.PrimaryPoints[I] := TPointF.Create(
+            Center.X + Cos(Angle) * Radius,
+            Center.Y + Sin(Angle) * Radius);
+        end;
+        Result.PrimaryClosed := True;
+        Result.Filled := True;
+      end;
+    5: // diamond
+      begin
+        Result.PrimaryPoints := [Tip,
+          LocalPoint(LengthValue * 0.5, -HalfWidth),
+          LocalPoint(LengthValue, 0),
+          LocalPoint(LengthValue * 0.5, HalfWidth)];
+        Result.PrimaryClosed := True;
+        Result.Filled := True;
+      end;
+    6: // concave arrow
+      begin
+        Result.PrimaryPoints := [Tip,
+          LocalPoint(LengthValue, -HalfWidth),
+          LocalPoint(LengthValue * 0.68, 0),
+          LocalPoint(LengthValue, HalfWidth)];
+        Result.PrimaryClosed := True;
+        Result.Filled := True;
+      end;
+    7: // compact arrow
+      begin
+        Result.PrimaryPoints := [Tip,
+          LocalPoint(LengthValue * 0.62, -HalfWidth * 0.55),
+          LocalPoint(LengthValue * 0.62, HalfWidth * 0.55)];
+        Result.PrimaryClosed := True;
+        Result.Filled := True;
+      end;
+    8: // slash
+      begin
+        Result.PrimaryPoints := [LocalPoint(LengthValue * 0.25, -HalfWidth),
+          LocalPoint(LengthValue * 0.75, HalfWidth)];
+      end;
+    9: // star
+      begin
+        Radius := HalfWidth * 1.15;
+        InnerRadius := Radius * 0.42;
+        Center := LocalPoint(Radius, 0);
+        SetLength(Result.PrimaryPoints, 10);
+        for I := 0 to High(Result.PrimaryPoints) do
+        begin
+          Angle := Pi + I * Pi / 5;
+          if Odd(I) then Distance := InnerRadius else Distance := Radius;
+          Result.PrimaryPoints[I] := TPointF.Create(
+            Center.X + Cos(Angle) * Distance,
+            Center.Y + Sin(Angle) * Distance);
+        end;
+        Result.PrimaryClosed := True;
+        Result.Filled := True;
+      end;
   end;
 end;
 

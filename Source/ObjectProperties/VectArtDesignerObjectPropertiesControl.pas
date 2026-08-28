@@ -6,23 +6,10 @@ interface
 uses
   System.Classes, System.Types, Vcl.Controls, Vcl.StdCtrls,
   VectArtDesignerDocument, VectArtDesignerEditCommands,
-  VectArtDesignerEditHistory, VectArtDesignerEditorState;
+  VectArtDesignerEditHistory, VectArtDesignerEditorState,
+  VectArtDesignerStrokeStyleCombo;
 
 type
-  // Parent未接続のFrame内でItemsへ触れるとTComboBoxがHandleを要求するため、
-  // 選択肢の生成を実際のCreateWndまで遅延する。
-  TVectArtStrokeStyleCombo = class(TComboBox)
-  private
-    FPendingItemIndex: Integer;
-  protected
-    procedure CreateWnd; override;
-    procedure DrawItem(Index: Integer; Rect: TRect;
-      State: TOwnerDrawState); override;
-  public
-    constructor Create(AOwner: TComponent); override;
-    procedure SetPendingItemIndex(Value: Integer);
-  end;
-
   TVectArtObjectPropertiesControl = class(TCustomControl)
   private
     FColorEdit: TEdit;
@@ -84,101 +71,6 @@ const
   EDIT_HEIGHT = 25;
   MIN_OBJECT_SIZE = 1.0;
 
-constructor TVectArtStrokeStyleCombo.Create(AOwner: TComponent);
-begin
-  inherited Create(AOwner);
-  FPendingItemIndex := 0;
-end;
-
-procedure TVectArtStrokeStyleCombo.CreateWnd;
-var
-  ChangeEvent: TNotifyEvent;
-begin
-  inherited CreateWnd;
-  ChangeEvent := OnChange;
-  OnChange := nil;
-  try
-    Items.BeginUpdate;
-    try
-      Items.Clear;
-      Items.Add('Solid');
-      Items.Add('Dotted');
-      Items.Add('Short dash');
-      Items.Add('Dash-dot');
-      Items.Add('Dash-dot-dot');
-      Items.Add('Sparse dotted');
-      Items.Add('Medium dash');
-      Items.Add('Long dash-dot');
-      Items.Add('Long dash');
-      ItemIndex := FPendingItemIndex;
-    finally
-      Items.EndUpdate;
-    end;
-  finally
-    OnChange := ChangeEvent;
-  end;
-end;
-
-procedure TVectArtStrokeStyleCombo.DrawItem(Index: Integer; Rect: TRect;
-  State: TOwnerDrawState);
-var
-  DashIndex: Integer;
-  DrawSegment: Boolean;
-  Intervals: TArray<Single>;
-  SegmentLength: Integer;
-  StyleValue: TVectArtStrokeStyle;
-  X: Integer;
-  Y: Integer;
-begin
-  if odSelected in State then
-    Canvas.Brush.Color := TColor($00D77800)
-  else
-    Canvas.Brush.Color := COLOR_EDIT;
-  Canvas.FillRect(Rect);
-  if not InRange(Index, Ord(Low(TVectArtStrokeStyle)),
-    Ord(High(TVectArtStrokeStyle))) then
-    Exit;
-  StyleValue := TVectArtStrokeStyle(Index);
-  Canvas.Pen.Color := COLOR_TEXT;
-  Canvas.Pen.Width := 2;
-  Canvas.Pen.Style := psSolid;
-  Canvas.Brush.Color := COLOR_TEXT;
-  Y := (Rect.Top + Rect.Bottom) div 2;
-  X := Rect.Left + 5;
-  Intervals := VectArtStrokeDashIntervals(StyleValue, 2.0);
-  if Length(Intervals) = 0 then
-  begin
-    Canvas.MoveTo(X, Y);
-    Canvas.LineTo(Rect.Right - 5, Y);
-    Exit;
-  end;
-  DashIndex := 0;
-  DrawSegment := True;
-  while X < Rect.Right - 5 do
-  begin
-    SegmentLength := Max(Round(Intervals[DashIndex]), 1);
-    if DrawSegment then
-      if VectArtStrokeUsesRoundCaps(StyleValue) and
-        (SegmentLength <= 2) then
-        Canvas.Ellipse(X - 1, Y - 1, X + 2, Y + 2)
-      else
-      begin
-        Canvas.MoveTo(X, Y);
-        Canvas.LineTo(Min(X + SegmentLength, Rect.Right - 5), Y);
-      end;
-    Inc(X, SegmentLength);
-    DashIndex := (DashIndex + 1) mod Length(Intervals);
-    DrawSegment := not DrawSegment;
-  end;
-end;
-
-procedure TVectArtStrokeStyleCombo.SetPendingItemIndex(Value: Integer);
-begin
-  FPendingItemIndex := Value;
-  if HandleAllocated then
-    ItemIndex := Value;
-end;
-
 constructor TVectArtObjectPropertiesControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -205,8 +97,10 @@ var
   I: Integer;
   LayerIndex: Integer;
   LayerIndices: TArray<Integer>;
+  LinesIncluded: Boolean;
   NewColor: TColor;
   OldColor: TColor;
+  OtherStrokesIncluded: Boolean;
   PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
   Red: Integer;
@@ -226,6 +120,8 @@ begin
   Blue := Value and $FF;
   NewColor := RGB(Red, Green, Blue);
   LayerIndices := GetSelectedStrokeIndices;
+  LinesIncluded := False;
+  OtherStrokesIncluded := False;
   Command := nil;
   if FEditHistory <> nil then
     Command := TVectArtCompoundCommand.Create;
@@ -234,6 +130,7 @@ begin
     LayerIndex := LayerIndices[I];
     if FDocument[LayerIndex] is TVectArtLineLayer then
     begin
+      LinesIncluded := True;
       OldColor := TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor;
       FDocument.SetLineStroke(LayerIndex, NewColor,
         TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth,
@@ -242,6 +139,7 @@ begin
     end
     else if FDocument[LayerIndex] is TVectArtPathLayer then
     begin
+      OtherStrokesIncluded := True;
       PathLayer := TVectArtPathLayer(FDocument[LayerIndex]);
       OldColor := PathLayer.StrokeColor;
       FDocument.SetPathStroke(LayerIndex, NewColor, PathLayer.StrokeWidth,
@@ -250,6 +148,7 @@ begin
     end
     else
     begin
+      OtherStrokesIncluded := True;
       RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
       OldColor := RectangleLayer.StrokeColor;
       FDocument.SetRectangleStroke(LayerIndex, NewColor,
@@ -278,7 +177,12 @@ begin
   else
     Command.Free;
   if FEditorState <> nil then
-    FEditorState.RectangleStrokeColor := NewColor;
+  begin
+    if OtherStrokesIncluded then
+      FEditorState.RectangleStrokeColor := NewColor;
+    if LinesIncluded then
+      FEditorState.LineStrokeColor := NewColor;
+  end;
 end;
 
 procedure TVectArtObjectPropertiesControl.ApplyStrokeStyle(Sender: TObject);
@@ -287,8 +191,10 @@ var
   I: Integer;
   LayerIndex: Integer;
   LayerIndices: TArray<Integer>;
+  LinesIncluded: Boolean;
   NewStyle: TVectArtStrokeStyle;
   OldStyle: TVectArtStrokeStyle;
+  OtherStrokesIncluded: Boolean;
   PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
 begin
@@ -300,6 +206,8 @@ begin
     Exit;
   NewStyle := TVectArtStrokeStyle(FStrokeStyleCombo.ItemIndex);
   LayerIndices := GetSelectedStrokeIndices;
+  LinesIncluded := False;
+  OtherStrokesIncluded := False;
   Command := nil;
   if FEditHistory <> nil then
     Command := TVectArtCompoundCommand.Create;
@@ -308,6 +216,7 @@ begin
     LayerIndex := LayerIndices[I];
     if FDocument[LayerIndex] is TVectArtLineLayer then
     begin
+      LinesIncluded := True;
       OldStyle := TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle;
       FDocument.SetLineStroke(LayerIndex,
         TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor,
@@ -316,6 +225,7 @@ begin
     end
     else if FDocument[LayerIndex] is TVectArtPathLayer then
     begin
+      OtherStrokesIncluded := True;
       PathLayer := TVectArtPathLayer(FDocument[LayerIndex]);
       OldStyle := PathLayer.StrokeStyle;
       FDocument.SetPathStroke(LayerIndex, PathLayer.StrokeColor,
@@ -324,6 +234,7 @@ begin
     end
     else
     begin
+      OtherStrokesIncluded := True;
       RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
       OldStyle := RectangleLayer.StrokeStyle;
       FDocument.SetRectangleStroke(LayerIndex, RectangleLayer.StrokeColor,
@@ -352,7 +263,12 @@ begin
   else
     Command.Free;
   if FEditorState <> nil then
-    FEditorState.RectangleStrokeStyle := NewStyle;
+  begin
+    if OtherStrokesIncluded then
+      FEditorState.RectangleStrokeStyle := NewStyle;
+    if LinesIncluded then
+      FEditorState.LineStrokeStyle := NewStyle;
+  end;
 end;
 
 procedure TVectArtObjectPropertiesControl.ApplyStrokeWidth;
@@ -361,8 +277,10 @@ var
   I: Integer;
   LayerIndex: Integer;
   LayerIndices: TArray<Integer>;
+  LinesIncluded: Boolean;
   NewWidth: Double;
   OldWidth: Single;
+  OtherStrokesIncluded: Boolean;
   PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
 begin
@@ -376,6 +294,8 @@ begin
   end;
   NewWidth := Max(NewWidth, 0.0);
   LayerIndices := GetSelectedStrokeIndices;
+  LinesIncluded := False;
+  OtherStrokesIncluded := False;
   Command := nil;
   if FEditHistory <> nil then
     Command := TVectArtCompoundCommand.Create;
@@ -384,6 +304,7 @@ begin
     LayerIndex := LayerIndices[I];
     if FDocument[LayerIndex] is TVectArtLineLayer then
     begin
+      LinesIncluded := True;
       OldWidth := TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth;
       FDocument.SetLineStroke(LayerIndex,
         TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor, NewWidth,
@@ -392,6 +313,7 @@ begin
     end
     else if FDocument[LayerIndex] is TVectArtPathLayer then
     begin
+      OtherStrokesIncluded := True;
       PathLayer := TVectArtPathLayer(FDocument[LayerIndex]);
       OldWidth := PathLayer.StrokeWidth;
       FDocument.SetPathStroke(LayerIndex, PathLayer.StrokeColor, NewWidth,
@@ -400,6 +322,7 @@ begin
     end
     else
     begin
+      OtherStrokesIncluded := True;
       RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
       OldWidth := RectangleLayer.StrokeWidth;
       FDocument.SetRectangleStroke(LayerIndex, RectangleLayer.StrokeColor,
@@ -428,7 +351,12 @@ begin
   else
     Command.Free;
   if FEditorState <> nil then
-    FEditorState.RectangleStrokeWidth := NewWidth;
+  begin
+    if OtherStrokesIncluded then
+      FEditorState.RectangleStrokeWidth := NewWidth;
+    if LinesIncluded then
+      FEditorState.LineStrokeWidth := NewWidth;
+  end;
 end;
 
 procedure TVectArtObjectPropertiesControl.ClearEditValue(Edit: TEdit);

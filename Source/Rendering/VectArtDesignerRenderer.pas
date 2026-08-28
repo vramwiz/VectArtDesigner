@@ -47,7 +47,8 @@ implementation
 
 uses
   System.Math, System.Skia, System.Types, System.UITypes,
-  TextRendererSkiaRuntime, Vcl.Graphics, Winapi.Windows;
+  TextRendererSkiaRuntime, Vcl.Graphics, Winapi.Windows,
+  VectArtDesignerGeometry;
 
 const
   MAX_RENDER_DIMENSION = 16384;
@@ -119,6 +120,7 @@ var
   ImagePaint: ISkPaint;
   RasterImage: ISkImage;
   EdgeWidth: Single;
+  MarkerGeometry: TVectArtMarkerGeometry;
   SignedHeight: Single;
   RotationDegrees: Single;
   Layer: TVectArtLayer;
@@ -133,6 +135,37 @@ var
   StrokeWidth: Single;
   StrokePaint: ISkPaint;
   Surface: ISkSurface;
+
+  procedure DrawMarker(Marker: TVectArtLineMarker; const Tip,
+    InsidePoint: TPointF; MarkerSize: Single; AntiAlias: Boolean);
+  var
+    K: Integer;
+    MarkerPath: ISkPath;
+    MarkerPathBuilder: ISkPathBuilder;
+  begin
+    MarkerGeometry := BuildLineMarkerGeometry(Ord(Marker), Tip, InsidePoint,
+      LineLayer.StrokeWidth, MarkerSize);
+    if Length(MarkerGeometry.PrimaryPoints) < 2 then Exit;
+    MarkerPathBuilder := TSkPathBuilder.Create;
+    MarkerPathBuilder.MoveTo(MarkerGeometry.PrimaryPoints[0]);
+    for K := 1 to High(MarkerGeometry.PrimaryPoints) do
+      MarkerPathBuilder.LineTo(MarkerGeometry.PrimaryPoints[K]);
+    if MarkerGeometry.PrimaryClosed then MarkerPathBuilder.Close;
+    MarkerPath := MarkerPathBuilder.Detach;
+    if MarkerGeometry.Filled then
+    begin
+      Paint.Color := StrokePaint.Color;
+      Paint.AntiAlias := AntiAlias;
+      Canvas.DrawPath(MarkerPath, Paint);
+    end
+    else
+    begin
+      StrokePaint.PathEffect := nil;
+      StrokePaint.StrokeCap := TSkStrokeCap.Round;
+      StrokePaint.StrokeWidth := Max(LineLayer.StrokeWidth, 0.1);
+      Canvas.DrawPath(MarkerPath, StrokePaint);
+    end;
+  end;
 begin
   if Document = nil then
     raise EArgumentNilException.Create('Document');
@@ -210,6 +243,7 @@ begin
     if Layer is TVectArtLineLayer then
     begin
       LineLayer := TVectArtLineLayer(Layer);
+      StrokePaint.AntiAlias := LineLayer.AntiAlias;
       StrokeWidth := Max(Max(LineLayer.StrokeWidth, 0.1),
         MinimumStrokeWidth);
       StrokePaint.Color := VclColorToAlphaColor(LineLayer.StrokeColor,
@@ -224,12 +258,28 @@ begin
       if VectArtStrokeUsesRoundCaps(LineLayer.StrokeStyle) then
         StrokePaint.StrokeCap := TSkStrokeCap.Round
       else
-        StrokePaint.StrokeCap := TSkStrokeCap.Butt;
+        case LineLayer.LineCap of
+          vlcSquare: StrokePaint.StrokeCap := TSkStrokeCap.Square;
+          vlcRound: StrokePaint.StrokeCap := TSkStrokeCap.Round;
+        else
+          StrokePaint.StrokeCap := TSkStrokeCap.Butt;
+        end;
+      case LineLayer.LineJoin of
+        vljBevel: StrokePaint.StrokeJoin := TSkStrokeJoin.Bevel;
+        vljRound: StrokePaint.StrokeJoin := TSkStrokeJoin.Round;
+      else
+        StrokePaint.StrokeJoin := TSkStrokeJoin.Miter;
+      end;
       Canvas.DrawLine(LineLayer.StartPoint, LineLayer.EndPoint, StrokePaint);
+      DrawMarker(LineLayer.StartMarker, LineLayer.StartPoint,
+        LineLayer.EndPoint, LineLayer.StartMarkerSize, LineLayer.AntiAlias);
+      DrawMarker(LineLayer.EndMarker, LineLayer.EndPoint,
+        LineLayer.StartPoint, LineLayer.EndMarkerSize, LineLayer.AntiAlias);
       Continue;
     end;
     if Layer is TVectArtPathLayer then
     begin
+      StrokePaint.AntiAlias := True;
       PathLayer := TVectArtPathLayer(Layer);
       if Length(PathLayer.Points) < 2 then
         Continue;
@@ -262,6 +312,7 @@ begin
           StrokePaint.StrokeCap := TSkStrokeCap.Round
         else
           StrokePaint.StrokeCap := TSkStrokeCap.Butt;
+        StrokePaint.StrokeJoin := TSkStrokeJoin.Miter;
         Canvas.DrawPath(Path, StrokePaint);
       end;
       Continue;
@@ -269,6 +320,7 @@ begin
     if not (Layer is TVectArtRectangleLayer) then
       Continue;
     RectangleLayer := TVectArtRectangleLayer(Layer);
+    StrokePaint.AntiAlias := True;
     Paint.Color := VclColorToAlphaColor(RectangleLayer.FillColor,
       RectangleLayer.Opacity);
     Canvas.Save;
@@ -294,6 +346,7 @@ begin
           StrokePaint.StrokeCap := TSkStrokeCap.Round
         else
           StrokePaint.StrokeCap := TSkStrokeCap.Butt;
+        StrokePaint.StrokeJoin := TSkStrokeJoin.Miter;
         Canvas.DrawRect(RectangleLayer.Bounds, StrokePaint);
       end;
     finally

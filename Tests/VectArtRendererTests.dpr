@@ -31,6 +31,7 @@ end;
 
 var
   Data: TVectArtRectangleData;
+  ButtCapAlpha: Byte;
   DefaultThinAlpha: Byte;
   LineData: TVectArtLineData;
   Destination: TVectArtRenderBuffer;
@@ -38,6 +39,7 @@ var
   I: NativeInt;
   Pixel: PVectArtRgbaPixel;
   Rendered: TVectArtRenderBuffer;
+  RoundCapAlpha: Byte;
   EnhancedThinAlpha: Byte;
 begin
   TTextRendererSkiaRuntime.Acquire(BundledSkiaRuntimeFileName);
@@ -110,6 +112,13 @@ begin
     LineData.StartPoint := TPointF.Create(0, 0);
     LineData.EndPoint := TPointF.Create(7, 7);
     LineData.Locked := False;
+    LineData.LineCap := vlcButt;
+    LineData.AntiAlias := True;
+    LineData.EndMarker := vlmNone;
+    LineData.EndMarkerSize := 4.0;
+    LineData.StartMarker := vlmNone;
+    LineData.StartMarkerSize := 4.0;
+    LineData.LineJoin := vljMiter;
     LineData.Name := 'Line 1';
     LineData.Opacity := 1.0;
     LineData.StrokeColor := clRed;
@@ -130,6 +139,16 @@ begin
     EnhancedThinAlpha := PixelAt(Rendered, 3, 1)^.A;
     Require(EnhancedThinAlpha > DefaultThinAlpha,
       'Preview minimum stroke width was not applied');
+    Document.SetLinePoints(2, TPointF.Create(3, 4), TPointF.Create(6, 4));
+    Document.SetLineStroke(2, clRed, 4.0, vssSolid);
+    Document.SetLineCap(2, vlcButt);
+    RenderVectArtDocument(Document, Rendered, 8, 8);
+    ButtCapAlpha := PixelAt(Rendered, 1, 4)^.A;
+    Document.SetLineCap(2, vlcRound);
+    RenderVectArtDocument(Document, Rendered, 8, 8);
+    RoundCapAlpha := PixelAt(Rendered, 1, 4)^.A;
+    Require(RoundCapAlpha > ButtCapAlpha,
+      'Round line cap did not extend beyond a butt cap');
     Writeln('VectArt shared renderer: PASS');
   finally
     Destination.Free;

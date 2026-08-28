@@ -15,6 +15,7 @@ type
     FDocument: TVectArtDocument;
     FEditHistory: TVectArtEditHistory;
     FRenderer: TVectArtLayerRenderer;
+    FSelectionAnchorIndex: Integer;
     procedure PaintDirect2D;
     procedure PaintGDI;
     procedure SetDocument(const Value: TVectArtDocument);
@@ -47,6 +48,7 @@ begin
   TabStop := True;
   FDirect2DEnabled := TDirect2DCanvas.Supported;
   FRenderer := TVectArtLayerRenderer.Create;
+  FSelectionAnchorIndex := -1;
 end;
 
 destructor TVectArtLayerListControl.Destroy;
@@ -90,7 +92,26 @@ begin
             FDocument, Index, vlbpLocked, not NewValue, NewValue));
         Exit;
       end;
-      FDocument.SelectedIndex := Index;
+      if ssShift in Shift then
+      begin
+        if FSelectionAnchorIndex <= 0 then
+          if FDocument.SelectedIndex > 0 then
+            FSelectionAnchorIndex := FDocument.SelectedIndex
+          else
+            FSelectionAnchorIndex := Index;
+        FDocument.SelectLayerRange(FSelectionAnchorIndex, Index,
+          ssCtrl in Shift);
+      end
+      else if ssCtrl in Shift then
+      begin
+        FDocument.ToggleSelectedLayer(Index);
+        FSelectionAnchorIndex := Index;
+      end
+      else
+      begin
+        FDocument.SelectedIndex := Index;
+        FSelectionAnchorIndex := Index;
+      end;
       Exit;
     end;
   end;
@@ -137,6 +158,7 @@ begin
   if FDocument = Value then
     Exit;
   FDocument := Value;
+  FSelectionAnchorIndex := -1;
   FRenderer.Document := Value;
   Invalidate;
 end;

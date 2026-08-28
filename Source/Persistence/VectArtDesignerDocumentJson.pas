@@ -144,6 +144,15 @@ begin
           TJSONNumber.Create(Line.StrokeWidth));
         LineJson.AddPair('strokeStyle',
           TJSONNumber.Create(Ord(Line.StrokeStyle)));
+        LineJson.AddPair('lineCap', TJSONNumber.Create(Ord(Line.LineCap)));
+        LineJson.AddPair('lineJoin', TJSONNumber.Create(Ord(Line.LineJoin)));
+        LineJson.AddPair('antiAlias', TJSONBool.Create(Line.AntiAlias));
+        LineJson.AddPair('endMarker', TJSONNumber.Create(Ord(Line.EndMarker)));
+        LineJson.AddPair('endMarkerSize', TJSONNumber.Create(Line.EndMarkerSize));
+        LineJson.AddPair('startMarker',
+          TJSONNumber.Create(Ord(Line.StartMarker)));
+        LineJson.AddPair('startMarkerSize',
+          TJSONNumber.Create(Line.StartMarkerSize));
         LineJson.AddPair('visible', TJSONBool.Create(Line.Visible));
         LineJson.AddPair('locked', TJSONBool.Create(Line.Locked));
         LayersJson.AddElement(LineJson);
@@ -249,6 +258,9 @@ var
   Root: TJSONObject;
   SelectedIndex: Integer;
   SourceKind: string;
+  LineCapValue: Integer;
+  LineJoinValue: Integer;
+  LineMarkerValue: Integer;
   StrokeStyleValue: Integer;
   Version: Integer;
 begin
@@ -341,6 +353,54 @@ begin
           if InRange(StrokeStyleValue, Ord(Low(TVectArtStrokeStyle)),
             Ord(High(TVectArtStrokeStyle))) then
             LineValue.StrokeStyle := TVectArtStrokeStyle(StrokeStyleValue);
+          LineValue.LineCap := vlcButt;
+          if LayerJson.GetValue('lineCap') is TJSONNumber then
+          begin
+            LineCapValue := TJSONNumber(
+              LayerJson.GetValue('lineCap')).AsInt;
+            if InRange(LineCapValue, Ord(Low(TVectArtLineCap)),
+              Ord(High(TVectArtLineCap))) then
+              LineValue.LineCap := TVectArtLineCap(LineCapValue);
+          end;
+          LineValue.LineJoin := vljMiter;
+          if LayerJson.GetValue('lineJoin') is TJSONNumber then
+          begin
+            LineJoinValue := TJSONNumber(
+              LayerJson.GetValue('lineJoin')).AsInt;
+            if InRange(LineJoinValue, Ord(Low(TVectArtLineJoin)),
+              Ord(High(TVectArtLineJoin))) then
+              LineValue.LineJoin := TVectArtLineJoin(LineJoinValue);
+          end;
+          LineValue.AntiAlias := True;
+          if LayerJson.GetValue('antiAlias') is TJSONBool then
+            LineValue.AntiAlias := TJSONBool(
+              LayerJson.GetValue('antiAlias')).AsBoolean;
+          LineValue.EndMarker := vlmNone;
+          LineValue.EndMarkerSize := 4.0;
+          if LayerJson.GetValue('endMarker') is TJSONNumber then
+          begin
+            LineMarkerValue := TJSONNumber(
+              LayerJson.GetValue('endMarker')).AsInt;
+            if InRange(LineMarkerValue, Ord(Low(TVectArtLineMarker)),
+              Ord(High(TVectArtLineMarker))) then
+              LineValue.EndMarker := TVectArtLineMarker(LineMarkerValue);
+          end;
+          if LayerJson.GetValue('endMarkerSize') is TJSONNumber then
+            LineValue.EndMarkerSize := Max(TJSONNumber(
+              LayerJson.GetValue('endMarkerSize')).AsDouble, 1.0);
+          LineValue.StartMarker := vlmNone;
+          LineValue.StartMarkerSize := 4.0;
+          if LayerJson.GetValue('startMarker') is TJSONNumber then
+          begin
+            LineMarkerValue := TJSONNumber(
+              LayerJson.GetValue('startMarker')).AsInt;
+            if InRange(LineMarkerValue, Ord(Low(TVectArtLineMarker)),
+              Ord(High(TVectArtLineMarker))) then
+              LineValue.StartMarker := TVectArtLineMarker(LineMarkerValue);
+          end;
+          if LayerJson.GetValue('startMarkerSize') is TJSONNumber then
+            LineValue.StartMarkerSize := Max(TJSONNumber(
+              LayerJson.GetValue('startMarkerSize')).AsDouble, 1.0);
           LineValue.Visible := ReadBoolean(LayerJson, 'visible');
           LineValue.Locked := ReadBoolean(LayerJson, 'locked');
           LineData[I] := LineValue;

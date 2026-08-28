@@ -56,6 +56,15 @@ begin
     Require(SameValue(Line.StrokeWidth, 100.0, 0.000001),
       'Line stroke width differs');
     Require(Line.StrokeStyle = vssLongDash, 'Line stroke style differs');
+    Require(Line.LineCap = vlcRound, 'Line cap differs');
+    Require(Line.LineJoin = vljRound, 'Line join differs');
+    Require(Line.AntiAlias, 'Line anti-alias differs');
+    Require(Line.EndMarker = vlmStar, 'Line end marker differs');
+    Require(Line.StartMarker = vlmOpenArrow, 'Line start marker differs');
+    Require(SameValue(Line.EndMarkerSize, 11.0),
+      'Line end marker size differs');
+    Require(SameValue(Line.StartMarkerSize, 11.0),
+      'Line start marker size differs');
     Require(ColorToRGB(Line.StrokeColor) = ColorToRGB(clBlack),
       'Line stroke color differs');
     Writeln('WebArt line import: PASS');

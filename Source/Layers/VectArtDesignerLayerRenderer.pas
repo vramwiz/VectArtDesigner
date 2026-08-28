@@ -48,10 +48,14 @@ type
     property Document: TVectArtDocument read FDocument write SetDocument;
   end;
 
+function VectArtLineThumbnailStrokeWidth(StrokeWidth: Single): Integer;
+procedure VectArtLineThumbnailPoints(const ThumbnailRect: TRect;
+  PreviewStrokeWidth: Integer; out StartPoint, EndPoint: TPoint);
+
 implementation
 
 uses
-  System.Classes, System.Math, Winapi.Windows;
+  System.Classes, System.Math, Winapi.D2D1, Winapi.Windows;
 
 const
   COLOR_LIST_BACKGROUND   = TColor($001A1A1A);
@@ -71,6 +75,8 @@ const
   THUMBNAIL_HEIGHT        = 54;
   THUMBNAIL_WIDTH         = 96;
   VISIBILITY_BUTTON_TOP   = 17;
+  LINE_THUMBNAIL_MAX_STROKE = 10;
+  LINE_THUMBNAIL_MIN_MARGIN = 8;
 
 constructor TVectArtLayerRenderer.Create;
 begin
@@ -159,6 +165,31 @@ begin
     Round(GetBValue(ColorValue) * Opacity + $FF * (1 - Opacity)));
 end;
 
+function VectArtLineThumbnailStrokeWidth(StrokeWidth: Single): Integer;
+begin
+  if StrokeWidth <= 1.0 then
+    Exit(1);
+  Result := EnsureRange(Round(1 + 2 * Ln(StrokeWidth)), 1,
+    LINE_THUMBNAIL_MAX_STROKE);
+end;
+
+procedure VectArtLineThumbnailPoints(const ThumbnailRect: TRect;
+  PreviewStrokeWidth: Integer; out StartPoint, EndPoint: TPoint);
+var
+  Margin: Integer;
+begin
+  PreviewStrokeWidth := EnsureRange(PreviewStrokeWidth, 1,
+    LINE_THUMBNAIL_MAX_STROKE);
+  Margin := Max(LINE_THUMBNAIL_MIN_MARGIN,
+    ((PreviewStrokeWidth + 1) div 2) + 3);
+  Margin := Min(Margin, Max(Min(ThumbnailRect.Width,
+    ThumbnailRect.Height) div 2, 0));
+  StartPoint := Point(ThumbnailRect.Left + Margin,
+    ThumbnailRect.Bottom - Margin);
+  EndPoint := Point(ThumbnailRect.Right - Margin,
+    ThumbnailRect.Top + Margin);
+end;
+
 procedure TVectArtLayerRenderer.DrawImageThumbnail(ACanvas: TCustomCanvas;
   const ThumbnailRect: TRect; ImageLayer: TVectArtImageLayer);
 var
@@ -185,9 +216,13 @@ var
   DetailText: string;
   LockRect: TRect;
   LineLayer: TVectArtLineLayer;
+  LineEnd: TPoint;
+  LineStart: TPoint;
+  LineStrokeWidth: Integer;
   RectangleLayer: TVectArtRectangleLayer;
   RectangleRect: TRect;
   Row: Integer;
+  SavedDC: Integer;
   TextX: Integer;
   ThumbnailArea: TRect;
   ThumbnailRect: TRect;
@@ -282,15 +317,26 @@ begin
   if Layer is TVectArtLineLayer then
   begin
     LineLayer := TVectArtLineLayer(Layer);
+    LineStrokeWidth := VectArtLineThumbnailStrokeWidth(
+      LineLayer.StrokeWidth);
+    VectArtLineThumbnailPoints(ThumbnailRect, LineStrokeWidth,
+      LineStart, LineEnd);
     ACanvas.Pen.Color := BlendThumbnailColor(LineLayer.StrokeColor,
       LineLayer.Opacity);
-    ACanvas.Pen.Width := Max(Round(LineLayer.StrokeWidth), 1);
+    ACanvas.Pen.Width := LineStrokeWidth;
     if LineLayer.StrokeStyle <> vssSolid then
       ACanvas.Pen.Style := psDash
     else
       ACanvas.Pen.Style := psSolid;
-    ACanvas.MoveTo(ThumbnailRect.Left + 8, ThumbnailRect.Bottom - 8);
-    ACanvas.LineTo(ThumbnailRect.Right - 8, ThumbnailRect.Top + 8);
+    SavedDC := SaveDC(ACanvas.Handle);
+    try
+      IntersectClipRect(ACanvas.Handle, ThumbnailRect.Left,
+        ThumbnailRect.Top, ThumbnailRect.Right, ThumbnailRect.Bottom);
+      ACanvas.MoveTo(LineStart.X, LineStart.Y);
+      ACanvas.LineTo(LineEnd.X, LineEnd.Y);
+    finally
+      RestoreDC(ACanvas.Handle, SavedDC);
+    end;
     ACanvas.Pen.Style := psSolid;
     ACanvas.Pen.Width := 1;
   end;
@@ -322,7 +368,9 @@ begin
   else if Layer is TVectArtPathLayer then
     DetailText := Format('Path  %d%%', [Round(Layer.Opacity * 100)])
   else
-    DetailText := Format('Line  %d%%', [Round(Layer.Opacity * 100)]);
+    DetailText := Format('Line  %spx  %d%%',
+      [FormatFloat('0.##', TVectArtLineLayer(Layer).StrokeWidth),
+       Round(Layer.Opacity * 100)]);
   ACanvas.Font.Height := -11;
   ACanvas.Font.Color := COLOR_TEXT_SECONDARY;
   ACanvas.TextOut(TextX, ItemRect.Top + 43, DetailText);
@@ -359,6 +407,9 @@ var
   DetailText: string;
   LockRect: TRect;
   LineLayer: TVectArtLineLayer;
+  LineEnd: TPoint;
+  LineStart: TPoint;
+  LineStrokeWidth: Integer;
   RectangleLayer: TVectArtRectangleLayer;
   RectangleRect: TRect;
   Row: Integer;
@@ -460,15 +511,25 @@ begin
   if Layer is TVectArtLineLayer then
   begin
     LineLayer := TVectArtLineLayer(Layer);
+    LineStrokeWidth := VectArtLineThumbnailStrokeWidth(
+      LineLayer.StrokeWidth);
+    VectArtLineThumbnailPoints(ThumbnailRect, LineStrokeWidth,
+      LineStart, LineEnd);
     ACanvas.Pen.Color := BlendThumbnailColor(LineLayer.StrokeColor,
       LineLayer.Opacity);
-    ACanvas.Pen.Width := Max(Round(LineLayer.StrokeWidth), 1);
+    ACanvas.Pen.Width := LineStrokeWidth;
     if LineLayer.StrokeStyle <> vssSolid then
       ACanvas.Pen.Style := psDash
     else
       ACanvas.Pen.Style := psSolid;
-    ACanvas.MoveTo(ThumbnailRect.Left + 8, ThumbnailRect.Bottom - 8);
-    ACanvas.LineTo(ThumbnailRect.Right - 8, ThumbnailRect.Top + 8);
+    ACanvas.RenderTarget.PushAxisAlignedClip(ThumbnailRect,
+      D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    try
+      ACanvas.MoveTo(LineStart.X, LineStart.Y);
+      ACanvas.LineTo(LineEnd.X, LineEnd.Y);
+    finally
+      ACanvas.RenderTarget.PopAxisAlignedClip;
+    end;
     ACanvas.Pen.Style := psSolid;
     ACanvas.Pen.Width := 1;
   end;
@@ -500,7 +561,9 @@ begin
   else if Layer is TVectArtPathLayer then
     DetailText := Format('Path  %d%%', [Round(Layer.Opacity * 100)])
   else
-    DetailText := Format('Line  %d%%', [Round(Layer.Opacity * 100)]);
+    DetailText := Format('Line  %spx  %d%%',
+      [FormatFloat('0.##', TVectArtLineLayer(Layer).StrokeWidth),
+       Round(Layer.Opacity * 100)]);
   ACanvas.Font.Height := -11;
   ACanvas.Font.Color := COLOR_TEXT_SECONDARY;
   ACanvas.TextOut(TextX, ItemRect.Top + 43, DetailText);

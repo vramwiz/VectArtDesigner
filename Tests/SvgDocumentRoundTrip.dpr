@@ -79,6 +79,13 @@ begin
     LineData.StartPoint := TPointF.Create(50, 60);
     LineData.EndPoint := TPointF.Create(500, 300);
     LineData.Locked := False;
+    LineData.LineCap := vlcRound;
+    LineData.AntiAlias := False;
+    LineData.EndMarker := vlmStar;
+    LineData.EndMarkerSize := 9.0;
+    LineData.StartMarker := vlmOpenArrow;
+    LineData.StartMarkerSize := 6.0;
+    LineData.LineJoin := vljBevel;
     LineData.Name := '斜線';
     LineData.Opacity := 0.8;
     LineData.StrokeColor := TColor($0000AAFF);
@@ -117,6 +124,9 @@ begin
     Require(SvgText.Contains('xmlns:vad='), 'VAD namespace is missing');
     Require(SvgText.Contains('<rect '), 'SVG rect is missing');
     Require(SvgText.Contains('<line '), 'SVG line is missing');
+    Require(SvgText.Contains('vad:start-marker="open-arrow"') and
+      SvgText.Contains('stroke-width="1"'),
+      'SVG open marker stroke does not follow the line width');
     Require(SvgText.Contains('<polygon '), 'SVG polygon is missing');
     Require(SvgText.Contains('<image '), 'SVG image is missing');
     Require(SvgText.Contains('data:image/png;base64,'),
@@ -165,7 +175,15 @@ begin
     RequireSameSingle(LineData.EndPoint.Y, Line.EndPoint.Y,
       'Line end differs');
     Require((Line.StrokeColor = LineData.StrokeColor) and
-      (Line.StrokeStyle = LineData.StrokeStyle), 'Line stroke differs');
+      (Line.StrokeStyle = LineData.StrokeStyle) and
+      (Line.LineCap = LineData.LineCap) and
+      (Line.LineJoin = LineData.LineJoin) and
+      (Line.AntiAlias = LineData.AntiAlias) and
+      (Line.EndMarker = LineData.EndMarker) and
+      (Line.StartMarker = LineData.StartMarker) and
+      SameValue(Line.EndMarkerSize, LineData.EndMarkerSize) and
+      SameValue(Line.StartMarkerSize, LineData.StartMarkerSize),
+      'Line stroke differs');
     Path := TVectArtPathLayer(TargetDocument[4]);
     Require((Length(Path.Points) = Length(PathData.Points)) and
       Path.Closed and Path.Filled, 'Path properties differ');

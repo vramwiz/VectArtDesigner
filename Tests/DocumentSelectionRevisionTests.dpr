@@ -65,6 +65,40 @@ begin
       'Multiple selection changed the content revision');
     Require(Changes.Count = 4,
       'Multiple selection did not notify the UI');
+    Document.ToggleSelectedLayer(1);
+    Require((Document.SelectionCount = 1) and
+      Document.IsLayerSelected(2), 'Selection toggle did not remove a layer');
+    Document.ToggleSelectedLayer(1);
+    Require((Document.SelectionCount = 2) and
+      Document.IsLayerSelected(1), 'Selection toggle did not add a layer');
+    Document.SetSelectedLayers([1]);
+    Document.SelectLayerRange(1, 2, False);
+    Require((Document.SelectionCount = 2) and
+      Document.IsLayerSelected(1) and Document.IsLayerSelected(2),
+      'Selection range did not replace the selection');
+    Require(Document.Revision = Revision,
+      'Selection operations changed the content revision');
+    Changes.Count := 0;
+    Document.BeginUpdate;
+    try
+      Document.SetRectangleFillColor(1, clRed);
+      Document.SetRectangleFillColor(2, clBlue);
+    finally
+      Document.EndUpdate;
+    end;
+    Require((Changes.Count = 1) and (Document.Revision = Revision + 1),
+      'Batched content changes were not notified once');
+    Revision := Document.Revision;
+    Changes.Count := 0;
+    Document.BeginInteractiveUpdate;
+    Document.SetRectangleFillColor(1, clGreen);
+    Require(Document.IsInteractiveUpdate and (Changes.Count = 1),
+      'Interactive content change did not provide a live notification');
+    Document.EndInteractiveUpdate;
+    Require(not Document.IsInteractiveUpdate and (Changes.Count = 2) and
+      (Document.Revision = Revision + 1),
+      'Interactive update did not provide one final synchronization');
+    Revision := Document.Revision;
     Document.MoveLayer(1, 2);
     Require(Document.Revision = Revision + 1,
       'Layer movement did not change the content revision');

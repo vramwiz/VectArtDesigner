@@ -16,6 +16,14 @@ type
   TVectArtStrokeStyle = (vssSolid, vssDotted, vssShortDash, vssDashDot,
     vssDashDotDot, vssSparseDotted, vssMediumDash, vssLongDashDot,
     vssLongDash);
+  // MIFのvector stroke cap 0..2と同じ順序で保持する。
+  TVectArtLineCap = (vlcButt, vlcSquare, vlcRound);
+  // MIFのvector stroke join 0..2と同じ順序で保持する。
+  TVectArtLineJoin = (vljMiter, vljBevel, vljRound);
+  // vlmArrow remains ordinal 1 so existing VectArtDesigner JSON stays valid.
+  TVectArtLineMarker = (vlmNone, vlmArrow, vlmOpenArrow, vlmWideArrow,
+    vlmCircle, vlmDiamond, vlmConcaveArrow, vlmSmallArrow, vlmSlash,
+    vlmStar);
 
   TVectArtLayer = class
   private
@@ -85,7 +93,14 @@ type
 
   TVectArtLineLayer = class(TVectArtLayer)
   private
+    FAntiAlias: Boolean;
     FEndPoint: TPointF;
+    FEndMarker: TVectArtLineMarker;
+    FEndMarkerSize: Single;
+    FLineCap: TVectArtLineCap;
+    FLineJoin: TVectArtLineJoin;
+    FStartMarker: TVectArtLineMarker;
+    FStartMarkerSize: Single;
     FStartPoint: TPointF;
     FStrokeColor: TColor;
     FStrokeStyle: TVectArtStrokeStyle;
@@ -93,7 +108,15 @@ type
   public
     constructor Create(const AName: string; const AStartPoint,
       AEndPoint: TPointF);
+    property AntiAlias: Boolean read FAntiAlias write FAntiAlias;
     property EndPoint: TPointF read FEndPoint write FEndPoint;
+    property EndMarker: TVectArtLineMarker read FEndMarker write FEndMarker;
+    property EndMarkerSize: Single read FEndMarkerSize write FEndMarkerSize;
+    property LineCap: TVectArtLineCap read FLineCap write FLineCap;
+    property LineJoin: TVectArtLineJoin read FLineJoin write FLineJoin;
+    property StartMarker: TVectArtLineMarker read FStartMarker
+      write FStartMarker;
+    property StartMarkerSize: Single read FStartMarkerSize write FStartMarkerSize;
     property StartPoint: TPointF read FStartPoint write FStartPoint;
     property StrokeColor: TColor read FStrokeColor write FStrokeColor;
     property StrokeStyle: TVectArtStrokeStyle read FStrokeStyle
@@ -102,11 +125,18 @@ type
   end;
 
   TVectArtLineData = record
+    AntiAlias: Boolean;
     EndPoint: TPointF;
+    EndMarker: TVectArtLineMarker;
+    EndMarkerSize: Single;
+    LineCap: TVectArtLineCap;
+    LineJoin: TVectArtLineJoin;
     Locked: Boolean;
     Name: string;
     Opacity: Single;
     StartPoint: TPointF;
+    StartMarker: TVectArtLineMarker;
+    StartMarkerSize: Single;
     StrokeColor: TColor;
     StrokeStyle: TVectArtStrokeStyle;
     StrokeWidth: Single;
@@ -175,13 +205,18 @@ type
   TVectArtDocument = class
   private
     FLayers: TObjectList<TVectArtLayer>;
+    FChangePending: Boolean;
+    FInteractiveChanged: Boolean;
+    FInteractiveUpdateCount: Integer;
     FOnChanged: TNotifyEvent;
     FRevision: Int64;
     FSelectedIndex: Integer;
     FSelectedLayers: TList<Integer>;
+    FUpdateCount: Integer;
     function GetCanvasLayer: TVectArtCanvasLayer;
     function GetLayer(Index: Integer): TVectArtLayer;
     function GetLayerCount: Integer;
+    function GetIsInteractiveUpdate: Boolean;
     function GetSelectionCount: Integer;
     procedure SelectionChanged;
     procedure SetSelectedLayersCore(const Indices: array of Integer;
@@ -190,7 +225,11 @@ type
   public
     constructor Create;
     destructor Destroy; override;
+    procedure BeginInteractiveUpdate;
+    procedure BeginUpdate;
     procedure Changed;
+    procedure EndInteractiveUpdate;
+    procedure EndUpdate;
     function GetSelectedLayerIndices: TArray<Integer>;
     function InsertRectangle(Index: Integer;
       const Data: TVectArtRectangleData): Integer;
@@ -206,6 +245,13 @@ type
       Width: Single; Style: TVectArtStrokeStyle);
     procedure SetLinePoints(Index: Integer; const StartPoint,
       EndPoint: TPointF);
+    procedure SetLineCap(Index: Integer; Value: TVectArtLineCap);
+    procedure SetLineAntiAlias(Index: Integer; Value: Boolean);
+    procedure SetLineEndMarker(Index: Integer; Value: TVectArtLineMarker);
+    procedure SetLineEndMarkerSize(Index: Integer; Value: Single);
+    procedure SetLineStartMarker(Index: Integer; Value: TVectArtLineMarker);
+    procedure SetLineStartMarkerSize(Index: Integer; Value: Single);
+    procedure SetLineJoin(Index: Integer; Value: TVectArtLineJoin);
     procedure SetLineStroke(Index: Integer; Color: TColor; Width: Single;
       Style: TVectArtStrokeStyle);
     procedure SetImagePoints(Index: Integer;
@@ -223,10 +269,14 @@ type
     procedure SetPathPoints(Index: Integer; const Points: TArray<TPointF>);
     procedure SetPathStroke(Index: Integer; Color: TColor; Width: Single;
       Style: TVectArtStrokeStyle);
+    procedure SelectLayerRange(AnchorIndex, TargetIndex: Integer;
+      Additive: Boolean);
     procedure SetSelectedLayers(const Indices: array of Integer);
+    procedure ToggleSelectedLayer(Index: Integer);
     property CanvasLayer: TVectArtCanvasLayer read GetCanvasLayer;
     property LayerCount: Integer read GetLayerCount;
     property Layers[Index: Integer]: TVectArtLayer read GetLayer; default;
+    property IsInteractiveUpdate: Boolean read GetIsInteractiveUpdate;
     property OnChanged: TNotifyEvent read FOnChanged write FOnChanged;
     property Revision: Int64 read FRevision;
     property SelectedIndex: Integer read FSelectedIndex write SetSelectedIndex;
@@ -326,8 +376,15 @@ constructor TVectArtLineLayer.Create(const AName: string;
   const AStartPoint, AEndPoint: TPointF);
 begin
   inherited Create(vlkLine, AName);
+  FAntiAlias := True;
+  FEndMarker := vlmNone;
+  FEndMarkerSize := 4.0;
   FStartPoint := AStartPoint;
   FEndPoint := AEndPoint;
+  FLineCap := vlcButt;
+  FLineJoin := vljMiter;
+  FStartMarker := vlmNone;
+  FStartMarkerSize := 4.0;
   FStrokeColor := clBlack;
   FStrokeStyle := vssSolid;
   FStrokeWidth := 1.0;
@@ -381,9 +438,51 @@ end;
 
 procedure TVectArtDocument.Changed;
 begin
+  if FUpdateCount > 0 then
+  begin
+    FChangePending := True;
+    Exit;
+  end;
   Inc(FRevision);
+  if FInteractiveUpdateCount > 0 then
+    FInteractiveChanged := True;
   if Assigned(FOnChanged) then
     FOnChanged(Self);
+end;
+
+procedure TVectArtDocument.BeginInteractiveUpdate;
+begin
+  Inc(FInteractiveUpdateCount);
+end;
+
+procedure TVectArtDocument.BeginUpdate;
+begin
+  Inc(FUpdateCount);
+end;
+
+procedure TVectArtDocument.EndInteractiveUpdate;
+begin
+  if FInteractiveUpdateCount <= 0 then
+    Exit;
+  Dec(FInteractiveUpdateCount);
+  if (FInteractiveUpdateCount = 0) and FInteractiveChanged then
+  begin
+    FInteractiveChanged := False;
+    if Assigned(FOnChanged) then
+      FOnChanged(Self);
+  end;
+end;
+
+procedure TVectArtDocument.EndUpdate;
+begin
+  if FUpdateCount <= 0 then
+    Exit;
+  Dec(FUpdateCount);
+  if (FUpdateCount = 0) and FChangePending then
+  begin
+    FChangePending := False;
+    Changed;
+  end;
 end;
 
 procedure TVectArtDocument.SelectionChanged;
@@ -395,6 +494,11 @@ end;
 function TVectArtDocument.GetSelectedLayerIndices: TArray<Integer>;
 begin
   Result := FSelectedLayers.ToArray;
+end;
+
+function TVectArtDocument.GetIsInteractiveUpdate: Boolean;
+begin
+  Result := FInteractiveUpdateCount > 0;
 end;
 
 function TVectArtDocument.InsertRectangle(Index: Integer;
@@ -433,6 +537,13 @@ begin
   LineLayer := TVectArtLineLayer.Create(Data.Name, Data.StartPoint,
     Data.EndPoint);
   LineLayer.Locked := Data.Locked;
+  LineLayer.LineCap := Data.LineCap;
+  LineLayer.AntiAlias := Data.AntiAlias;
+  LineLayer.EndMarker := Data.EndMarker;
+  LineLayer.EndMarkerSize := Max(Data.EndMarkerSize, 1.0);
+  LineLayer.LineJoin := Data.LineJoin;
+  LineLayer.StartMarker := Data.StartMarker;
+  LineLayer.StartMarkerSize := Max(Data.StartMarkerSize, 1.0);
   LineLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
   LineLayer.StrokeColor := Data.StrokeColor;
   LineLayer.StrokeStyle := Data.StrokeStyle;
@@ -572,6 +683,13 @@ begin
     Exit;
   LineLayer := TVectArtLineLayer(FLayers[Index]);
   Data.EndPoint := LineLayer.EndPoint;
+  Data.LineCap := LineLayer.LineCap;
+  Data.AntiAlias := LineLayer.AntiAlias;
+  Data.EndMarker := LineLayer.EndMarker;
+  Data.EndMarkerSize := LineLayer.EndMarkerSize;
+  Data.LineJoin := LineLayer.LineJoin;
+  Data.StartMarker := LineLayer.StartMarker;
+  Data.StartMarkerSize := LineLayer.StartMarkerSize;
   Data.Locked := LineLayer.Locked;
   Data.Name := LineLayer.Name;
   Data.Opacity := LineLayer.Opacity;
@@ -738,6 +856,34 @@ begin
   SetSelectedLayersCore(Indices, True);
 end;
 
+procedure TVectArtDocument.SelectLayerRange(AnchorIndex,
+  TargetIndex: Integer; Additive: Boolean);
+var
+  FirstIndex: Integer;
+  I: Integer;
+  LastIndex: Integer;
+  Selection: TList<Integer>;
+begin
+  if FLayers.Count <= 1 then
+    Exit;
+  AnchorIndex := EnsureRange(AnchorIndex, 1, FLayers.Count - 1);
+  TargetIndex := EnsureRange(TargetIndex, 1, FLayers.Count - 1);
+  FirstIndex := Min(AnchorIndex, TargetIndex);
+  LastIndex := Max(AnchorIndex, TargetIndex);
+  Selection := TList<Integer>.Create;
+  try
+    if Additive then
+      Selection.AddRange(FSelectedLayers);
+    for I := FirstIndex to LastIndex do
+      if not Selection.Contains(I) then
+        Selection.Add(I);
+    Selection.Sort;
+    SetSelectedLayers(Selection.ToArray);
+  finally
+    Selection.Free;
+  end;
+end;
+
 procedure TVectArtDocument.SetSelectedLayersCore(
   const Indices: array of Integer; Notify: Boolean);
 var
@@ -773,6 +919,26 @@ begin
   end;
   if Notify then
     SelectionChanged;
+end;
+
+procedure TVectArtDocument.ToggleSelectedLayer(Index: Integer);
+var
+  Selection: TList<Integer>;
+begin
+  if (Index <= 0) or (Index >= FLayers.Count) then
+    Exit;
+  Selection := TList<Integer>.Create;
+  try
+    Selection.AddRange(FSelectedLayers);
+    if Selection.Contains(Index) then
+      Selection.Remove(Index)
+    else
+      Selection.Add(Index);
+    Selection.Sort;
+    SetSelectedLayers(Selection.ToArray);
+  finally
+    Selection.Free;
+  end;
 end;
 
 procedure TVectArtDocument.SetRectangleBounds(Index: Integer;
@@ -864,6 +1030,108 @@ begin
     Exit;
   LineLayer.StartPoint := StartPoint;
   LineLayer.EndPoint := EndPoint;
+  Changed;
+end;
+
+procedure TVectArtDocument.SetLineCap(Index: Integer;
+  Value: TVectArtLineCap);
+var
+  LineLayer: TVectArtLineLayer;
+begin
+  if (Index <= 0) or (Index >= FLayers.Count) or
+    not (FLayers[Index] is TVectArtLineLayer) then
+    Exit;
+  LineLayer := TVectArtLineLayer(FLayers[Index]);
+  if LineLayer.LineCap = Value then
+    Exit;
+  LineLayer.LineCap := Value;
+  Changed;
+end;
+
+procedure TVectArtDocument.SetLineAntiAlias(Index: Integer; Value: Boolean);
+var
+  LineLayer: TVectArtLineLayer;
+begin
+  if (Index <= 0) or (Index >= FLayers.Count) or
+    not (FLayers[Index] is TVectArtLineLayer) then
+    Exit;
+  LineLayer := TVectArtLineLayer(FLayers[Index]);
+  if LineLayer.AntiAlias = Value then
+    Exit;
+  LineLayer.AntiAlias := Value;
+  Changed;
+end;
+
+procedure TVectArtDocument.SetLineEndMarker(Index: Integer;
+  Value: TVectArtLineMarker);
+var
+  LineLayer: TVectArtLineLayer;
+begin
+  if (Index <= 0) or (Index >= FLayers.Count) or
+    not (FLayers[Index] is TVectArtLineLayer) then
+    Exit;
+  LineLayer := TVectArtLineLayer(FLayers[Index]);
+  if LineLayer.EndMarker = Value then
+    Exit;
+  LineLayer.EndMarker := Value;
+  Changed;
+end;
+
+procedure TVectArtDocument.SetLineEndMarkerSize(Index: Integer; Value: Single);
+var
+  LineLayer: TVectArtLineLayer;
+  NewValue: Single;
+begin
+  if (Index < 0) or (Index >= FLayers.Count) or
+    not (FLayers[Index] is TVectArtLineLayer) then Exit;
+  LineLayer := TVectArtLineLayer(FLayers[Index]);
+  NewValue := Max(Value, 1.0);
+  if SameValue(LineLayer.EndMarkerSize, NewValue) then Exit;
+  LineLayer.EndMarkerSize := NewValue;
+  Changed;
+end;
+
+procedure TVectArtDocument.SetLineStartMarker(Index: Integer;
+  Value: TVectArtLineMarker);
+var
+  LineLayer: TVectArtLineLayer;
+begin
+  if (Index <= 0) or (Index >= FLayers.Count) or
+    not (FLayers[Index] is TVectArtLineLayer) then
+    Exit;
+  LineLayer := TVectArtLineLayer(FLayers[Index]);
+  if LineLayer.StartMarker = Value then
+    Exit;
+  LineLayer.StartMarker := Value;
+  Changed;
+end;
+
+procedure TVectArtDocument.SetLineStartMarkerSize(Index: Integer; Value: Single);
+var
+  LineLayer: TVectArtLineLayer;
+  NewValue: Single;
+begin
+  if (Index < 0) or (Index >= FLayers.Count) or
+    not (FLayers[Index] is TVectArtLineLayer) then Exit;
+  LineLayer := TVectArtLineLayer(FLayers[Index]);
+  NewValue := Max(Value, 1.0);
+  if SameValue(LineLayer.StartMarkerSize, NewValue) then Exit;
+  LineLayer.StartMarkerSize := NewValue;
+  Changed;
+end;
+
+procedure TVectArtDocument.SetLineJoin(Index: Integer;
+  Value: TVectArtLineJoin);
+var
+  LineLayer: TVectArtLineLayer;
+begin
+  if (Index <= 0) or (Index >= FLayers.Count) or
+    not (FLayers[Index] is TVectArtLineLayer) then
+    Exit;
+  LineLayer := TVectArtLineLayer(FLayers[Index]);
+  if LineLayer.LineJoin = Value then
+    Exit;
+  LineLayer.LineJoin := Value;
   Changed;
 end;
 

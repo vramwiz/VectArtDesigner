@@ -133,6 +133,18 @@ begin
     Data.Points[3] := PointF(300, 200);
     Document.InsertImage(2, Data);
     ImageLayer2 := TVectArtImageLayer(Document[2]);
+    Document.SetSelectedLayers([1]);
+    Interaction.Configure(Document, Rect(0, 0, 1000, 1000), 1);
+    Require(not Interaction.MouseDown(mbLeft, [ssCtrl], 350, 150),
+      'Ctrl-click unexpectedly started a drag');
+    Require((Document.SelectionCount = 2) and
+      Document.IsLayerSelected(1) and Document.IsLayerSelected(2),
+      'Ctrl-click did not add the image selection');
+    Require(not Interaction.MouseDown(mbLeft, [ssCtrl], 150, 150),
+      'Ctrl-click deselection unexpectedly started a drag');
+    Require((Document.SelectionCount = 1) and
+      Document.IsLayerSelected(2),
+      'Ctrl-click did not remove the image selection');
     Document.SetSelectedLayers([1, 2]);
     History.Clear;
     Interaction.Configure(Document, Rect(0, 0, 1000, 1000), 1);

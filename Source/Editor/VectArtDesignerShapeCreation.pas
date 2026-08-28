@@ -77,11 +77,18 @@ begin
     (FCurrentPoint.X - FCanvasBounds.Left) / FZoom,
     (FCurrentPoint.Y - FCanvasBounds.Top) / FZoom);
   Data.Locked := False;
+  Data.LineCap := FEditorState.LineCap;
+  Data.AntiAlias := FEditorState.LineAntiAlias;
+  Data.EndMarker := FEditorState.LineEndMarker;
+  Data.EndMarkerSize := FEditorState.LineEndMarkerSize;
+  Data.StartMarker := FEditorState.LineStartMarker;
+  Data.StartMarkerSize := FEditorState.LineStartMarkerSize;
+  Data.LineJoin := FEditorState.LineJoin;
   Data.Name := NextLineName;
   Data.Opacity := FEditorState.RectangleOpacity;
-  Data.StrokeColor := FEditorState.RectangleStrokeColor;
-  Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
-  Data.StrokeWidth := Max(FEditorState.RectangleStrokeWidth, 1.0);
+  Data.StrokeColor := FEditorState.LineStrokeColor;
+  Data.StrokeStyle := FEditorState.LineStrokeStyle;
+  Data.StrokeWidth := FEditorState.LineStrokeWidth;
   Data.Visible := True;
   BeforeSelection := FDocument.GetSelectedLayerIndices;
   Index := FDocument.InsertLine(FDocument.LayerCount, Data);
