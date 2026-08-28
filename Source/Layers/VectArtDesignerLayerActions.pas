@@ -28,6 +28,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     // ボタンと同じ判定・履歴処理でレイヤー操作を実行する。
+    function CanRunLayerAction(Action: TVectArtLayerAction): Boolean;
     procedure RunLayerAction(Action: TVectArtLayerAction);
     procedure RefreshState;
     property Document: TVectArtDocument read GetDocument write SetDocument;
@@ -69,6 +70,12 @@ destructor TVectArtLayerActionsControl.Destroy;
 begin
   FOperations.Free;
   inherited Destroy;
+end;
+
+function TVectArtLayerActionsControl.CanRunLayerAction(
+  Action: TVectArtLayerAction): Boolean;
+begin
+  Result := FOperations.CanExecute(Action);
 end;
 
 procedure TVectArtLayerActionsControl.RunLayerAction(

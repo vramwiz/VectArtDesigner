@@ -4,12 +4,27 @@ unit VectArtDesignerLayerRenderer;
 interface
 
 uses
-  System.Types, Vcl.Direct2D, Vcl.Graphics, VectArtDesignerDocument;
+  System.Generics.Collections, System.SysUtils, System.Types, Vcl.Direct2D,
+  Vcl.Graphics, Vcl.Imaging.pngimage, VectArtDesignerDocument;
 
 type
+  TVectArtImageThumbnailCacheEntry = class
+  public
+    Image: TPngImage;
+    Signature: UInt64;
+    destructor Destroy; override;
+  end;
+
   TVectArtLayerRenderer = class
   private
     FDocument: TVectArtDocument;
+    FImageThumbnails: TObjectDictionary<TVectArtImageLayer,
+      TVectArtImageThumbnailCacheEntry>;
+    FThumbnailRevision: Int64;
+    function ImageDataSignature(const Data: TBytes): UInt64;
+    function ImageThumbnail(ImageLayer: TVectArtImageLayer): TPngImage;
+    procedure SetDocument(const Value: TVectArtDocument);
+    procedure SyncThumbnailCache;
     procedure DrawImageThumbnail(ACanvas: TCustomCanvas;
       const ThumbnailRect: TRect; ImageLayer: TVectArtImageLayer);
     procedure DrawLayerItem(ACanvas: TCanvas; const ItemRect: TRect;
@@ -20,6 +35,8 @@ type
     function FitThumbnailRect(const AvailableRect: TRect;
       LogicalWidth, LogicalHeight: Integer): TRect;
   public
+    constructor Create;
+    destructor Destroy; override;
     procedure DrawLayers(ACanvas: TCanvas;
       const Bounds: TRect); overload;
     procedure DrawLayers(ACanvas: TDirect2DCanvas;
@@ -28,14 +45,13 @@ type
     function LayerItemRect(const Bounds: TRect; Index: Integer): TRect;
     function LockButtonRect(const ItemRect: TRect): TRect;
     function VisibilityButtonRect(const ItemRect: TRect): TRect;
-    property Document: TVectArtDocument read FDocument write FDocument;
+    property Document: TVectArtDocument read FDocument write SetDocument;
   end;
 
 implementation
 
 uses
-  System.Classes, System.Math, System.SysUtils, Vcl.Imaging.pngimage,
-  Winapi.Windows;
+  System.Classes, System.Math, Winapi.Windows;
 
 const
   COLOR_LIST_BACKGROUND   = TColor($001A1A1A);
@@ -56,6 +72,81 @@ const
   THUMBNAIL_WIDTH         = 96;
   VISIBILITY_BUTTON_TOP   = 17;
 
+constructor TVectArtLayerRenderer.Create;
+begin
+  inherited Create;
+  FImageThumbnails := TObjectDictionary<TVectArtImageLayer,
+    TVectArtImageThumbnailCacheEntry>.Create([doOwnsValues]);
+  FThumbnailRevision := -1;
+end;
+
+destructor TVectArtLayerRenderer.Destroy;
+begin
+  FImageThumbnails.Free;
+  inherited Destroy;
+end;
+
+destructor TVectArtImageThumbnailCacheEntry.Destroy;
+begin
+  Image.Free;
+  inherited Destroy;
+end;
+
+function TVectArtLayerRenderer.ImageDataSignature(
+  const Data: TBytes): UInt64;
+var
+  I: Integer;
+  Index: Integer;
+begin
+  Result := UInt64(Length(Data)) * UInt64($100000001B3);
+  if Length(Data) = 0 then
+    Exit;
+  for I := 0 to 15 do
+  begin
+    Index := (Int64(I) * (Length(Data) - 1)) div 15;
+    Result := (Result xor Data[Index]) * UInt64($100000001B3);
+  end;
+end;
+
+function TVectArtLayerRenderer.ImageThumbnail(
+  ImageLayer: TVectArtImageLayer): TPngImage;
+var
+  Entry: TVectArtImageThumbnailCacheEntry;
+  Signature: UInt64;
+  Stream: TBytesStream;
+begin
+  Result := nil;
+  if (ImageLayer = nil) or (Length(ImageLayer.PngData) = 0) then
+    Exit;
+  Signature := ImageDataSignature(ImageLayer.PngData);
+  if FImageThumbnails.TryGetValue(ImageLayer, Entry) and
+    (Entry.Signature = Signature) then
+    Exit(Entry.Image);
+  FImageThumbnails.Remove(ImageLayer);
+  Entry := TVectArtImageThumbnailCacheEntry.Create;
+  Entry.Image := TPngImage.Create;
+  Entry.Signature := Signature;
+  Stream := TBytesStream.Create(ImageLayer.PngData);
+  try
+    try
+      Entry.Image.LoadFromStream(Stream);
+      if (Entry.Image.Width <= 0) or (Entry.Image.Height <= 0) then
+        Exit;
+      FImageThumbnails.Add(ImageLayer, Entry);
+      Result := Entry.Image;
+      Entry := nil;
+    except
+      on EInvalidGraphic do
+        Exit;
+      on EReadError do
+        Exit;
+    end;
+  finally
+    Stream.Free;
+    Entry.Free;
+  end;
+end;
+
 function BlendThumbnailColor(Foreground: TColor; Opacity: Single): TColor;
 var
   ColorValue: TColor;
@@ -73,31 +164,16 @@ procedure TVectArtLayerRenderer.DrawImageThumbnail(ACanvas: TCustomCanvas;
 var
   ImageRect: TRect;
   PngImage: TPngImage;
-  Stream: TBytesStream;
 begin
   if (ACanvas = nil) or (ImageLayer = nil) or
     (Length(ImageLayer.PngData) = 0) then
     Exit;
-  PngImage := TPngImage.Create;
-  Stream := TBytesStream.Create(ImageLayer.PngData);
-  try
-    try
-      PngImage.LoadFromStream(Stream);
-      if (PngImage.Width <= 0) or (PngImage.Height <= 0) then
-        Exit;
-      ImageRect := FitThumbnailRect(ThumbnailRect, PngImage.Width,
-        PngImage.Height);
-      ACanvas.StretchDraw(ImageRect, PngImage);
-    except
-      on EInvalidGraphic do
-        Exit;
-      on EReadError do
-        Exit;
-    end;
-  finally
-    Stream.Free;
-    PngImage.Free;
-  end;
+  PngImage := ImageThumbnail(ImageLayer);
+  if PngImage = nil then
+    Exit;
+  ImageRect := FitThumbnailRect(ThumbnailRect, PngImage.Width,
+    PngImage.Height);
+  ACanvas.StretchDraw(ImageRect, PngImage);
 end;
 
 procedure TVectArtLayerRenderer.DrawLayerItem(ACanvas: TCanvas;
@@ -452,12 +528,57 @@ begin
     ACanvas.LineTo(LockRect.Right - 6, LockRect.Top + 8);
 end;
 
+procedure TVectArtLayerRenderer.SetDocument(const Value: TVectArtDocument);
+begin
+  if FDocument = Value then
+    Exit;
+  FDocument := Value;
+  FImageThumbnails.Clear;
+  FThumbnailRevision := -1;
+end;
+
+procedure TVectArtLayerRenderer.SyncThumbnailCache;
+var
+  CachedLayer: TVectArtImageLayer;
+  CurrentLayer: TVectArtLayer;
+  I: Integer;
+  IsCurrent: Boolean;
+  Keys: TArray<TVectArtImageLayer>;
+begin
+  if FDocument = nil then
+  begin
+    FImageThumbnails.Clear;
+    FThumbnailRevision := -1;
+    Exit;
+  end;
+  if FThumbnailRevision = FDocument.Revision then
+    Exit;
+  Keys := FImageThumbnails.Keys.ToArray;
+  for CachedLayer in Keys do
+  begin
+    IsCurrent := False;
+    for I := 1 to FDocument.LayerCount - 1 do
+    begin
+      CurrentLayer := FDocument[I];
+      if CurrentLayer = CachedLayer then
+      begin
+        IsCurrent := True;
+        Break;
+      end;
+    end;
+    if not IsCurrent then
+      FImageThumbnails.Remove(CachedLayer);
+  end;
+  FThumbnailRevision := FDocument.Revision;
+end;
+
 procedure TVectArtLayerRenderer.DrawLayers(ACanvas: TCanvas;
   const Bounds: TRect);
 var
   I: Integer;
   ItemRect: TRect;
 begin
+  SyncThumbnailCache;
   ACanvas.Brush.Style := bsSolid;
   ACanvas.Brush.Color := COLOR_LIST_BACKGROUND;
   ACanvas.FillRect(Bounds);
@@ -479,6 +600,7 @@ var
   I: Integer;
   ItemRect: TRect;
 begin
+  SyncThumbnailCache;
   ACanvas.Brush.Style := bsSolid;
   ACanvas.Brush.Color := COLOR_LIST_BACKGROUND;
   ACanvas.FillRect(Bounds);

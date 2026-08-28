@@ -56,6 +56,7 @@
             <Form>MainForm</Form>
         </DCCReference>
         <DCCReference Include="Lib\DarkMenu\VectArtDarkPopupMenu.pas"/>
+        <DCCReference Include="Lib\ShortcutAction\ShortcutAction.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerFileActionsUI.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerEditActionsUI.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerCanvasSettingsDialog.pas"/>

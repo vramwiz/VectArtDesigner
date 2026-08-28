@@ -7,7 +7,8 @@ interface
 uses
   System.Classes, System.SysUtils, Vcl.Controls, Vcl.ExtCtrls, Vcl.Forms,
   Vcl.StdCtrls, Winapi.Windows,
-  VectArtDarkPopupMenu, VectArtDesignerContext, VectArtDesignerDockManager,
+  ShortcutAction, VectArtDarkPopupMenu, VectArtDesignerContext,
+  VectArtDesignerDockManager,
   VectArtDesignerDocument,
   VectArtDesignerEditHistory, VectArtDesignerEditorState,
   VectArtDesignerEditorWorkspaceFrame, VectArtDesignerLayerPanelFrame,
@@ -53,6 +54,7 @@ type
     FLayerFrame: TLayerPanelFrame;
     FObjectPropertiesFrame: TObjectPropertiesFrame;
     FSkiaAcquired: Boolean;
+    FShortcuts: TShortcutAction;
     FToolPaletteFrame: TToolPaletteFrame;
     FViewMenu: TVectArtDarkPopupMenu;
     FLayoutEditing: Boolean;
@@ -77,8 +79,12 @@ type
     procedure FileSaveRequest(Sender: TObject; const FileName: string);
     procedure FileSaveShortcut(Sender: TObject);
     procedure InitializeSkiaRuntime;
+    procedure InitializeShortcuts;
+    function IsEditingSurfaceFocused: Boolean;
+    function IsTextInputFocused: Boolean;
     procedure LoadLayoutSettings;
     procedure SaveLayoutSettings;
+    procedure SelectAllLayers;
     procedure SetLayoutEditing(const Value: Boolean);
     procedure ToolMenuItemClick(Sender: TObject);
     procedure ToolVisibilityChanged(Sender: TToolPlaceholderFrame);
@@ -241,6 +247,7 @@ begin
   UpdateLayoutEditMenu;
   UpdateToolMenuItems;
   LoadLayoutSettings;
+  InitializeShortcuts;
   HistoryChanged(FEditHistory);
   EditorStateChanged(FEditorState);
 end;
@@ -491,37 +498,8 @@ end;
 procedure TMainForm.FormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
-  if ssCtrl in Shift then
-  begin
-    if (Key = Ord('O')) and not (ssShift in Shift) then
-      FFileActionsUI.ExecuteOpen
-    else if (Key = Ord('S')) and (ssShift in Shift) then
-      FFileActionsUI.ExecuteSaveAs
-    else if Key = Ord('S') then
-      FFileActionsUI.ExecuteSave
-    else if (Key = Ord('Z')) and (ssShift in Shift) and
-      (FEditHistory <> nil) then
-      FEditHistory.Redo
-    else if (Key = Ord('Z')) and (FEditHistory <> nil) then
-      FEditHistory.Undo
-    else if (Key = Ord('Y')) and (FEditHistory <> nil) then
-      FEditHistory.Redo
-    else
-      Exit;
-    Key := 0;
+  if (FShortcuts <> nil) and FShortcuts.KeyDown(Key, Shift) then
     Exit;
-  end;
-  if (Key = VK_DELETE) and not (ssCtrl in Shift) and
-    not (ssAlt in Shift) and (FDocument <> nil) and
-    (FDocument.SelectionCount > 0) and (FLayerFrame <> nil) and
-    (((FEditorFrame <> nil) and
-      (GetFocus = FEditorFrame.CanvasControl.Handle)) or
-     (GetFocus = FLayerFrame.LayerList.Handle)) then
-  begin
-    FLayerFrame.RunLayerAction(vlaDelete);
-    Key := 0;
-    Exit;
-  end;
   if (FEditorFrame <> nil) and
     (GetFocus = FEditorFrame.CanvasControl.Handle) and
     HandleSelectionNudge(FDocument, FEditHistory, Key, Shift) then
@@ -556,6 +534,7 @@ end;
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   SaveLayoutSettings;
+  FreeAndNil(FShortcuts);
   FDockManager.Free;
   if FDocument <> nil then
     FDocument.OnChanged := nil;
@@ -581,6 +560,123 @@ begin
   FreeAndNil(FEditorState);
   FreeAndNil(FDocument);
   FinalizeSkiaRuntime;
+end;
+
+procedure TMainForm.InitializeShortcuts;
+begin
+  FShortcuts := TShortcutAction.Create;
+  FShortcuts.Add(Ord('O'), [ssCtrl],
+    procedure
+    begin
+      FFileActionsUI.ExecuteOpen;
+    end);
+  FShortcuts.Add(Ord('S'), [ssCtrl],
+    procedure
+    begin
+      FFileActionsUI.ExecuteSave;
+    end);
+  FShortcuts.Add(Ord('S'), [ssCtrl, ssShift],
+    procedure
+    begin
+      FFileActionsUI.ExecuteSaveAs;
+    end);
+  FShortcuts.Add(Ord('Z'), [ssCtrl],
+    procedure
+    begin
+      FEditHistory.Undo;
+    end,
+    function: Boolean
+    begin
+      Result := (FEditHistory <> nil) and not IsTextInputFocused;
+    end);
+  FShortcuts.Add(Ord('Z'), [ssCtrl, ssShift],
+    procedure
+    begin
+      FEditHistory.Redo;
+    end,
+    function: Boolean
+    begin
+      Result := (FEditHistory <> nil) and not IsTextInputFocused;
+    end);
+  FShortcuts.Add(Ord('Y'), [ssCtrl],
+    procedure
+    begin
+      FEditHistory.Redo;
+    end,
+    function: Boolean
+    begin
+      Result := (FEditHistory <> nil) and not IsTextInputFocused;
+    end);
+  FShortcuts.Add(Ord('A'), [ssCtrl],
+    procedure
+    begin
+      SelectAllLayers;
+    end,
+    function: Boolean
+    begin
+      Result := IsEditingSurfaceFocused and (FDocument <> nil) and
+        (FDocument.LayerCount > 1);
+    end);
+  FShortcuts.Add(Ord('D'), [ssCtrl],
+    procedure
+    begin
+      FLayerFrame.RunLayerAction(vlaDuplicate);
+    end,
+    function: Boolean
+    begin
+      Result := IsEditingSurfaceFocused and (FLayerFrame <> nil) and
+        FLayerFrame.CanRunLayerAction(vlaDuplicate);
+    end);
+  FShortcuts.Add(VK_DELETE, [],
+    procedure
+    begin
+      FLayerFrame.RunLayerAction(vlaDelete);
+    end,
+    function: Boolean
+    begin
+      Result := IsEditingSurfaceFocused and (FLayerFrame <> nil) and
+        FLayerFrame.CanRunLayerAction(vlaDelete);
+    end);
+  FShortcuts.Add(VK_ESCAPE, [],
+    procedure
+    begin
+      FDocument.SetSelectedLayers([]);
+    end,
+    function: Boolean
+    begin
+      Result := IsEditingSurfaceFocused and (FDocument <> nil) and
+        (FDocument.SelectionCount > 0);
+    end);
+end;
+
+function TMainForm.IsEditingSurfaceFocused: Boolean;
+begin
+  Result := ((FEditorFrame <> nil) and
+    (GetFocus = FEditorFrame.CanvasControl.Handle)) or
+    ((FLayerFrame <> nil) and
+    (GetFocus = FLayerFrame.LayerList.Handle));
+end;
+
+function TMainForm.IsTextInputFocused: Boolean;
+var
+  FocusedControl: TWinControl;
+begin
+  FocusedControl := FindControl(GetFocus);
+  Result := (FocusedControl is TCustomEdit) or
+    (FocusedControl is TCustomComboBox);
+end;
+
+procedure TMainForm.SelectAllLayers;
+var
+  I: Integer;
+  Indices: TArray<Integer>;
+begin
+  if (FDocument = nil) or (FDocument.LayerCount <= 1) then
+    Exit;
+  SetLength(Indices, FDocument.LayerCount - 1);
+  for I := 1 to FDocument.LayerCount - 1 do
+    Indices[I - 1] := I;
+  FDocument.SetSelectedLayers(Indices);
 end;
 
 procedure TMainForm.FinalizeSkiaRuntime;

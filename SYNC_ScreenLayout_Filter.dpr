@@ -18,6 +18,7 @@ uses
   TextRendererSkiaRuntime in 'Lib\TextRenderer\TextRendererSkiaRuntime.pas',
   TextRendererSkia in 'Lib\TextRenderer\TextRendererSkia.pas',
   VectArtDarkPopupMenu in 'Lib\DarkMenu\VectArtDarkPopupMenu.pas',
+  ShortcutAction in 'Lib\ShortcutAction\ShortcutAction.pas',
   VectArtDesignerMainForm in 'Source\Shell\VectArtDesignerMainForm.pas' {MainForm},
   VectArtDesignerFileActionsUI in 'Source\Shell\VectArtDesignerFileActionsUI.pas',
   VectArtDesignerEditActionsUI in 'Source\Shell\VectArtDesignerEditActionsUI.pas',

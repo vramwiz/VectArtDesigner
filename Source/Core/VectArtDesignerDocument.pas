@@ -183,6 +183,9 @@ type
     function GetLayer(Index: Integer): TVectArtLayer;
     function GetLayerCount: Integer;
     function GetSelectionCount: Integer;
+    procedure SelectionChanged;
+    procedure SetSelectedLayersCore(const Indices: array of Integer;
+      Notify: Boolean);
     procedure SetSelectedIndex(const Value: Integer);
   public
     constructor Create;
@@ -383,6 +386,12 @@ begin
     FOnChanged(Self);
 end;
 
+procedure TVectArtDocument.SelectionChanged;
+begin
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
+end;
+
 function TVectArtDocument.GetSelectedLayerIndices: TArray<Integer>;
 begin
   Result := FSelectedLayers.ToArray;
@@ -507,7 +516,8 @@ begin
     else if (FromIndex > ToIndex) and (Selection[I] >= ToIndex) and
       (Selection[I] < FromIndex) then
       Inc(Selection[I]);
-  SetSelectedLayers(Selection);
+  SetSelectedLayersCore(Selection, False);
+  Changed;
 end;
 
 function TVectArtDocument.RemoveRectangle(Index: Integer;
@@ -542,10 +552,11 @@ begin
         Selection.Add(FSelectedLayers[I] - 1);
     if (Selection.Count = 0) and (FLayers.Count > 1) then
       Selection.Add(Min(Index, FLayers.Count - 1));
-    SetSelectedLayers(Selection.ToArray);
+    SetSelectedLayersCore(Selection.ToArray, False);
   finally
     Selection.Free;
   end;
+  Changed;
 end;
 
 function TVectArtDocument.RemoveLine(Index: Integer;
@@ -579,10 +590,11 @@ begin
         Selection.Add(FSelectedLayers[I] - 1);
     if (Selection.Count = 0) and (FLayers.Count > 1) then
       Selection.Add(Min(Index, FLayers.Count - 1));
-    SetSelectedLayers(Selection.ToArray);
+    SetSelectedLayersCore(Selection.ToArray, False);
   finally
     Selection.Free;
   end;
+  Changed;
 end;
 
 function TVectArtDocument.RemovePath(Index: Integer;
@@ -618,10 +630,11 @@ begin
         Selection.Add(FSelectedLayers[I] - 1);
     if (Selection.Count = 0) and (FLayers.Count > 1) then
       Selection.Add(Min(Index, FLayers.Count - 1));
-    SetSelectedLayers(Selection.ToArray);
+    SetSelectedLayersCore(Selection.ToArray, False);
   finally
     Selection.Free;
   end;
+  Changed;
 end;
 
 function TVectArtDocument.RemoveImage(Index: Integer;
@@ -653,10 +666,11 @@ begin
         Selection.Add(FSelectedLayers[I] - 1);
     if (Selection.Count = 0) and (FLayers.Count > 1) then
       Selection.Add(Min(Index, FLayers.Count - 1));
-    SetSelectedLayers(Selection.ToArray);
+    SetSelectedLayersCore(Selection.ToArray, False);
   finally
     Selection.Free;
   end;
+  Changed;
 end;
 
 function TVectArtDocument.GetCanvasLayer: TVectArtCanvasLayer;
@@ -716,14 +730,20 @@ begin
   if NewValue >= 0 then
     FSelectedLayers.Add(NewValue);
   FSelectedIndex := NewValue;
-  Changed;
+  SelectionChanged;
 end;
 
 procedure TVectArtDocument.SetSelectedLayers(const Indices: array of Integer);
+begin
+  SetSelectedLayersCore(Indices, True);
+end;
+
+procedure TVectArtDocument.SetSelectedLayersCore(
+  const Indices: array of Integer; Notify: Boolean);
 var
   I: Integer;
   Index: Integer;
-  SelectionChanged: Boolean;
+  HasSelectionChanged: Boolean;
   ValidIndices: TList<Integer>;
 begin
   ValidIndices := TList<Integer>.Create;
@@ -732,15 +752,15 @@ begin
       if (Index > 0) and (Index < FLayers.Count) and
         not ValidIndices.Contains(Index) then
         ValidIndices.Add(Index);
-    SelectionChanged := ValidIndices.Count <> FSelectedLayers.Count;
-    if not SelectionChanged then
+    HasSelectionChanged := ValidIndices.Count <> FSelectedLayers.Count;
+    if not HasSelectionChanged then
       for I := 0 to ValidIndices.Count - 1 do
         if ValidIndices[I] <> FSelectedLayers[I] then
         begin
-          SelectionChanged := True;
+          HasSelectionChanged := True;
           Break;
         end;
-    if not SelectionChanged then
+    if not HasSelectionChanged then
       Exit;
     FSelectedLayers.Clear;
     FSelectedLayers.AddRange(ValidIndices);
@@ -751,7 +771,8 @@ begin
   finally
     ValidIndices.Free;
   end;
-  Changed;
+  if Notify then
+    SelectionChanged;
 end;
 
 procedure TVectArtDocument.SetRectangleBounds(Index: Integer;

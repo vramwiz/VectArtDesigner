@@ -17,6 +17,7 @@ type
     procedure SetContext(const Value: IVectArtDesignerContext);
   public
     constructor Create(AOwner: TComponent); override;
+    function CanRunLayerAction(Action: TVectArtLayerAction): Boolean;
     procedure RunLayerAction(Action: TVectArtLayerAction);
     procedure RefreshFromDocument;
     // Contextを交換すると、一覧と操作バーへ同じサービス一式を接続する。
@@ -33,6 +34,12 @@ uses
 
 const
   COLOR_PANEL_BACKGROUND = TColor($00212121);
+
+function TLayerPanelFrame.CanRunLayerAction(
+  Action: TVectArtLayerAction): Boolean;
+begin
+  Result := FLayerActions.CanRunLayerAction(Action);
+end;
 
 constructor TLayerPanelFrame.Create(AOwner: TComponent);
 begin
