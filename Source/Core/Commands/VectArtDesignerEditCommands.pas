@@ -99,6 +99,19 @@ type
     procedure Undo; override;
   end;
 
+  TVectArtImagePointsCommand = class(TVectArtEditCommand)
+  private
+    FDocument: TVectArtDocument;
+    FLayerIndex: Integer;
+    FNewPoints: TVectArtImagePoints;
+    FOldPoints: TVectArtImagePoints;
+  public
+    constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
+      const OldPoints, NewPoints: TVectArtImagePoints);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
   TVectArtStrokeCommand = class(TVectArtEditCommand)
   private
     FDocument: TVectArtDocument;
@@ -231,12 +244,24 @@ end;
 
 procedure TVectArtFillColorCommand.Execute;
 begin
-  if FDocument <> nil then FDocument.SetRectangleFillColor(FLayerIndex, FNewColor);
+  if FDocument = nil then
+    Exit;
+  if FDocument[FLayerIndex] is TVectArtPathLayer then
+    FDocument.SetPathFill(FLayerIndex, FNewColor,
+      TVectArtPathLayer(FDocument[FLayerIndex]).Filled)
+  else
+    FDocument.SetRectangleFillColor(FLayerIndex, FNewColor);
 end;
 
 procedure TVectArtFillColorCommand.Undo;
 begin
-  if FDocument <> nil then FDocument.SetRectangleFillColor(FLayerIndex, FOldColor);
+  if FDocument = nil then
+    Exit;
+  if FDocument[FLayerIndex] is TVectArtPathLayer then
+    FDocument.SetPathFill(FLayerIndex, FOldColor,
+      TVectArtPathLayer(FDocument[FLayerIndex]).Filled)
+  else
+    FDocument.SetRectangleFillColor(FLayerIndex, FOldColor);
 end;
 
 constructor TVectArtRotationCommand.Create(ADocument: TVectArtDocument;
@@ -308,6 +333,28 @@ begin
     FDocument.SetPathPoints(FLayerIndex, FOldPoints);
 end;
 
+constructor TVectArtImagePointsCommand.Create(ADocument: TVectArtDocument;
+  LayerIndex: Integer; const OldPoints, NewPoints: TVectArtImagePoints);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FLayerIndex := LayerIndex;
+  FOldPoints := OldPoints;
+  FNewPoints := NewPoints;
+end;
+
+procedure TVectArtImagePointsCommand.Execute;
+begin
+  if FDocument <> nil then
+    FDocument.SetImagePoints(FLayerIndex, FNewPoints);
+end;
+
+procedure TVectArtImagePointsCommand.Undo;
+begin
+  if FDocument <> nil then
+    FDocument.SetImagePoints(FLayerIndex, FOldPoints);
+end;
+
 procedure TVectArtStrokeCommand.Apply(Color: TColor; Width: Single;
   Style: TVectArtStrokeStyle);
 begin
@@ -315,6 +362,8 @@ begin
     Exit;
   if FDocument[FLayerIndex] is TVectArtLineLayer then
     FDocument.SetLineStroke(FLayerIndex, Color, Width, Style)
+  else if FDocument[FLayerIndex] is TVectArtPathLayer then
+    FDocument.SetPathStroke(FLayerIndex, Color, Width, Style)
   else
     FDocument.SetRectangleStroke(FLayerIndex, Color, Width, Style);
 end;

@@ -7,7 +7,7 @@ uses
   System.Classes, Vcl.Graphics, VectArtDesignerDocument;
 
 type
-  TVectArtEditorTool = (vetSelect, vetRectangle, vetLine);
+  TVectArtEditorTool = (vetSelect, vetRectangle, vetLine, vetPath);
 
   TVectArtEditorState = class
   private

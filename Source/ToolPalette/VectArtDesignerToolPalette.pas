@@ -84,10 +84,24 @@ begin
   else if Index = 1 then
     Canvas.Rectangle(CenterX - 10, CenterY - 8, CenterX + 10,
       CenterY + 8)
-  else
+  else if Index = 2 then
   begin
     Canvas.MoveTo(CenterX - 11, CenterY + 8);
     Canvas.LineTo(CenterX + 11, CenterY - 8);
+  end
+  else
+  begin
+    Canvas.MoveTo(CenterX - 11, CenterY + 8);
+    Canvas.LineTo(CenterX - 4, CenterY - 8);
+    Canvas.LineTo(CenterX + 10, CenterY - 3);
+    Canvas.LineTo(CenterX + 5, CenterY + 10);
+    Canvas.LineTo(CenterX - 11, CenterY + 8);
+    Canvas.Brush.Style := bsSolid;
+    Canvas.Brush.Color := COLOR_ICON;
+    Canvas.Rectangle(CenterX - 13, CenterY + 6, CenterX - 9, CenterY + 10);
+    Canvas.Rectangle(CenterX - 6, CenterY - 10, CenterX - 2, CenterY - 6);
+    Canvas.Rectangle(CenterX + 8, CenterY - 5, CenterX + 12, CenterY - 1);
+    Canvas.Rectangle(CenterX + 3, CenterY + 8, CenterX + 7, CenterY + 12);
   end;
 end;
 
@@ -97,7 +111,7 @@ var
   I: Integer;
 begin
   if (Button = mbLeft) and (FEditorState <> nil) then
-    for I := 0 to 2 do
+    for I := 0 to 3 do
       if PtInRect(ButtonRect(I), Point(X, Y)) then
       begin
         FEditorState.CurrentTool := TVectArtEditorTool(I);
@@ -112,7 +126,7 @@ var
 begin
   Canvas.Brush.Color := COLOR_BACKGROUND;
   Canvas.FillRect(ClientRect);
-  for I := 0 to 2 do
+  for I := 0 to 3 do
     DrawButton(I);
 end;
 

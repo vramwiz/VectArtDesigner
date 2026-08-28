@@ -31,12 +31,14 @@ end;
 
 var
   Data: TVectArtRectangleData;
+  DefaultThinAlpha: Byte;
   LineData: TVectArtLineData;
   Destination: TVectArtRenderBuffer;
   Document: TVectArtDocument;
   I: NativeInt;
   Pixel: PVectArtRgbaPixel;
   Rendered: TVectArtRenderBuffer;
+  EnhancedThinAlpha: Byte;
 begin
   TTextRendererSkiaRuntime.Acquire(BundledSkiaRuntimeFileName);
   Document := TVectArtDocument.Create;
@@ -119,6 +121,15 @@ begin
     Pixel := PixelAt(Rendered, 0, 0);
     Require((Pixel^.R >= 200) and (Pixel^.A > 0),
       'Line was not rendered');
+    Document.SetLayerVisible(1, False);
+    Document.SetLinePoints(2, TPointF.Create(1, 0), TPointF.Create(6, 0));
+    Document.SetLineStroke(2, clRed, 0.1, vssSolid);
+    RenderVectArtDocument(Document, Rendered, 8, 8);
+    DefaultThinAlpha := PixelAt(Rendered, 3, 1)^.A;
+    RenderVectArtDocument(Document, Rendered, 8, 8, 3.0);
+    EnhancedThinAlpha := PixelAt(Rendered, 3, 1)^.A;
+    Require(EnhancedThinAlpha > DefaultThinAlpha,
+      'Preview minimum stroke width was not applied');
     Writeln('VectArt shared renderer: PASS');
   finally
     Destination.Free;

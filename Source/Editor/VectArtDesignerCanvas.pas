@@ -22,6 +22,7 @@ type
     FReferenceBackground: TBitmap;
     FRenderedDocument: TBitmap;
     FRenderBuffer: TVectArtRenderBuffer;
+    FRenderedPreviewStrokeWidth: Single;
     FRenderedRevision: Int64;
     FShapeCreation: TVectArtShapeCreation;
     FPanning: Boolean;
@@ -87,6 +88,9 @@ const
   MAX_VIEW_ZOOM         = 8.0;
   MIN_VIEW_ZOOM         = 0.25;
   VIEW_ZOOM_STEP        = 1.2;
+  // Falseにすると編集ビューの細線補正を一括で無効化する。
+  ENABLE_THIN_STROKE_PREVIEW = True;
+  MIN_PREVIEW_STROKE_WIDTH_PIXELS = 1.0;
 
 procedure DrawPremultipliedBitmap(Target: TCanvas; const Bounds: TRect;
   Bitmap: Vcl.Graphics.TBitmap);
@@ -117,6 +121,7 @@ begin
   FRenderedDocument := Vcl.Graphics.TBitmap.Create;
   FRenderedDocument.PixelFormat := pf32bit;
   FRenderBuffer := TVectArtRenderBuffer.Create;
+  FRenderedPreviewStrokeWidth := -1.0;
   FRenderedRevision := -1;
   FShapeCreation := TVectArtShapeCreation.Create;
   FPanOffset := TPointF.Zero;
@@ -243,6 +248,16 @@ end;
 procedure TVectArtCanvasControl.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
+  FShapeCreation.Configure(FDocument, EditHistory, FEditorState,
+    FCanvasBounds, FZoom);
+  if (Button = mbRight) and (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetPath) and FShapeCreation.Active then
+  begin
+    if not FShapeCreation.FinishPath(False) then
+      FShapeCreation.CancelPath;
+    Invalidate;
+    Exit;
+  end;
   if Button = mbRight then
   begin
     FPanning := True;
@@ -261,12 +276,15 @@ begin
       FCanvasBounds, FZoom);
     if FShapeCreation.MouseDown(Button, Shift, X, Y) then
     begin
-      MouseCapture := True;
+      if (FEditorState <> nil) and
+        (FEditorState.CurrentTool <> vetPath) then
+        MouseCapture := True;
       Cursor := crCross;
+      Invalidate;
       Exit;
     end;
     if (FEditorState <> nil) and
-      (FEditorState.CurrentTool in [vetRectangle, vetLine]) then
+      (FEditorState.CurrentTool in [vetRectangle, vetLine, vetPath]) then
     begin
       Cursor := crCross;
       Exit;
@@ -311,7 +329,7 @@ begin
     Exit;
   end;
   if (FEditorState <> nil) and
-    (FEditorState.CurrentTool in [vetRectangle, vetLine]) then
+    (FEditorState.CurrentTool in [vetRectangle, vetLine, vetPath]) then
   begin
     Cursor := crCross;
     Exit;
@@ -377,6 +395,7 @@ var
   Destination: PByte;
   Height: Integer;
   Source: PVectArtRgbaPixel;
+  PreviewStrokeWidth: Single;
   Width: Integer;
   X: Integer;
   Y: Integer;
@@ -389,12 +408,17 @@ begin
   end;
   Width := Max(FDocument.CanvasLayer.Width, 1);
   Height := Max(FDocument.CanvasLayer.Height, 1);
+  PreviewStrokeWidth := 0.0;
+  if ENABLE_THIN_STROKE_PREVIEW and (FZoom > 0) then
+    PreviewStrokeWidth := MIN_PREVIEW_STROKE_WIDTH_PIXELS / FZoom;
   if (FRenderedRevision = FDocument.Revision) and
+    SameValue(FRenderedPreviewStrokeWidth, PreviewStrokeWidth) and
     (FRenderedDocument.Width = Width) and
     (FRenderedDocument.Height = Height) then
     Exit;
 
-  RenderVectArtDocument(FDocument, FRenderBuffer, Width, Height);
+  RenderVectArtDocument(FDocument, FRenderBuffer, Width, Height,
+    PreviewStrokeWidth);
   FRenderedDocument.PixelFormat := pf32bit;
   FRenderedDocument.SetSize(Width, Height);
   FRenderedDocument.AlphaFormat := afPremultiplied;
@@ -414,6 +438,7 @@ begin
     end;
   end;
   FRenderedRevision := FDocument.Revision;
+  FRenderedPreviewStrokeWidth := PreviewStrokeWidth;
 end;
 
 procedure TVectArtCanvasControl.PaintDirect2D;
@@ -431,11 +456,14 @@ var
   Handle: TVectArtSelectionHandle;
   RotationHandleIndex: Integer;
   I: Integer;
+  ImageLayer: TVectArtImageLayer;
   Layer: TVectArtLayer;
   LayerRect: TRect;
   LineLayer: TVectArtLineLayer;
   LineEnd: TPoint;
   LineStart: TPoint;
+  PathPreview: TArray<TPoint>;
+  PathVertexRects: TArray<TRect>;
   LogicalQuad: TVectArtQuad;
   PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
@@ -537,7 +565,8 @@ begin
           if not Layer.Visible or
             not ((Layer is TVectArtRectangleLayer) or
               (Layer is TVectArtLineLayer) or
-              (Layer is TVectArtPathLayer)) then
+              (Layer is TVectArtPathLayer) or
+              (Layer is TVectArtImageLayer)) then
             Continue;
           if Layer is TVectArtRectangleLayer then
           begin
@@ -558,12 +587,29 @@ begin
             SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
               SelectionFrameOffset(LineLayer.StrokeWidth, FZoom));
           end
-          else
+          else if Layer is TVectArtPathLayer then
           begin
             PathLayer := TVectArtPathLayer(Layer);
             RotatedBounds := PointsBounds(PathLayer.Points);
             SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
               SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
+          end
+          else
+          begin
+            ImageLayer := TVectArtImageLayer(Layer);
+            RotatedBounds := TRectF.Create(ImageLayer.Points[0],
+              ImageLayer.Points[0]);
+            for RotationHandleIndex := 1 to High(ImageLayer.Points) do
+            begin
+              RotatedBounds.Left := Min(RotatedBounds.Left,
+                ImageLayer.Points[RotationHandleIndex].X);
+              RotatedBounds.Top := Min(RotatedBounds.Top,
+                ImageLayer.Points[RotationHandleIndex].Y);
+              RotatedBounds.Right := Max(RotatedBounds.Right,
+                ImageLayer.Points[RotationHandleIndex].X);
+              RotatedBounds.Bottom := Max(RotatedBounds.Bottom,
+                ImageLayer.Points[RotationHandleIndex].Y);
+            end;
           end;
           LayerRect := Rect(FCanvasBounds.Left +
             Round(RotatedBounds.Left * FZoom), FCanvasBounds.Top +
@@ -607,6 +653,19 @@ begin
           (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
           SelectionGeometry := BuildPathSelectionGeometry(
             SelectionLayerRect, SelectionFrameOffsetPixels)
+        else if (FDocument.SelectionCount = 1) and
+          (FDocument.SelectedIndex > 0) and
+          (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer) then
+        begin
+          ImageLayer := TVectArtImageLayer(
+            FDocument[FDocument.SelectedIndex]);
+          for I := 0 to High(ScreenQuad) do
+            ScreenQuad[I] := Point(FCanvasBounds.Left +
+              Round(ImageLayer.Points[I].X * FZoom), FCanvasBounds.Top +
+              Round(ImageLayer.Points[I].Y * FZoom));
+          SelectionGeometry := BuildRotatedSelectionGeometry(ScreenQuad,
+            SelectionFrameOffsetPixels);
+        end
         else if not FInteraction.AxisAlignedSelection and
           (FDocument.SelectionCount = 1) and
           (FDocument.SelectedIndex > 0) and
@@ -642,7 +701,8 @@ begin
               Direct2DCanvas.FrameRect(SelectionGeometry.Handles[Handle]);
             end;
           if (FDocument.SelectionCount = 1) and
-            (FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) and
+            ((FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) or
+             (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer)) and
             not FInteraction.AxisAlignedSelection then
             for RotationHandleIndex := 0 to 3 do
             begin
@@ -654,6 +714,14 @@ begin
                 SelectionGeometry.RotationHandles[RotationHandleIndex]);
             end;
         end;
+      end;
+      PathVertexRects := FInteraction.SelectedPathVertexRects;
+      for I := 0 to High(PathVertexRects) do
+      begin
+        Direct2DCanvas.Brush.Color := TColor($00F0C060);
+        Direct2DCanvas.FillRect(PathVertexRects[I]);
+        Direct2DCanvas.Brush.Color := COLOR_SELECTION;
+        Direct2DCanvas.FrameRect(PathVertexRects[I]);
       end;
       if FInteraction.RangeSelecting then
       begin
@@ -675,6 +743,11 @@ begin
         Direct2DCanvas.MoveTo(LineStart.X, LineStart.Y);
         Direct2DCanvas.LineTo(LineEnd.X, LineEnd.Y);
       end;
+      if FShapeCreation.PreviewPath(PathPreview) then
+      begin
+        Direct2DCanvas.Pen.Color := COLOR_SELECTION;
+        Direct2DCanvas.Polyline(PathPreview);
+      end;
     finally
       Direct2DCanvas.EndDraw;
     end;
@@ -694,11 +767,14 @@ var
   Handle: TVectArtSelectionHandle;
   RotationHandleIndex: Integer;
   I: Integer;
+  ImageLayer: TVectArtImageLayer;
   Layer: TVectArtLayer;
   LayerRect: TRect;
   LineLayer: TVectArtLineLayer;
   LineEnd: TPoint;
   LineStart: TPoint;
+  PathPreview: TArray<TPoint>;
+  PathVertexRects: TArray<TRect>;
   LogicalQuad: TVectArtQuad;
   PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
@@ -779,7 +855,8 @@ begin
       if not Layer.Visible or
         not ((Layer is TVectArtRectangleLayer) or
           (Layer is TVectArtLineLayer) or
-          (Layer is TVectArtPathLayer)) then
+          (Layer is TVectArtPathLayer) or
+          (Layer is TVectArtImageLayer)) then
         Continue;
       if Layer is TVectArtRectangleLayer then
       begin
@@ -800,12 +877,29 @@ begin
         SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
           SelectionFrameOffset(LineLayer.StrokeWidth, FZoom));
       end
-      else
+      else if Layer is TVectArtPathLayer then
       begin
         PathLayer := TVectArtPathLayer(Layer);
         RotatedBounds := PointsBounds(PathLayer.Points);
         SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
           SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
+      end
+      else
+      begin
+        ImageLayer := TVectArtImageLayer(Layer);
+        RotatedBounds := TRectF.Create(ImageLayer.Points[0],
+          ImageLayer.Points[0]);
+        for RotationHandleIndex := 1 to High(ImageLayer.Points) do
+        begin
+          RotatedBounds.Left := Min(RotatedBounds.Left,
+            ImageLayer.Points[RotationHandleIndex].X);
+          RotatedBounds.Top := Min(RotatedBounds.Top,
+            ImageLayer.Points[RotationHandleIndex].Y);
+          RotatedBounds.Right := Max(RotatedBounds.Right,
+            ImageLayer.Points[RotationHandleIndex].X);
+          RotatedBounds.Bottom := Max(RotatedBounds.Bottom,
+            ImageLayer.Points[RotationHandleIndex].Y);
+        end;
       end;
       LayerRect := Rect(FCanvasBounds.Left +
         Round(RotatedBounds.Left * FZoom), FCanvasBounds.Top +
@@ -847,6 +941,18 @@ begin
       (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
       SelectionGeometry := BuildPathSelectionGeometry(SelectionLayerRect,
         SelectionFrameOffsetPixels)
+    else if (FDocument.SelectionCount = 1) and
+      (FDocument.SelectedIndex > 0) and
+      (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer) then
+    begin
+      ImageLayer := TVectArtImageLayer(FDocument[FDocument.SelectedIndex]);
+      for I := 0 to High(ScreenQuad) do
+        ScreenQuad[I] := Point(FCanvasBounds.Left +
+          Round(ImageLayer.Points[I].X * FZoom), FCanvasBounds.Top +
+          Round(ImageLayer.Points[I].Y * FZoom));
+      SelectionGeometry := BuildRotatedSelectionGeometry(ScreenQuad,
+        SelectionFrameOffsetPixels);
+    end
     else if not FInteraction.AxisAlignedSelection and
       (FDocument.SelectionCount = 1) and
       (FDocument.SelectedIndex > 0) and
@@ -882,7 +988,8 @@ begin
           Canvas.FrameRect(SelectionGeometry.Handles[Handle]);
         end;
       if (FDocument.SelectionCount = 1) and
-        (FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) and
+        ((FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) or
+         (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer)) and
         not FInteraction.AxisAlignedSelection then
         for RotationHandleIndex := 0 to 3 do
         begin
@@ -894,6 +1001,14 @@ begin
             RotationHandleIndex]);
         end;
     end;
+  end;
+  PathVertexRects := FInteraction.SelectedPathVertexRects;
+  for I := 0 to High(PathVertexRects) do
+  begin
+    Canvas.Brush.Color := TColor($00F0C060);
+    Canvas.FillRect(PathVertexRects[I]);
+    Canvas.Brush.Color := COLOR_SELECTION;
+    Canvas.FrameRect(PathVertexRects[I]);
   end;
   if FInteraction.RangeSelecting then
   begin
@@ -914,6 +1029,11 @@ begin
     Canvas.Pen.Color := COLOR_SELECTION;
     Canvas.MoveTo(LineStart.X, LineStart.Y);
     Canvas.LineTo(LineEnd.X, LineEnd.Y);
+  end;
+  if FShapeCreation.PreviewPath(PathPreview) then
+  begin
+    Canvas.Pen.Color := COLOR_SELECTION;
+    Canvas.Polyline(PathPreview);
   end;
 end;
 
@@ -965,6 +1085,7 @@ begin
     Exit;
   FDocument := Value;
   FRenderedRevision := -1;
+  FRenderedPreviewStrokeWidth := -1.0;
   FPanOffset := TPointF.Zero;
   FViewZoom := 1.0;
   CalculateCanvasBounds;

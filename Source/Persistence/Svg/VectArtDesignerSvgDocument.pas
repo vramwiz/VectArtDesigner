@@ -24,7 +24,8 @@ implementation
 
 uses
   System.Classes, System.Generics.Collections, System.IOUtils, System.Math,
-  System.SysUtils, System.Types, System.Variants, Vcl.Graphics, Winapi.Windows,
+  System.NetEncoding, System.SysUtils, System.Types, System.Variants,
+  Vcl.Graphics, Winapi.Windows,
   VectArtDesignerGeometry, Xml.omnixmldom, Xml.XMLDoc, Xml.XMLIntf,
   Xml.xmldom;
 
@@ -77,8 +78,11 @@ var
   DashIndex: Integer;
   DashIntervals: TArray<Single>;
   I: Integer;
+  Image: TVectArtImageLayer;
   Layer: TVectArtLayer;
   Line: TVectArtLineLayer;
+  Path: TVectArtPathLayer;
+  PointIndex: Integer;
   Rectangle: TVectArtRectangleLayer;
 begin
   Result := False;
@@ -113,6 +117,37 @@ begin
       for I := 1 to Document.LayerCount - 1 do
       begin
         Layer := Document[I];
+        if Layer is TVectArtImageLayer then
+        begin
+          Image := TVectArtImageLayer(Layer);
+          Builder.Append('  <image x="0" y="0" width="1" height="1"')
+            .Append(' preserveAspectRatio="none" href="data:image/png;base64,')
+            .Append(TNetEncoding.Base64.EncodeBytesToString(Image.PngData))
+            .Append('" transform="matrix(')
+            .Append(SvgNumber(Image.Points[1].X - Image.Points[0].X))
+            .Append(' ')
+            .Append(SvgNumber(Image.Points[1].Y - Image.Points[0].Y))
+            .Append(' ')
+            .Append(SvgNumber(Image.Points[3].X - Image.Points[0].X))
+            .Append(' ')
+            .Append(SvgNumber(Image.Points[3].Y - Image.Points[0].Y))
+            .Append(' ').Append(SvgNumber(Image.Points[0].X))
+            .Append(' ').Append(SvgNumber(Image.Points[0].Y))
+            .Append(')" opacity="').Append(SvgNumber(Image.Opacity))
+            .Append('" vad:name="').Append(XmlEscape(Image.Name))
+            .Append('" vad:locked="').Append(BooleanText(Image.Locked))
+            .Append('" vad:source-kind="');
+          if Image.SourceKind = visLogo then
+            Builder.Append('logo')
+          else
+            Builder.Append('image');
+          Builder.Append('"');
+          if not Image.Visible then
+            Builder.Append(' display="none"');
+          Builder.Append('><title>').Append(XmlEscape(Image.Name))
+            .AppendLine('</title></image>');
+          Continue;
+        end;
         if Layer is TVectArtLineLayer then
         begin
           Line := TVectArtLineLayer(Layer);
@@ -145,6 +180,65 @@ begin
             Builder.Append(' display="none"');
           Builder.Append('><title>').Append(XmlEscape(Line.Name))
             .AppendLine('</title></line>');
+          Continue;
+        end;
+        if Layer is TVectArtPathLayer then
+        begin
+          Path := TVectArtPathLayer(Layer);
+          if Path.Closed then
+            Builder.Append('  <polygon points="')
+          else
+            Builder.Append('  <polyline points="');
+          for PointIndex := 0 to High(Path.Points) do
+          begin
+            if PointIndex > 0 then
+              Builder.Append(' ');
+            Builder.Append(SvgNumber(Path.Points[PointIndex].X)).Append(',')
+              .Append(SvgNumber(Path.Points[PointIndex].Y));
+          end;
+          Builder.Append('" fill="');
+          if Path.Filled and Path.Closed then
+            Builder.Append(SvgColor(Path.FillColor))
+          else
+            Builder.Append('none');
+          Builder.Append('"');
+          if Path.StrokeWidth > 0 then
+          begin
+            Builder.Append(' stroke="').Append(SvgColor(Path.StrokeColor))
+              .Append('" stroke-width="').Append(SvgNumber(Path.StrokeWidth))
+              .Append('" vad:stroke-color="')
+              .Append(Integer(Path.StrokeColor))
+              .Append('" vad:stroke-style="')
+              .Append(Ord(Path.StrokeStyle)).Append('"');
+            DashIntervals := VectArtStrokeDashIntervals(Path.StrokeStyle,
+              Path.StrokeWidth);
+            if Length(DashIntervals) > 0 then
+            begin
+              Builder.Append(' stroke-dasharray="');
+              for DashIndex := 0 to High(DashIntervals) do
+              begin
+                if DashIndex > 0 then
+                  Builder.Append(' ');
+                Builder.Append(SvgNumber(DashIntervals[DashIndex]));
+              end;
+              Builder.Append('"');
+            end;
+          end
+          else
+            Builder.Append(' stroke="none"');
+          Builder.Append(' opacity="').Append(SvgNumber(Path.Opacity))
+            .Append('" vad:fill-color="').Append(Integer(Path.FillColor))
+            .Append('" vad:name="').Append(XmlEscape(Path.Name))
+            .Append('" vad:locked="').Append(BooleanText(Path.Locked))
+            .Append('"');
+          if not Path.Visible then
+            Builder.Append(' display="none"');
+          if Path.Closed then
+            Builder.Append('><title>').Append(XmlEscape(Path.Name))
+              .AppendLine('</title></polygon>')
+          else
+            Builder.Append('><title>').Append(XmlEscape(Path.Name))
+              .AppendLine('</title></polyline>');
           Continue;
         end;
         if not (Layer is TVectArtRectangleLayer) then
@@ -377,6 +471,157 @@ begin
   Result := Format('Rectangle %d', [Index]);
 end;
 
+function ImageName(const Node: IXMLNode; Index: Integer): string;
+var
+  Child: IXMLNode;
+  I: Integer;
+begin
+  for I := 0 to Node.ChildNodes.Count - 1 do
+  begin
+    Child := Node.ChildNodes[I];
+    if SameText(LocalNodeName(Child), 'title') and (Trim(Child.Text) <> '') then
+      Exit(Child.Text);
+  end;
+  if TryGetAttribute(Node, 'vad:name', Result) and (Result <> '') then
+    Exit;
+  if TryGetAttribute(Node, 'id', Result) and (Result <> '') then
+    Exit;
+  Result := Format('Image %d', [Index]);
+end;
+
+function TryParseSvgMatrix(const Text: string; out A, B, C, D, E,
+  F: Single): Boolean;
+var
+  CloseIndex: Integer;
+  I: Integer;
+  OpenIndex: Integer;
+  Parts: TStringList;
+  ValueText: string;
+begin
+  Result := False;
+  ValueText := Trim(Text);
+  OpenIndex := ValueText.IndexOf('(');
+  CloseIndex := ValueText.LastIndexOf(')');
+  if (OpenIndex < 0) or (CloseIndex <= OpenIndex) or
+    (Trim(ValueText.Substring(CloseIndex + 1)) <> '') or
+    not SameText(Trim(ValueText.Substring(0, OpenIndex)), 'matrix') then
+    Exit;
+  ValueText := ValueText.Substring(OpenIndex + 1,
+    CloseIndex - OpenIndex - 1).Replace(',', ' ');
+  Parts := TStringList.Create;
+  try
+    Parts.StrictDelimiter := True;
+    Parts.Delimiter := ' ';
+    Parts.DelimitedText := ValueText;
+    for I := Parts.Count - 1 downto 0 do
+      if Trim(Parts[I]) = '' then
+        Parts.Delete(I);
+    Result := (Parts.Count = 6) and
+      TryParseSvgNumber(Parts[0], A) and
+      TryParseSvgNumber(Parts[1], B) and
+      TryParseSvgNumber(Parts[2], C) and
+      TryParseSvgNumber(Parts[3], D) and
+      TryParseSvgNumber(Parts[4], E) and
+      TryParseSvgNumber(Parts[5], F);
+  finally
+    Parts.Free;
+  end;
+end;
+
+function TransformSvgPoint(const Point: TPointF; A, B, C, D, E,
+  F: Single): TPointF;
+begin
+  Result := TPointF.Create(A * Point.X + C * Point.Y + E,
+    B * Point.X + D * Point.Y + F);
+end;
+
+function TryParseImage(const Node: IXMLNode; Index: Integer;
+  out Data: TVectArtImageData): Boolean;
+const
+  PNG_DATA_PREFIX = 'data:image/png;base64,';
+var
+  A: Single;
+  B: Single;
+  C: Single;
+  D: Single;
+  DisplayValue: string;
+  E: Single;
+  F: Single;
+  Height: Single;
+  Href: string;
+  LockedText: string;
+  OpacityText: string;
+  SourceKindText: string;
+  TransformText: string;
+  ValueText: string;
+  VisibilityValue: string;
+  Width: Single;
+  X: Single;
+  Y: Single;
+begin
+  Result := False;
+  if not TryGetAttribute(Node, 'href', Href) then
+    if not TryGetAttribute(Node, 'xlink:href', Href) then
+      Exit;
+  if not SameText(Copy(Href, 1, Length(PNG_DATA_PREFIX)), PNG_DATA_PREFIX) then
+    Exit;
+  Data.PngData := TNetEncoding.Base64.DecodeStringToBytes(
+    Copy(Href, Length(PNG_DATA_PREFIX) + 1, MaxInt));
+  if Length(Data.PngData) = 0 then
+    Exit;
+  if not TryGetAttribute(Node, 'x', ValueText) then
+    ValueText := '0';
+  if not TryParseSvgNumber(ValueText, X) then
+    Exit;
+  if not TryGetAttribute(Node, 'y', ValueText) then
+    ValueText := '0';
+  if not TryParseSvgNumber(ValueText, Y) then
+    Exit;
+  if not TryGetAttribute(Node, 'width', ValueText) or
+    not TryParseSvgNumber(ValueText, Width) or (Width <= 0) then
+    Exit;
+  if not TryGetAttribute(Node, 'height', ValueText) or
+    not TryParseSvgNumber(ValueText, Height) or (Height <= 0) then
+    Exit;
+  A := 1;
+  B := 0;
+  C := 0;
+  D := 1;
+  E := 0;
+  F := 0;
+  if TryGetAttribute(Node, 'transform', TransformText) and
+    not TryParseSvgMatrix(TransformText, A, B, C, D, E, F) then
+    Exit;
+  Data.Points[0] := TransformSvgPoint(PointF(X, Y), A, B, C, D, E, F);
+  Data.Points[1] := TransformSvgPoint(PointF(X + Width, Y),
+    A, B, C, D, E, F);
+  Data.Points[2] := TransformSvgPoint(PointF(X + Width, Y + Height),
+    A, B, C, D, E, F);
+  Data.Points[3] := TransformSvgPoint(PointF(X, Y + Height),
+    A, B, C, D, E, F);
+  Data.Name := ImageName(Node, Index);
+  Data.SourceKind := visImage;
+  if TryGetAttribute(Node, 'vad:source-kind', SourceKindText) and
+    SameText(Trim(SourceKindText), 'logo') then
+    Data.SourceKind := visLogo;
+  Data.Opacity := 1.0;
+  if TryGetPresentationValue(Node, 'opacity', OpacityText) and
+    not TryParseSvgNumber(OpacityText, Data.Opacity) then
+    Exit;
+  Data.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
+  Data.Visible := True;
+  if TryGetPresentationValue(Node, 'display', DisplayValue) then
+    Data.Visible := not SameText(Trim(DisplayValue), 'none');
+  if TryGetPresentationValue(Node, 'visibility', VisibilityValue) then
+    Data.Visible := Data.Visible and
+      not SameText(Trim(VisibilityValue), 'hidden') and
+      not SameText(Trim(VisibilityValue), 'collapse');
+  Data.Locked := False;
+  if TryGetAttribute(Node, 'vad:locked', LockedText) then
+    TryParseBoolean(LockedText, Data.Locked);
+  Result := True;
+end;
+
 function TryParseRotation(const Node: IXMLNode; var Bounds: TRectF;
   out Angle: Single): Boolean;
 var
@@ -592,6 +837,100 @@ begin
   Result := True;
 end;
 
+function TryParsePath(const Node: IXMLNode; Index: Integer; Closed: Boolean;
+  out Data: TVectArtPathData): Boolean;
+var
+  ColorInteger: Integer;
+  DisplayValue: string;
+  I: Integer;
+  LockedText: string;
+  OpacityText: string;
+  Parts: TStringList;
+  PointsText: string;
+  StrokeStyleInteger: Integer;
+  ValueText: string;
+  VisibilityValue: string;
+begin
+  Result := False;
+  if not TryGetAttribute(Node, 'points', PointsText) then
+    Exit;
+  PointsText := StringReplace(Trim(PointsText), ',', ' ', [rfReplaceAll]);
+  Parts := TStringList.Create;
+  try
+    Parts.StrictDelimiter := True;
+    Parts.Delimiter := ' ';
+    Parts.DelimitedText := PointsText;
+    for I := Parts.Count - 1 downto 0 do
+      if Trim(Parts[I]) = '' then
+        Parts.Delete(I);
+    if (Parts.Count < 4) or Odd(Parts.Count) then
+      Exit;
+    SetLength(Data.Points, Parts.Count div 2);
+    for I := 0 to High(Data.Points) do
+      if not TryParseSvgNumber(Parts[I * 2], Data.Points[I].X) or
+        not TryParseSvgNumber(Parts[I * 2 + 1], Data.Points[I].Y) then
+        Exit;
+  finally
+    Parts.Free;
+  end;
+  Data.Closed := Closed;
+  ValueText := 'none';
+  TryGetPresentationValue(Node, 'fill', ValueText);
+  Data.Filled := Closed and not SameText(Trim(ValueText), 'none');
+  Data.FillColor := clWhite;
+  if Data.Filled and not TryParseSvgColor(ValueText, Data.FillColor) then
+    Exit;
+  if TryGetAttribute(Node, 'vad:fill-color', ValueText) and
+    TryStrToInt(ValueText, ColorInteger) and
+    (not Data.Filled or (ColorToRGB(TColor(ColorInteger)) =
+    ColorToRGB(Data.FillColor))) then
+    Data.FillColor := TColor(ColorInteger);
+  ValueText := 'none';
+  TryGetPresentationValue(Node, 'stroke', ValueText);
+  Data.StrokeWidth := 0.0;
+  Data.StrokeColor := clBlack;
+  if not SameText(Trim(ValueText), 'none') then
+  begin
+    if not TryParseSvgColor(ValueText, Data.StrokeColor) then
+      Exit;
+    Data.StrokeWidth := 1.0;
+    if TryGetPresentationValue(Node, 'stroke-width', ValueText) and
+      (not TryParseSvgNumber(ValueText, Data.StrokeWidth) or
+      (Data.StrokeWidth < 0)) then
+      Exit;
+  end;
+  if TryGetAttribute(Node, 'vad:stroke-color', ValueText) and
+    TryStrToInt(ValueText, ColorInteger) and
+    (ColorToRGB(TColor(ColorInteger)) = ColorToRGB(Data.StrokeColor)) then
+    Data.StrokeColor := TColor(ColorInteger);
+  Data.StrokeStyle := vssSolid;
+  if TryGetAttribute(Node, 'vad:stroke-style', ValueText) and
+    TryStrToInt(ValueText, StrokeStyleInteger) and
+    InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
+      Ord(High(TVectArtStrokeStyle))) then
+    Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
+  else if TryGetPresentationValue(Node, 'stroke-dasharray', ValueText) and
+    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
+    Data.StrokeStyle := vssDashed;
+  Data.Opacity := 1.0;
+  if TryGetPresentationValue(Node, 'opacity', OpacityText) and
+    not TryParseSvgNumber(OpacityText, Data.Opacity) then
+    Exit;
+  Data.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
+  Data.Name := RectangleName(Node, Index);
+  Data.Visible := True;
+  if TryGetPresentationValue(Node, 'display', DisplayValue) then
+    Data.Visible := not SameText(Trim(DisplayValue), 'none');
+  if TryGetPresentationValue(Node, 'visibility', VisibilityValue) then
+    Data.Visible := Data.Visible and
+      not SameText(Trim(VisibilityValue), 'hidden') and
+      not SameText(Trim(VisibilityValue), 'collapse');
+  Data.Locked := False;
+  if TryGetAttribute(Node, 'vad:locked', LockedText) then
+    TryParseBoolean(LockedText, Data.Locked);
+  Result := True;
+end;
+
 function TryReadCanvasSize(const Root: IXMLNode; out Width,
   Height: Integer): Boolean;
 var
@@ -653,11 +992,17 @@ var
   Child: IXMLNode;
   Data: TVectArtRectangleData;
   Discarded: TVectArtRectangleData;
+  DiscardedImage: TVectArtImageData;
   DiscardedLine: TVectArtLineData;
+  DiscardedPath: TVectArtPathData;
   I: Integer;
+  ImageData: TVectArtImageData;
+  Images: TList<TVectArtImageData>;
   LayerOrder: TList<Integer>;
   LineData: TVectArtLineData;
   Lines: TList<TVectArtLineData>;
+  PathData: TVectArtPathData;
+  Paths: TList<TVectArtPathData>;
   RectangleData: TList<TVectArtRectangleData>;
   Root: IXMLNode;
   SelectedIndex: Integer;
@@ -671,6 +1016,8 @@ begin
   ErrorMessage := '';
   RectangleData := TList<TVectArtRectangleData>.Create;
   Lines := TList<TVectArtLineData>.Create;
+  Paths := TList<TVectArtPathData>.Create;
+  Images := TList<TVectArtImageData>.Create;
   LayerOrder := TList<Integer>.Create;
   try
     try
@@ -720,6 +1067,20 @@ begin
         begin
           Lines.Add(LineData);
           LayerOrder.Add(-Lines.Count);
+        end
+        else if (SameText(LocalNodeName(Child), 'polyline') or
+          SameText(LocalNodeName(Child), 'polygon')) and
+          TryParsePath(Child, Paths.Count + 1,
+            SameText(LocalNodeName(Child), 'polygon'), PathData) then
+        begin
+          Paths.Add(PathData);
+          LayerOrder.Add(-(1000000 + Paths.Count));
+        end
+        else if SameText(LocalNodeName(Child), 'image') and
+          TryParseImage(Child, Images.Count + 1, ImageData) then
+        begin
+          Images.Add(ImageData);
+          LayerOrder.Add(-(2000000 + Images.Count));
         end;
       end;
 
@@ -731,6 +1092,10 @@ begin
           Document.RemoveRectangle(Document.LayerCount - 1, Discarded)
         else if Document[Document.LayerCount - 1] is TVectArtLineLayer then
           Document.RemoveLine(Document.LayerCount - 1, DiscardedLine)
+        else if Document[Document.LayerCount - 1] is TVectArtPathLayer then
+          Document.RemovePath(Document.LayerCount - 1, DiscardedPath)
+        else if Document[Document.LayerCount - 1] is TVectArtImageLayer then
+          Document.RemoveImage(Document.LayerCount - 1, DiscardedImage)
         else
           raise EInvalidOp.Create('Document contains an unsupported layer');
       Canvas.Width := CanvasWidth;
@@ -741,6 +1106,12 @@ begin
         if I > 0 then
           Document.InsertRectangle(Document.LayerCount,
             RectangleData[I - 1])
+        else if I <= -2000000 then
+          Document.InsertImage(Document.LayerCount,
+            Images[-I - 2000001])
+        else if I <= -1000000 then
+          Document.InsertPath(Document.LayerCount,
+            Paths[-I - 1000001])
         else
           Document.InsertLine(Document.LayerCount, Lines[-I - 1]);
       Document.SelectedIndex := SelectedIndex;
@@ -752,7 +1123,9 @@ begin
     end;
   finally
     LayerOrder.Free;
+    Images.Free;
     Lines.Free;
+    Paths.Free;
     RectangleData.Free;
   end;
 end;

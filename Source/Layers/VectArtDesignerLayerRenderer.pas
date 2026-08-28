@@ -10,6 +10,8 @@ type
   TVectArtLayerRenderer = class
   private
     FDocument: TVectArtDocument;
+    procedure DrawImageThumbnail(ACanvas: TCustomCanvas;
+      const ThumbnailRect: TRect; ImageLayer: TVectArtImageLayer);
     procedure DrawLayerItem(ACanvas: TCanvas; const ItemRect: TRect;
       Layer: TVectArtLayer; Selected: Boolean); overload;
     procedure DrawLayerItem(ACanvas: TDirect2DCanvas;
@@ -32,7 +34,8 @@ type
 implementation
 
 uses
-  System.Math, System.SysUtils, Winapi.Windows;
+  System.Classes, System.Math, System.SysUtils, Vcl.Imaging.pngimage,
+  Winapi.Windows;
 
 const
   COLOR_LIST_BACKGROUND   = TColor($001A1A1A);
@@ -63,6 +66,38 @@ begin
     Round(GetRValue(ColorValue) * Opacity + $FF * (1 - Opacity)),
     Round(GetGValue(ColorValue) * Opacity + $FF * (1 - Opacity)),
     Round(GetBValue(ColorValue) * Opacity + $FF * (1 - Opacity)));
+end;
+
+procedure TVectArtLayerRenderer.DrawImageThumbnail(ACanvas: TCustomCanvas;
+  const ThumbnailRect: TRect; ImageLayer: TVectArtImageLayer);
+var
+  ImageRect: TRect;
+  PngImage: TPngImage;
+  Stream: TBytesStream;
+begin
+  if (ACanvas = nil) or (ImageLayer = nil) or
+    (Length(ImageLayer.PngData) = 0) then
+    Exit;
+  PngImage := TPngImage.Create;
+  Stream := TBytesStream.Create(ImageLayer.PngData);
+  try
+    try
+      PngImage.LoadFromStream(Stream);
+      if (PngImage.Width <= 0) or (PngImage.Height <= 0) then
+        Exit;
+      ImageRect := FitThumbnailRect(ThumbnailRect, PngImage.Width,
+        PngImage.Height);
+      ACanvas.StretchDraw(ImageRect, PngImage);
+    except
+      on EInvalidGraphic do
+        Exit;
+      on EReadError do
+        Exit;
+    end;
+  finally
+    Stream.Free;
+    PngImage.Free;
+  end;
 end;
 
 procedure TVectArtLayerRenderer.DrawLayerItem(ACanvas: TCanvas;
@@ -183,6 +218,9 @@ begin
     ACanvas.Pen.Style := psSolid;
     ACanvas.Pen.Width := 1;
   end;
+  if Layer is TVectArtImageLayer then
+    DrawImageThumbnail(ACanvas, ThumbnailRect,
+      TVectArtImageLayer(Layer));
   ACanvas.Brush.Style := bsClear;
   ACanvas.Pen.Color := COLOR_THUMB_BORDER;
   ACanvas.FrameRect(ThumbnailRect);
@@ -200,6 +238,13 @@ begin
       [Round(TVectArtRectangleLayer(Layer).Bounds.Width),
        Round(TVectArtRectangleLayer(Layer).Bounds.Height),
        Round(Layer.Opacity * 100)])
+  else if Layer is TVectArtImageLayer then
+    if TVectArtImageLayer(Layer).SourceKind = visLogo then
+      DetailText := Format('Logo  %d%%', [Round(Layer.Opacity * 100)])
+    else
+      DetailText := Format('Image  %d%%', [Round(Layer.Opacity * 100)])
+  else if Layer is TVectArtPathLayer then
+    DetailText := Format('Path  %d%%', [Round(Layer.Opacity * 100)])
   else
     DetailText := Format('Line  %d%%', [Round(Layer.Opacity * 100)]);
   ACanvas.Font.Height := -11;
@@ -351,6 +396,9 @@ begin
     ACanvas.Pen.Style := psSolid;
     ACanvas.Pen.Width := 1;
   end;
+  if Layer is TVectArtImageLayer then
+    DrawImageThumbnail(ACanvas, ThumbnailRect,
+      TVectArtImageLayer(Layer));
   ACanvas.Brush.Style := bsClear;
   ACanvas.Pen.Color := COLOR_THUMB_BORDER;
   ACanvas.FrameRect(ThumbnailRect);
@@ -368,6 +416,13 @@ begin
       [Round(TVectArtRectangleLayer(Layer).Bounds.Width),
        Round(TVectArtRectangleLayer(Layer).Bounds.Height),
        Round(Layer.Opacity * 100)])
+  else if Layer is TVectArtImageLayer then
+    if TVectArtImageLayer(Layer).SourceKind = visLogo then
+      DetailText := Format('Logo  %d%%', [Round(Layer.Opacity * 100)])
+    else
+      DetailText := Format('Image  %d%%', [Round(Layer.Opacity * 100)])
+  else if Layer is TVectArtPathLayer then
+    DetailText := Format('Path  %d%%', [Round(Layer.Opacity * 100)])
   else
     DetailText := Format('Line  %d%%', [Round(Layer.Opacity * 100)]);
   ACanvas.Font.Height := -11;

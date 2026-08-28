@@ -21,9 +21,13 @@ end;
 var
   Data: TVectArtRectangleData;
   LineData: TVectArtLineData;
+  ImageData: TVectArtImageData;
+  PathData: TVectArtPathData;
   ErrorMessage: string;
   Rectangle: TVectArtRectangleLayer;
   TargetLine: TVectArtLineLayer;
+  TargetImage: TVectArtImageLayer;
+  TargetPath: TVectArtPathLayer;
   Serialized: string;
   SourceDocument: TVectArtDocument;
   TargetDocument: TVectArtDocument;
@@ -66,8 +70,32 @@ begin
     LineData.StrokeWidth := 5.0;
     LineData.Visible := True;
     SourceDocument.InsertLine(SourceDocument.LayerCount, LineData);
+    PathData.Name := 'Path 1';
+    PathData.Points := [PointF(300, 40), PointF(500, 80),
+      PointF(440, 220)];
+    PathData.Closed := True;
+    PathData.Filled := True;
+    PathData.FillColor := clLime;
+    PathData.Locked := False;
+    PathData.Opacity := 0.6;
+    PathData.StrokeColor := clBlue;
+    PathData.StrokeStyle := vssDashDotDot;
+    PathData.StrokeWidth := 4.0;
+    PathData.Visible := True;
+    SourceDocument.InsertPath(SourceDocument.LayerCount, PathData);
+    ImageData.Name := 'Image 1';
+    ImageData.Locked := False;
+    ImageData.Opacity := 0.45;
+    ImageData.PngData := [$89, $50, $4E, $47];
+    ImageData.Points[0] := PointF(600, 100);
+    ImageData.Points[1] := PointF(500, 100);
+    ImageData.Points[2] := PointF(500, 180);
+    ImageData.Points[3] := PointF(600, 180);
+    ImageData.SourceKind := visLogo;
+    ImageData.Visible := True;
+    SourceDocument.InsertImage(SourceDocument.LayerCount, ImageData);
     SourceDocument.CanvasLayer.Transparent := True;
-    SourceDocument.SelectedIndex := 2;
+    SourceDocument.SelectedIndex := 4;
 
     Serialized := SerializeVectArtDocument(SourceDocument);
     Require(TryDeserializeVectArtDocument(Serialized, TargetDocument,
@@ -79,7 +107,7 @@ begin
     Require((TargetDocument.CanvasLayer.Width = 2560) and
       (TargetDocument.CanvasLayer.Height = 1440),
       'Canvas size differs');
-    Require(TargetDocument.SelectedIndex = 2, 'Selection differs');
+    Require(TargetDocument.SelectedIndex = 4, 'Selection differs');
     Rectangle := TVectArtRectangleLayer(TargetDocument.Layers[1]);
     Require(Rectangle.Name = '日本語レイヤー', 'Layer name differs');
     Require(Rectangle.Locked, 'Layer lock differs');
@@ -102,6 +130,28 @@ begin
       SameValue(TargetLine.StrokeWidth, LineData.StrokeWidth) and
       (TargetLine.StrokeStyle = LineData.StrokeStyle),
       'Line stroke differs');
+    TargetPath := TVectArtPathLayer(TargetDocument[3]);
+    Require((Length(TargetPath.Points) = 3) and TargetPath.Closed and
+      TargetPath.Filled, 'Path properties differ');
+    Require(SameValue(TargetPath.Points[1].X, PathData.Points[1].X) and
+      SameValue(TargetPath.Points[2].Y, PathData.Points[2].Y),
+      'Path points differ');
+    Require((TargetPath.FillColor = PathData.FillColor) and
+      (TargetPath.StrokeColor = PathData.StrokeColor) and
+      SameValue(TargetPath.StrokeWidth, PathData.StrokeWidth) and
+      (TargetPath.StrokeStyle = PathData.StrokeStyle),
+      'Path style differs');
+    TargetImage := TVectArtImageLayer(TargetDocument[4]);
+    Require((TargetImage.Name = ImageData.Name) and
+      (TargetImage.SourceKind = visLogo) and
+      SameValue(TargetImage.Opacity, ImageData.Opacity),
+      'Image properties differ');
+    Require((Length(TargetImage.PngData) = Length(ImageData.PngData)) and
+      (TargetImage.PngData[2] = ImageData.PngData[2]),
+      'Image PNG data differs');
+    Require(SameValue(TargetImage.Points[0].X,
+      ImageData.Points[0].X) and SameValue(TargetImage.Points[2].Y,
+      ImageData.Points[2].Y), 'Image points differ');
 
     Require(not TryDeserializeVectArtDocument('{broken', TargetDocument,
       ErrorMessage), 'Invalid JSON was accepted');

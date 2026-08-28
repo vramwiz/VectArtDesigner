@@ -13,7 +13,8 @@ function TryDeserializeVectArtDocument(const Text: string;
 implementation
 
 uses
-  System.Generics.Collections, System.JSON, System.Math, System.SysUtils, System.Types,
+  System.Generics.Collections, System.JSON, System.Math, System.NetEncoding,
+  System.SysUtils, System.Types,
   Vcl.Graphics;
 
 const
@@ -60,10 +61,17 @@ var
   Canvas: TVectArtCanvasLayer;
   CanvasJson: TJSONObject;
   I: Integer;
+  Image: TVectArtImageLayer;
+  ImageJson: TJSONObject;
   Layer: TVectArtLayer;
   Line: TVectArtLineLayer;
   LineJson: TJSONObject;
   LayersJson: TJSONArray;
+  Path: TVectArtPathLayer;
+  PathJson: TJSONObject;
+  PointIndex: Integer;
+  PointJson: TJSONObject;
+  PointsJson: TJSONArray;
   Rectangle: TVectArtRectangleLayer;
   RectangleJson: TJSONObject;
   Root: TJSONObject;
@@ -90,6 +98,35 @@ begin
     for I := 1 to Document.LayerCount - 1 do
     begin
       Layer := Document.Layers[I];
+      if Layer is TVectArtImageLayer then
+      begin
+        Image := TVectArtImageLayer(Layer);
+        ImageJson := TJSONObject.Create;
+        ImageJson.AddPair('type', 'image');
+        ImageJson.AddPair('name', Image.Name);
+        if Image.SourceKind = visLogo then
+          ImageJson.AddPair('sourceKind', 'logo')
+        else
+          ImageJson.AddPair('sourceKind', 'image');
+        ImageJson.AddPair('pngBase64',
+          TNetEncoding.Base64.EncodeBytesToString(Image.PngData));
+        ImageJson.AddPair('opacity', TJSONNumber.Create(Image.Opacity));
+        ImageJson.AddPair('visible', TJSONBool.Create(Image.Visible));
+        ImageJson.AddPair('locked', TJSONBool.Create(Image.Locked));
+        PointsJson := TJSONArray.Create;
+        for PointIndex := 0 to High(Image.Points) do
+        begin
+          PointJson := TJSONObject.Create;
+          PointJson.AddPair('x', TJSONNumber.Create(
+            Image.Points[PointIndex].X));
+          PointJson.AddPair('y', TJSONNumber.Create(
+            Image.Points[PointIndex].Y));
+          PointsJson.AddElement(PointJson);
+        end;
+        ImageJson.AddPair('points', PointsJson);
+        LayersJson.AddElement(ImageJson);
+        Continue;
+      end;
       if Layer is TVectArtLineLayer then
       begin
         Line := TVectArtLineLayer(Layer);
@@ -110,6 +147,37 @@ begin
         LineJson.AddPair('visible', TJSONBool.Create(Line.Visible));
         LineJson.AddPair('locked', TJSONBool.Create(Line.Locked));
         LayersJson.AddElement(LineJson);
+        Continue;
+      end;
+      if Layer is TVectArtPathLayer then
+      begin
+        Path := TVectArtPathLayer(Layer);
+        PathJson := TJSONObject.Create;
+        PathJson.AddPair('type', 'path');
+        PathJson.AddPair('name', Path.Name);
+        PathJson.AddPair('closed', TJSONBool.Create(Path.Closed));
+        PathJson.AddPair('filled', TJSONBool.Create(Path.Filled));
+        PathJson.AddPair('fillColor',
+          TJSONNumber.Create(Integer(Path.FillColor)));
+        PathJson.AddPair('opacity', TJSONNumber.Create(Path.Opacity));
+        PathJson.AddPair('strokeColor',
+          TJSONNumber.Create(Integer(Path.StrokeColor)));
+        PathJson.AddPair('strokeWidth',
+          TJSONNumber.Create(Path.StrokeWidth));
+        PathJson.AddPair('strokeStyle',
+          TJSONNumber.Create(Ord(Path.StrokeStyle)));
+        PathJson.AddPair('visible', TJSONBool.Create(Path.Visible));
+        PathJson.AddPair('locked', TJSONBool.Create(Path.Locked));
+        PointsJson := TJSONArray.Create;
+        for PointIndex := 0 to High(Path.Points) do
+        begin
+          PointJson := TJSONObject.Create;
+          PointJson.AddPair('x', TJSONNumber.Create(Path.Points[PointIndex].X));
+          PointJson.AddPair('y', TJSONNumber.Create(Path.Points[PointIndex].Y));
+          PointsJson.AddElement(PointJson);
+        end;
+        PathJson.AddPair('points', PointsJson);
+        LayersJson.AddElement(PathJson);
         Continue;
       end;
       if not (Layer is TVectArtRectangleLayer) then
@@ -161,7 +229,11 @@ var
   Data: TVectArtRectangleData;
   Discarded: TVectArtRectangleData;
   DiscardedLine: TVectArtLineData;
+  DiscardedPath: TVectArtPathData;
+  DiscardedImage: TVectArtImageData;
   I: Integer;
+  ImageData: TArray<TVectArtImageData>;
+  ImageValue: TVectArtImageData;
   Json: TJSONValue;
   LayerJson: TJSONObject;
   LayerTypes: TArray<string>;
@@ -169,8 +241,14 @@ var
   RectangleData: TArray<TVectArtRectangleData>;
   LineData: TArray<TVectArtLineData>;
   LineValue: TVectArtLineData;
+  PathData: TArray<TVectArtPathData>;
+  PathValue: TVectArtPathData;
+  PointIndex: Integer;
+  PointJson: TJSONObject;
+  PointsJson: TJSONArray;
   Root: TJSONObject;
   SelectedIndex: Integer;
+  SourceKind: string;
   StrokeStyleValue: Integer;
   Version: Integer;
 begin
@@ -204,6 +282,8 @@ begin
       LayersJson := TJSONArray(RequireValue(Root, 'layers', TJSONArray));
       SetLength(RectangleData, LayersJson.Count);
       SetLength(LineData, LayersJson.Count);
+      SetLength(PathData, LayersJson.Count);
+      SetLength(ImageData, LayersJson.Count);
       SetLength(LayerTypes, LayersJson.Count);
       for I := 0 to LayersJson.Count - 1 do
       begin
@@ -211,6 +291,39 @@ begin
           raise EConvertError.CreateFmt('Layer %d is not a JSON object', [I]);
         LayerJson := TJSONObject(LayersJson.Items[I]);
         LayerTypes[I] := ReadString(LayerJson, 'type');
+        if LayerTypes[I] = 'image' then
+        begin
+          ImageValue.Name := ReadString(LayerJson, 'name');
+          SourceKind := ReadString(LayerJson, 'sourceKind');
+          if SourceKind = 'logo' then
+            ImageValue.SourceKind := visLogo
+          else if SourceKind = 'image' then
+            ImageValue.SourceKind := visImage
+          else
+            raise EConvertError.CreateFmt(
+              'Image layer %d has an invalid source kind', [I]);
+          ImageValue.PngData := TNetEncoding.Base64.DecodeStringToBytes(
+            ReadString(LayerJson, 'pngBase64'));
+          ImageValue.Opacity := ReadSingle(LayerJson, 'opacity');
+          ImageValue.Visible := ReadBoolean(LayerJson, 'visible');
+          ImageValue.Locked := ReadBoolean(LayerJson, 'locked');
+          PointsJson := TJSONArray(RequireValue(LayerJson, 'points',
+            TJSONArray));
+          if PointsJson.Count <> Length(ImageValue.Points) then
+            raise EConvertError.CreateFmt(
+              'Image layer %d must contain four points', [I]);
+          for PointIndex := 0 to PointsJson.Count - 1 do
+          begin
+            if not (PointsJson.Items[PointIndex] is TJSONObject) then
+              raise EConvertError.CreateFmt(
+                'Image layer %d point %d is invalid', [I, PointIndex]);
+            PointJson := TJSONObject(PointsJson.Items[PointIndex]);
+            ImageValue.Points[PointIndex] := TPointF.Create(
+              ReadSingle(PointJson, 'x'), ReadSingle(PointJson, 'y'));
+          end;
+          ImageData[I] := ImageValue;
+          Continue;
+        end;
         if LayerTypes[I] = 'line' then
         begin
           LineValue.Name := ReadString(LayerJson, 'name');
@@ -231,6 +344,42 @@ begin
           LineValue.Visible := ReadBoolean(LayerJson, 'visible');
           LineValue.Locked := ReadBoolean(LayerJson, 'locked');
           LineData[I] := LineValue;
+          Continue;
+        end;
+        if LayerTypes[I] = 'path' then
+        begin
+          PathValue.Name := ReadString(LayerJson, 'name');
+          PathValue.Closed := ReadBoolean(LayerJson, 'closed');
+          PathValue.Filled := ReadBoolean(LayerJson, 'filled');
+          PathValue.FillColor := TColor(ReadInteger(LayerJson, 'fillColor'));
+          PathValue.Opacity := ReadSingle(LayerJson, 'opacity');
+          PathValue.StrokeColor := TColor(ReadInteger(LayerJson,
+            'strokeColor'));
+          PathValue.StrokeWidth := Max(ReadSingle(LayerJson,
+            'strokeWidth'), 0.0);
+          StrokeStyleValue := ReadInteger(LayerJson, 'strokeStyle');
+          PathValue.StrokeStyle := vssSolid;
+          if InRange(StrokeStyleValue, Ord(Low(TVectArtStrokeStyle)),
+            Ord(High(TVectArtStrokeStyle))) then
+            PathValue.StrokeStyle := TVectArtStrokeStyle(StrokeStyleValue);
+          PathValue.Visible := ReadBoolean(LayerJson, 'visible');
+          PathValue.Locked := ReadBoolean(LayerJson, 'locked');
+          PointsJson := TJSONArray(RequireValue(LayerJson, 'points',
+            TJSONArray));
+          if PointsJson.Count < 2 then
+            raise EConvertError.CreateFmt('Path layer %d has too few points',
+              [I]);
+          SetLength(PathValue.Points, PointsJson.Count);
+          for PointIndex := 0 to PointsJson.Count - 1 do
+          begin
+            if not (PointsJson.Items[PointIndex] is TJSONObject) then
+              raise EConvertError.CreateFmt(
+                'Path layer %d point %d is invalid', [I, PointIndex]);
+            PointJson := TJSONObject(PointsJson.Items[PointIndex]);
+            PathValue.Points[PointIndex] := TPointF.Create(
+              ReadSingle(PointJson, 'x'), ReadSingle(PointJson, 'y'));
+          end;
+          PathData[I] := PathValue;
           Continue;
         end;
         if LayerTypes[I] <> 'rectangle' then
@@ -279,6 +428,10 @@ begin
           Document.RemoveRectangle(Document.LayerCount - 1, Discarded)
         else if Document[Document.LayerCount - 1] is TVectArtLineLayer then
           Document.RemoveLine(Document.LayerCount - 1, DiscardedLine)
+        else if Document[Document.LayerCount - 1] is TVectArtPathLayer then
+          Document.RemovePath(Document.LayerCount - 1, DiscardedPath)
+        else if Document[Document.LayerCount - 1] is TVectArtImageLayer then
+          Document.RemoveImage(Document.LayerCount - 1, DiscardedImage)
         else
           raise EInvalidOp.Create('Document contains an unsupported layer');
       Canvas.Width := CanvasWidth;
@@ -288,8 +441,12 @@ begin
       for I := 0 to High(RectangleData) do
         if LayerTypes[I] = 'rectangle' then
           Document.InsertRectangle(Document.LayerCount, RectangleData[I])
+        else if LayerTypes[I] = 'line' then
+          Document.InsertLine(Document.LayerCount, LineData[I])
+        else if LayerTypes[I] = 'image' then
+          Document.InsertImage(Document.LayerCount, ImageData[I])
         else
-          Document.InsertLine(Document.LayerCount, LineData[I]);
+          Document.InsertPath(Document.LayerCount, PathData[I]);
       Document.SelectedIndex := SelectedIndex;
       Document.Changed;
       Result := True;

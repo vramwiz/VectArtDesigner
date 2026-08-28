@@ -480,6 +480,10 @@ begin
   else if (FEditorState <> nil) and
     (FEditorState.CurrentTool = vetLine) then
     lblStatus.Caption := 'Ready   Tool: Line   Canvas: ' + CanvasSize
+  else if (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetPath) then
+    lblStatus.Caption := 'Path: click vertices, click first point to close, ' +
+      'double-click/right-click to finish   Canvas: ' + CanvasSize
   else
     lblStatus.Caption := 'Ready   Tool: Select   Canvas: ' + CanvasSize;
 end;

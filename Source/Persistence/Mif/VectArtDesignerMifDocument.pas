@@ -30,6 +30,7 @@ uses
 const
   // 旧版が埋め込んだ編集情報は読み込みだけを継続し、互換保存には出力しない。
   DOCUMENT_TEXT_KEY = 'VectArtDesigner document';
+  // WebArt Designer 7が四角形用に生成した76x1のvector IPNGをそのまま使用する。
   RECTANGLE_VECTOR_PNG_BASE64 =
     'iVBORw0KGgoAAAANSUhEUgAAAEwAAAABCAYAAAB0UUiZAAAACXBIWXMAAAsSAAALEgHS3X78' +
     'AAAAEnRFWHRvYmplY3QgdHlwZQB2ZWN0b3KhamnfAAAAPUlEQVR4nGNgYGBlYGBgZACBGA' +
@@ -287,6 +288,50 @@ begin
   InsertPngMetadataChunk(Png, 'waDA', WadaStringData(Key, Value));
 end;
 
+procedure UpdateWadaInteger(var Png: TBytes; const Key: string;
+  Value: Int32);
+var
+  ChunkLength: UInt32;
+  DataOffset: Integer;
+  ExistingKey: string;
+  NullOffset: Integer;
+  Offset: Integer;
+begin
+  if IsPng(Png) then
+  begin
+    Offset := SizeOf(PNG_SIGNATURE);
+    while Offset + 12 <= Length(Png) do
+    begin
+      ChunkLength := ReadUInt32BE(Png, Offset);
+      if (ChunkLength > UInt32(High(Integer))) or
+        (Int64(Offset) + ChunkLength + 12 > Length(Png)) then
+        Break;
+      if TEncoding.ASCII.GetString(Png, Offset + 4, 4) = 'waDA' then
+      begin
+        DataOffset := Offset + 8;
+        NullOffset := DataOffset;
+        while (NullOffset < DataOffset + Integer(ChunkLength)) and
+          (Png[NullOffset] <> 0) do
+          Inc(NullOffset);
+        if (NullOffset + 5 = DataOffset + Integer(ChunkLength)) then
+        begin
+          ExistingKey := TEncoding.ASCII.GetString(Png, DataOffset,
+            NullOffset - DataOffset);
+          if ExistingKey = Key then
+          begin
+            WriteUInt32BE(Png, NullOffset + 1, UInt32(Value));
+            WriteUInt32BE(Png, DataOffset + Integer(ChunkLength),
+              Crc32(Png, Offset + 4, Integer(ChunkLength) + 4));
+            Exit;
+          end;
+        end;
+      end;
+      Inc(Offset, Integer(ChunkLength) + 12);
+    end;
+  end;
+  AddWadaInteger(Png, Key, Value);
+end;
+
 procedure AddPhysicalDimensions(var Png: TBytes);
 var
   Data: TBytes;
@@ -499,6 +544,81 @@ begin
   AddPhysicalDimensions(Result);
 end;
 
+function CreatePathRasterPng(PathLayer: TVectArtPathLayer;
+  out PlacementBounds: TRectF): TBytes;
+var
+  Canvas: ISkCanvas;
+  DashIntervals: TArray<Single>;
+  FillPaint: ISkPaint;
+  Height: Integer;
+  I: Integer;
+  ImageInfo: TSkImageInfo;
+  Padding: Single;
+  Path: ISkPath;
+  PathBuilder: ISkPathBuilder;
+  Pixels: TArray<TVectArtRgbaPixel>;
+  RGBColor: TColor;
+  StrokePaint: ISkPaint;
+  Surface: ISkSurface;
+  Width: Integer;
+begin
+  PlacementBounds := PointsBounds(PathLayer.Points);
+  Padding := Max(PathLayer.StrokeWidth * 0.5 + 2, 2.0);
+  PlacementBounds.Inflate(Padding, Padding);
+  Width := EnsureRange(Ceil(PlacementBounds.Width), 1, 16384);
+  Height := EnsureRange(Ceil(PlacementBounds.Height), 1, 16384);
+  SetLength(Pixels, Width * Height);
+  ImageInfo := TSkImageInfo.Create(Width, Height, TSkColorType.RGBA8888,
+    TSkAlphaType.Unpremul);
+  Surface := TSkSurface.MakeRasterDirect(ImageInfo, @Pixels[0],
+    NativeUInt(Width) * SizeOf(TVectArtRgbaPixel));
+  if Surface = nil then
+    raise EWriteError.Create('Cannot create path PNG surface');
+  Canvas := Surface.Canvas;
+  Canvas.Clear(TAlphaColorRec.Null);
+  PathBuilder := TSkPathBuilder.Create;
+  PathBuilder.MoveTo(PathLayer.Points[0].X - PlacementBounds.Left,
+    PathLayer.Points[0].Y - PlacementBounds.Top);
+  for I := 1 to High(PathLayer.Points) do
+    PathBuilder.LineTo(PathLayer.Points[I].X - PlacementBounds.Left,
+      PathLayer.Points[I].Y - PlacementBounds.Top);
+  if PathLayer.Closed then
+    PathBuilder.Close;
+  Path := PathBuilder.Detach;
+  if PathLayer.Filled and PathLayer.Closed then
+  begin
+    FillPaint := TSkPaint.Create(TSkPaintStyle.Fill);
+    FillPaint.AntiAlias := True;
+    RGBColor := ColorToRGB(PathLayer.FillColor);
+    FillPaint.Color := TAlphaColor($FF000000 or
+      (Cardinal(GetRValue(RGBColor)) shl 16) or
+      (Cardinal(GetGValue(RGBColor)) shl 8) or Cardinal(GetBValue(RGBColor)));
+    Canvas.DrawPath(Path, FillPaint);
+  end;
+  if PathLayer.StrokeWidth > 0 then
+  begin
+    StrokePaint := TSkPaint.Create(TSkPaintStyle.Stroke);
+    StrokePaint.AntiAlias := True;
+    RGBColor := ColorToRGB(PathLayer.StrokeColor);
+    StrokePaint.Color := TAlphaColor($FF000000 or
+      (Cardinal(GetRValue(RGBColor)) shl 16) or
+      (Cardinal(GetGValue(RGBColor)) shl 8) or Cardinal(GetBValue(RGBColor)));
+    StrokePaint.StrokeWidth := PathLayer.StrokeWidth;
+    DashIntervals := VectArtStrokeDashIntervals(PathLayer.StrokeStyle,
+      PathLayer.StrokeWidth);
+    if Length(DashIntervals) > 0 then
+      StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0);
+    if VectArtStrokeUsesRoundCaps(PathLayer.StrokeStyle) then
+      StrokePaint.StrokeCap := TSkStrokeCap.Round
+    else
+      StrokePaint.StrokeCap := TSkStrokeCap.Butt;
+    Canvas.DrawPath(Path, StrokePaint);
+  end;
+  Surface.Flush;
+  Result := EncodeRgba(@Pixels[0], Width, Height);
+  AddPhysicalDimensions(Result);
+end;
+
 procedure AddImagePlacementMetadata(var Png: TBytes;
   const Bounds: TRectF; Alpha: Integer; Hidden: Boolean); overload;
 begin
@@ -512,6 +632,22 @@ begin
   AddWadaInteger(Png, 'image position4 y', Round(Bounds.Bottom));
   AddWadaInteger(Png, 'image alpha', EnsureRange(Alpha, 0, 255));
   AddWadaInteger(Png, 'image hidden', Ord(Hidden));
+end;
+
+procedure UpdateImagePlacementMetadata(var Png: TBytes;
+  const Points: TVectArtImagePoints; Alpha: Integer; Hidden: Boolean);
+var
+  I: Integer;
+begin
+  for I := 0 to High(Points) do
+  begin
+    UpdateWadaInteger(Png, Format('image position%d x', [I + 1]),
+      Round(Points[I].X));
+    UpdateWadaInteger(Png, Format('image position%d y', [I + 1]),
+      Round(Points[I].Y));
+  end;
+  UpdateWadaInteger(Png, 'image alpha', EnsureRange(Alpha, 0, 255));
+  UpdateWadaInteger(Png, 'image hidden', Ord(Hidden));
 end;
 
 procedure AddImagePlacementMetadata(var Png: TBytes;
@@ -663,6 +799,105 @@ function CreateLineVectorPng: TBytes;
 begin
   Result := TNetEncoding.Base64.DecodeStringToBytes(LINE_VECTOR_PNG_BASE64);
   Result := RemovePngChunk(Result, 'sBIT');
+end;
+
+function CreatePathVectorPng(PathLayer: TVectArtPathLayer): TBytes;
+const
+  RECORD_SIZE = 60;
+var
+  Command: UInt32;
+  Count: UInt32;
+  I: Integer;
+  Offset: Integer;
+  Pixels: TArray<TVectArtRgbaPixel>;
+  Raw: TBytes;
+  X: Double;
+  Y: Double;
+begin
+  Count := Length(PathLayer.Points) + Ord(PathLayer.Closed);
+  SetLength(Raw, 4 + Integer(Count) * RECORD_SIZE);
+  Move(Count, Raw[0], SizeOf(Count));
+  for I := 0 to High(PathLayer.Points) do
+  begin
+    Offset := 4 + I * RECORD_SIZE;
+    if I = 0 then
+      Command := 1
+    else
+      Command := 2;
+    Move(Command, Raw[Offset], SizeOf(Command));
+    X := PathLayer.Points[I].X;
+    Y := PathLayer.Points[I].Y;
+    Move(X, Raw[Offset + 4], SizeOf(X));
+    Move(Y, Raw[Offset + 12], SizeOf(Y));
+  end;
+  if PathLayer.Closed then
+  begin
+    Offset := 4 + Length(PathLayer.Points) * RECORD_SIZE;
+    Command := 3;
+    Move(Command, Raw[Offset], SizeOf(Command));
+  end;
+  SetLength(Pixels, Length(Raw) div 4);
+  for I := 0 to High(Pixels) do
+  begin
+    Pixels[I].R := Raw[I * 4 + 2];
+    Pixels[I].G := Raw[I * 4 + 1];
+    Pixels[I].B := Raw[I * 4];
+    Pixels[I].A := Raw[I * 4 + 3];
+  end;
+  Result := EncodeRgba(@Pixels[0], Length(Pixels), 1);
+  AddPhysicalDimensions(Result);
+  AddText(Result, 'object type', 'vector');
+end;
+
+function CreatePathImagePng(PathLayer: TVectArtPathLayer): TBytes;
+var
+  Bounds: TRectF;
+  OriginalBounds: TRectF;
+begin
+  Result := CreatePathRasterPng(PathLayer, Bounds);
+  AddText(Result, 'object type', 'image');
+  AddWadaString(Result, 'object subtype', 'vector');
+  AddImagePlacementMetadata(Result, Bounds,
+    Round(PathLayer.Opacity * 255), not PathLayer.Visible);
+  AddWadaInteger(Result, 'vector closed', Ord(PathLayer.Closed));
+  AddWadaInteger(Result, 'vector quality', 1);
+  AddWadaInteger(Result, 'vector element type', 6);
+  AddWadaInteger(Result, 'vector stroke style', Ord(PathLayer.StrokeStyle));
+  AddWadaInteger(Result, 'vector stroke cap', 0);
+  AddWadaInteger(Result, 'vector stroke join', 0);
+  AddWadaInteger(Result, 'vector start stroke marker', 0);
+  AddWadaInteger(Result, 'vector end stroke marker', 0);
+  AddWadaInteger(Result, 'vector start marker size', 4);
+  AddWadaInteger(Result, 'vector end marker size', 4);
+  AddWadaDouble(Result, 'vector stroke width', PathLayer.StrokeWidth);
+  AddWadaDouble(Result, 'vector matrix a', 1.0);
+  AddWadaDouble(Result, 'vector matrix b', 0.0);
+  AddWadaDouble(Result, 'vector matrix c', 0.0);
+  AddWadaDouble(Result, 'vector matrix d', 1.0);
+  AddWadaDouble(Result, 'vector matrix e', 0.0);
+  AddWadaDouble(Result, 'vector matrix f', 0.0);
+  OriginalBounds := PointsBounds(PathLayer.Points);
+  AddWadaInteger(Result, 'vector original position1 x',
+    Floor(OriginalBounds.Left));
+  AddWadaInteger(Result, 'vector original position1 y',
+    Floor(OriginalBounds.Top));
+  AddWadaInteger(Result, 'vector original position2 x',
+    Ceil(OriginalBounds.Right));
+  AddWadaInteger(Result, 'vector original position2 y',
+    Floor(OriginalBounds.Top));
+  AddWadaInteger(Result, 'vector original position3 x',
+    Ceil(OriginalBounds.Right));
+  AddWadaInteger(Result, 'vector original position3 y',
+    Ceil(OriginalBounds.Bottom));
+  AddWadaInteger(Result, 'vector original position4 x',
+    Floor(OriginalBounds.Left));
+  AddWadaInteger(Result, 'vector original position4 y',
+    Ceil(OriginalBounds.Bottom));
+  AddWadaInteger(Result, 'vector enable stroke texture',
+    Ord(PathLayer.StrokeWidth > 0));
+  AddWadaInteger(Result, 'vector enable fill texture',
+    Ord(PathLayer.Filled and PathLayer.Closed));
+  AddWadaString(Result, 'vector effect object type', 'none');
 end;
 
 function CreateLineImagePng(Line: TVectArtLineLayer): TBytes;
@@ -1045,11 +1280,14 @@ var
   Discarded: TVectArtRectangleData;
   DiscardedLine: TVectArtLineData;
   DiscardedPath: TVectArtPathData;
+  DiscardedImage: TVectArtImageData;
   ElementType: Int32;
   FillColor: Int32;
   FillEnabled: Int32;
   Hidden: Int32;
   I: Integer;
+  ImageData: TVectArtImageData;
+  Images: TList<TVectArtImageData>;
   Left: Int32;
   LineData: TVectArtLineData;
   Lines: TList<TVectArtLineData>;
@@ -1099,18 +1337,18 @@ begin
   Rectangles := TList<TVectArtRectangleData>.Create;
   Lines := TList<TVectArtLineData>.Create;
   Paths := TList<TVectArtPathData>.Create;
+  Images := TList<TVectArtImageData>.Create;
   LayerOrder := TList<Integer>.Create;
   try
     for I := 2 to Container.ChunkCount - 2 do
     begin
       if (Container[I].Tag <> 'IPNG') or
         not TryReadPngString(Container[I].Data, 'tEXt', 'object type',
-          ObjectType) or not SameText(ObjectType, 'image') or
-        not TryReadPngString(Container[I].Data, 'waDA', 'object subtype',
-          ObjectSubtype) or not SameText(ObjectSubtype, 'vector') or
-        not TryReadPngInteger(Container[I].Data, 'vector element type',
-          ElementType) or not (ElementType in [4, 6]) then
+          ObjectType) then
         Continue;
+      ObjectSubtype := '';
+      TryReadPngString(Container[I].Data, 'waDA', 'object subtype',
+        ObjectSubtype);
       if not TryReadPngInteger(Container[I].Data, 'image position1 x', Left) or
         not TryReadPngInteger(Container[I].Data, 'image position1 y', Top) or
         not TryReadPngInteger(Container[I].Data, 'image position2 x', Position2X) or
@@ -1120,6 +1358,41 @@ begin
         not TryReadPngInteger(Container[I].Data, 'image position4 x', Position4X) or
         not TryReadPngInteger(Container[I].Data, 'image position4 y', Position4Y)
       then
+        Continue;
+      if SameText(ObjectType, 'logo') or
+        (SameText(ObjectType, 'image') and
+          not SameText(ObjectSubtype, 'vector')) then
+      begin
+        Alpha := 255;
+        Hidden := 0;
+        TryReadPngInteger(Container[I].Data, 'image alpha', Alpha);
+        TryReadPngInteger(Container[I].Data, 'image hidden', Hidden);
+        if SameText(ObjectType, 'logo') then
+        begin
+          ImageData.Name := Format('Logo %d', [Images.Count + 1]);
+          ImageData.SourceKind := visLogo;
+        end
+        else
+        begin
+          ImageData.Name := Format('Image %d', [Images.Count + 1]);
+          ImageData.SourceKind := visImage;
+        end;
+        ImageData.PngData := Copy(Container[I].Data);
+        ImageData.Points[0] := TPointF.Create(Left, Top);
+        ImageData.Points[1] := TPointF.Create(Position2X, Position2Y);
+        ImageData.Points[2] := TPointF.Create(Right, Bottom);
+        ImageData.Points[3] := TPointF.Create(Position4X, Position4Y);
+        ImageData.Opacity := EnsureRange(Alpha / 255.0, 0.0, 1.0);
+        ImageData.Visible := Hidden = 0;
+        ImageData.Locked := False;
+        Images.Add(ImageData);
+        LayerOrder.Add(-(2000000 + Images.Count));
+        Continue;
+      end;
+      if not SameText(ObjectType, 'image') or
+        not SameText(ObjectSubtype, 'vector') or
+        not TryReadPngInteger(Container[I].Data, 'vector element type',
+          ElementType) or not (ElementType in [4, 6]) then
         Continue;
       FillColor := ColorToRGB(clWhite);
       if (I + 1 < Container.ChunkCount) and
@@ -1245,15 +1518,19 @@ begin
         Continue;
       end;
       Data.Name := Format('Rectangle %d', [Rectangles.Count + 1]);
-      Data.Bounds := TRectF.Create(
-        (Left + Position2X + Right + Position4X) * 0.25 -
-          (Hypot(Position2X - Left, Position2Y - Top) + 1) * 0.5,
-        (Top + Position2Y + Bottom + Position4Y) * 0.25 -
-          (Hypot(Position4X - Left, Position4Y - Top) + 1) * 0.5,
-        (Left + Position2X + Right + Position4X) * 0.25 +
-          (Hypot(Position2X - Left, Position2Y - Top) + 1) * 0.5,
-        (Top + Position2Y + Bottom + Position4Y) * 0.25 +
-          (Hypot(Position4X - Left, Position4Y - Top) + 1) * 0.5);
+      if (Position2Y = Top) and (Position4X = Left) then
+        Data.Bounds := TRectF.Create(Min(Left, Right), Min(Top, Bottom),
+          Max(Left, Right) + 1, Max(Top, Bottom) + 1)
+      else
+        Data.Bounds := TRectF.Create(
+          (Left + Position2X + Right + Position4X) * 0.25 -
+            (Hypot(Position2X - Left, Position2Y - Top) + 1) * 0.5,
+          (Top + Position2Y + Bottom + Position4Y) * 0.25 -
+            (Hypot(Position4X - Left, Position4Y - Top) + 1) * 0.5,
+          (Left + Position2X + Right + Position4X) * 0.25 +
+            (Hypot(Position2X - Left, Position2Y - Top) + 1) * 0.5,
+          (Top + Position2Y + Bottom + Position4Y) * 0.25 +
+            (Hypot(Position4X - Left, Position4Y - Top) + 1) * 0.5);
       Data.FillColor := TColor(FillColor);
       Data.Opacity := EnsureRange(Alpha / 255.0, 0.0, 1.0);
       Data.RotationDegrees := RadToDeg(ArcTan2(Position2Y - Top,
@@ -1281,6 +1558,8 @@ begin
         Document.RemoveLine(Document.LayerCount - 1, DiscardedLine)
       else if Document[Document.LayerCount - 1] is TVectArtPathLayer then
         Document.RemovePath(Document.LayerCount - 1, DiscardedPath)
+      else if Document[Document.LayerCount - 1] is TVectArtImageLayer then
+        Document.RemoveImage(Document.LayerCount - 1, DiscardedImage)
       else
         raise EInvalidOp.Create('Document contains an unsupported layer');
     Document.CanvasLayer.Width := CanvasWidth;
@@ -1290,6 +1569,9 @@ begin
     for I in LayerOrder do
       if I > 0 then
         Document.InsertRectangle(Document.LayerCount, Rectangles[I - 1])
+      else if I <= -2000000 then
+        Document.InsertImage(Document.LayerCount,
+          Images[-I - 2000001])
       else if I <= -1000000 then
         Document.InsertPath(Document.LayerCount,
           Paths[-I - 1000001])
@@ -1302,6 +1584,7 @@ begin
     LayerOrder.Free;
     Lines.Free;
     Paths.Free;
+    Images.Free;
     Rectangles.Free;
   end;
 end;
@@ -1346,9 +1629,12 @@ var
   Canvas: TVectArtCanvasLayer;
   Header: TBytes;
   I: Integer;
+  ImageLayer: TVectArtImageLayer;
+  ImagePng: TBytes;
   Layer: TVectArtLayer;
   Line: TVectArtLineLayer;
-  ObjectCount: Integer;
+  ContentChunkCount: Integer;
+  PathLayer: TVectArtPathLayer;
   Rectangle: TVectArtRectangleLayer;
   RectangleIndex: Integer;
   RectangleSource: TRectangleMifSource;
@@ -1368,16 +1654,20 @@ begin
         raise EInvalidOp.Create('Document canvas is missing');
       CollectRectangleSources(SourceContainer, RectangleSources);
       Candidate := TVectArtMifContainer.Create;
-      ObjectCount := 0;
+      ContentChunkCount := 0;
       for I := 1 to Document.LayerCount - 1 do
       begin
-        if (Document[I] is TVectArtRectangleLayer) or
-          (Document[I] is TVectArtLineLayer) then
-          Inc(ObjectCount);
+        if Document[I] is TVectArtImageLayer then
+          Inc(ContentChunkCount, 2)
+        else if (Document[I] is TVectArtRectangleLayer) or
+          (Document[I] is TVectArtLineLayer) or
+          ((Document[I] is TVectArtPathLayer) and
+          (Length(TVectArtPathLayer(Document[I]).Points) >= 2)) then
+          Inc(ContentChunkCount, 4);
       end;
       SetLength(Header, 4);
       // MHDRはヘッダーと終端を除く外側チャンク数を保持する。
-      WriteUInt32BE(Header, 0, 2 + ObjectCount * 4);
+      WriteUInt32BE(Header, 0, 2 + ContentChunkCount);
       Candidate.AddChunk('MHDR', Header);
       Candidate.AddChunk('IPNG', CreateCompositePng(Document));
       Candidate.AddChunk('IPNG', CreateTexturePng(Canvas.BackgroundColor));
@@ -1385,6 +1675,16 @@ begin
       for I := 1 to Document.LayerCount - 1 do
       begin
         Layer := Document[I];
+        if Layer is TVectArtImageLayer then
+        begin
+          ImageLayer := TVectArtImageLayer(Layer);
+          ImagePng := Copy(ImageLayer.PngData);
+          UpdateImagePlacementMetadata(ImagePng, ImageLayer.Points,
+            Round(ImageLayer.Opacity * 255), not ImageLayer.Visible);
+          Candidate.AddChunk('IPNG', ImagePng);
+          Candidate.AddChunk('IPNG', CreateTexturePng(clWhite));
+          Continue;
+        end;
         if Layer is TVectArtLineLayer then
         begin
           Line := TVectArtLineLayer(Layer);
@@ -1392,6 +1692,17 @@ begin
           Candidate.AddChunk('IPNG', CreateTexturePng(clWhite));
           Candidate.AddChunk('IPNG', CreateLineVectorPng);
           Candidate.AddChunk('IPNG', CreateTexturePng(Line.StrokeColor));
+          Continue;
+        end;
+        if Layer is TVectArtPathLayer then
+        begin
+          PathLayer := TVectArtPathLayer(Layer);
+          if Length(PathLayer.Points) < 2 then
+            Continue;
+          Candidate.AddChunk('IPNG', CreatePathImagePng(PathLayer));
+          Candidate.AddChunk('IPNG', CreateTexturePng(PathLayer.FillColor));
+          Candidate.AddChunk('IPNG', CreatePathVectorPng(PathLayer));
+          Candidate.AddChunk('IPNG', CreateTexturePng(PathLayer.StrokeColor));
           Continue;
         end;
         if not (Layer is TVectArtRectangleLayer) then

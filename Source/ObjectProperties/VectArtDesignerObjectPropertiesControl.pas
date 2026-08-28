@@ -47,6 +47,8 @@ type
     procedure ClearEditValue(Edit: TEdit);
     procedure EditExit(Sender: TObject);
     procedure EditKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    function GetSelectedFillIndices: TArray<Integer>;
+    function GetSelectedOpacityIndices: TArray<Integer>;
     function GetSelectedRectangleIndices: TArray<Integer>;
     function GetSelectedStrokeIndices: TArray<Integer>;
     function SelectedLayersHaveLock: Boolean;
@@ -72,7 +74,7 @@ implementation
 
 uses
   System.Generics.Collections, System.Math, System.SysUtils, Winapi.Windows,
-  Vcl.Graphics;
+  Vcl.Graphics, VectArtDesignerGeometry;
 
 const
   COLOR_BACKGROUND = TColor($00212121);
@@ -205,6 +207,7 @@ var
   LayerIndices: TArray<Integer>;
   NewColor: TColor;
   OldColor: TColor;
+  PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
   Red: Integer;
   Value: Integer;
@@ -237,6 +240,14 @@ begin
         TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle);
       RectangleLayer := nil;
     end
+    else if FDocument[LayerIndex] is TVectArtPathLayer then
+    begin
+      PathLayer := TVectArtPathLayer(FDocument[LayerIndex]);
+      OldColor := PathLayer.StrokeColor;
+      FDocument.SetPathStroke(LayerIndex, NewColor, PathLayer.StrokeWidth,
+        PathLayer.StrokeStyle);
+      RectangleLayer := nil;
+    end
     else
     begin
       RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
@@ -251,6 +262,12 @@ begin
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle, NewColor,
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth,
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle))
+      else if FDocument[LayerIndex] is TVectArtPathLayer then
+        Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
+          OldColor, TVectArtPathLayer(FDocument[LayerIndex]).StrokeWidth,
+          TVectArtPathLayer(FDocument[LayerIndex]).StrokeStyle, NewColor,
+          TVectArtPathLayer(FDocument[LayerIndex]).StrokeWidth,
+          TVectArtPathLayer(FDocument[LayerIndex]).StrokeStyle))
       else
         Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
           OldColor, RectangleLayer.StrokeWidth, RectangleLayer.StrokeStyle,
@@ -272,6 +289,7 @@ var
   LayerIndices: TArray<Integer>;
   NewStyle: TVectArtStrokeStyle;
   OldStyle: TVectArtStrokeStyle;
+  PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
 begin
   if FUpdating or (FDocument = nil) or (FDocument.SelectionCount = 0) or
@@ -296,6 +314,14 @@ begin
         TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth, NewStyle);
       RectangleLayer := nil;
     end
+    else if FDocument[LayerIndex] is TVectArtPathLayer then
+    begin
+      PathLayer := TVectArtPathLayer(FDocument[LayerIndex]);
+      OldStyle := PathLayer.StrokeStyle;
+      FDocument.SetPathStroke(LayerIndex, PathLayer.StrokeColor,
+        PathLayer.StrokeWidth, NewStyle);
+      RectangleLayer := nil;
+    end
     else
     begin
       RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
@@ -310,6 +336,12 @@ begin
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth, OldStyle,
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor,
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth, NewStyle))
+      else if FDocument[LayerIndex] is TVectArtPathLayer then
+        Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
+          TVectArtPathLayer(FDocument[LayerIndex]).StrokeColor,
+          TVectArtPathLayer(FDocument[LayerIndex]).StrokeWidth, OldStyle,
+          TVectArtPathLayer(FDocument[LayerIndex]).StrokeColor,
+          TVectArtPathLayer(FDocument[LayerIndex]).StrokeWidth, NewStyle))
       else
         Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
           RectangleLayer.StrokeColor, RectangleLayer.StrokeWidth, OldStyle,
@@ -331,6 +363,7 @@ var
   LayerIndices: TArray<Integer>;
   NewWidth: Double;
   OldWidth: Single;
+  PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
 begin
   if FUpdating or (FDocument = nil) or (FDocument.SelectionCount = 0) or
@@ -357,6 +390,14 @@ begin
         TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle);
       RectangleLayer := nil;
     end
+    else if FDocument[LayerIndex] is TVectArtPathLayer then
+    begin
+      PathLayer := TVectArtPathLayer(FDocument[LayerIndex]);
+      OldWidth := PathLayer.StrokeWidth;
+      FDocument.SetPathStroke(LayerIndex, PathLayer.StrokeColor, NewWidth,
+        PathLayer.StrokeStyle);
+      RectangleLayer := nil;
+    end
     else
     begin
       RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
@@ -371,6 +412,12 @@ begin
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle,
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor, NewWidth,
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle))
+      else if FDocument[LayerIndex] is TVectArtPathLayer then
+        Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
+          TVectArtPathLayer(FDocument[LayerIndex]).StrokeColor, OldWidth,
+          TVectArtPathLayer(FDocument[LayerIndex]).StrokeStyle,
+          TVectArtPathLayer(FDocument[LayerIndex]).StrokeColor, NewWidth,
+          TVectArtPathLayer(FDocument[LayerIndex]).StrokeStyle))
       else
         Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
           RectangleLayer.StrokeColor, OldWidth, RectangleLayer.StrokeStyle,
@@ -403,6 +450,7 @@ var
   Red: Integer;
   NewColor: TColor;
   OldColor: TColor;
+  PathLayer: TVectArtPathLayer;
   Value: Integer;
 begin
   if FUpdating or (FDocument = nil) or
@@ -418,15 +466,24 @@ begin
   Green := (Value shr 8) and $FF;
   Blue := Value and $FF;
   NewColor := RGB(Red, Green, Blue);
-  LayerIndices := GetSelectedRectangleIndices;
+  LayerIndices := GetSelectedFillIndices;
   Command := nil;
   if FEditHistory <> nil then
     Command := TVectArtCompoundCommand.Create;
   for I := 0 to High(LayerIndices) do
   begin
     LayerIndex := LayerIndices[I];
-    OldColor := TVectArtRectangleLayer(FDocument[LayerIndex]).FillColor;
-    FDocument.SetRectangleFillColor(LayerIndex, NewColor);
+    if FDocument[LayerIndex] is TVectArtPathLayer then
+    begin
+      PathLayer := TVectArtPathLayer(FDocument[LayerIndex]);
+      OldColor := PathLayer.FillColor;
+      FDocument.SetPathFill(LayerIndex, NewColor, PathLayer.Filled);
+    end
+    else
+    begin
+      OldColor := TVectArtRectangleLayer(FDocument[LayerIndex]).FillColor;
+      FDocument.SetRectangleFillColor(LayerIndex, NewColor);
+    end;
     if (Command <> nil) and (OldColor <> NewColor) then
       Command.Add(TVectArtFillColorCommand.Create(FDocument, LayerIndex,
         OldColor, NewColor));
@@ -446,18 +503,26 @@ var
   I: Integer;
   LayerIndices: TArray<Integer>;
   NewBounds: TArray<TRectF>;
+  NewImagePoints: TVectArtImagePoints;
   NewSelectionBounds: TRectF;
   OldBounds: TArray<TRectF>;
+  OldPoints: TArray<TPointF>;
+  OldImagePoints: TVectArtImagePoints;
   OldSelectionBounds: TRectF;
+  PathLayer: TVectArtPathLayer;
+  ImageLayer: TVectArtImageLayer;
+  PathPoints: TArray<TPointF>;
+  PointIndex: Integer;
   ScaleX: Single;
   ScaleY: Single;
   WidthValue: Double;
+  ULength: Single;
+  VLength: Single;
   XValue: Double;
   YValue: Double;
 begin
   if FUpdating or (FDocument = nil) or
-    (FDocument.SelectionCount = 0) or SelectedLayersHaveLock or
-    not SelectedBounds(OldSelectionBounds) then
+    (FDocument.SelectionCount = 0) or SelectedLayersHaveLock then
     Exit;
   if not TryStrToFloat(Trim(FXEdit.Text), XValue) or
     not TryStrToFloat(Trim(FYEdit.Text), YValue) or
@@ -469,6 +534,65 @@ begin
   end;
   WidthValue := Max(WidthValue, MIN_OBJECT_SIZE);
   HeightValue := Max(HeightValue, MIN_OBJECT_SIZE);
+  if (FDocument.SelectionCount = 1) and
+    (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer) then
+  begin
+    ImageLayer := TVectArtImageLayer(FDocument[FDocument.SelectedIndex]);
+    OldImagePoints := ImageLayer.Points;
+    ULength := Hypot(OldImagePoints[1].X - OldImagePoints[0].X,
+      OldImagePoints[1].Y - OldImagePoints[0].Y);
+    VLength := Hypot(OldImagePoints[3].X - OldImagePoints[0].X,
+      OldImagePoints[3].Y - OldImagePoints[0].Y);
+    if (ULength <= 0) or (VLength <= 0) then
+    begin
+      RefreshFromDocument;
+      Exit;
+    end;
+    NewImagePoints[0] := TPointF.Create(XValue, YValue);
+    NewImagePoints[1] := TPointF.Create(XValue +
+      (OldImagePoints[1].X - OldImagePoints[0].X) / ULength * WidthValue,
+      YValue + (OldImagePoints[1].Y - OldImagePoints[0].Y) / ULength *
+        WidthValue);
+    NewImagePoints[3] := TPointF.Create(XValue +
+      (OldImagePoints[3].X - OldImagePoints[0].X) / VLength * HeightValue,
+      YValue + (OldImagePoints[3].Y - OldImagePoints[0].Y) / VLength *
+        HeightValue);
+    NewImagePoints[2] := TPointF.Create(NewImagePoints[1].X +
+      NewImagePoints[3].X - NewImagePoints[0].X,
+      NewImagePoints[1].Y + NewImagePoints[3].Y - NewImagePoints[0].Y);
+    FDocument.SetImagePoints(FDocument.SelectedIndex, NewImagePoints);
+    if FEditHistory <> nil then
+      FEditHistory.AddApplied(TVectArtImagePointsCommand.Create(FDocument,
+        FDocument.SelectedIndex, OldImagePoints, NewImagePoints));
+    Exit;
+  end;
+  if (FDocument.SelectionCount = 1) and
+    (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
+  begin
+    PathLayer := TVectArtPathLayer(FDocument[FDocument.SelectedIndex]);
+    OldPoints := Copy(PathLayer.Points);
+    OldSelectionBounds := PointsBounds(OldPoints);
+    if SameValue(OldSelectionBounds.Width, 0.0) or
+      SameValue(OldSelectionBounds.Height, 0.0) then
+    begin
+      RefreshFromDocument;
+      Exit;
+    end;
+    ScaleX := WidthValue / OldSelectionBounds.Width;
+    ScaleY := HeightValue / OldSelectionBounds.Height;
+    SetLength(PathPoints, Length(OldPoints));
+    for PointIndex := 0 to High(OldPoints) do
+      PathPoints[PointIndex] := TPointF.Create(
+        XValue + (OldPoints[PointIndex].X - OldSelectionBounds.Left) * ScaleX,
+        YValue + (OldPoints[PointIndex].Y - OldSelectionBounds.Top) * ScaleY);
+    FDocument.SetPathPoints(FDocument.SelectedIndex, PathPoints);
+    if FEditHistory <> nil then
+      FEditHistory.AddApplied(TVectArtPathPointsCommand.Create(FDocument,
+        FDocument.SelectedIndex, OldPoints, PathPoints));
+    Exit;
+  end;
+  if not SelectedBounds(OldSelectionBounds) then
+    Exit;
   NewSelectionBounds := TRectF.Create(XValue, YValue, XValue + WidthValue,
     YValue + HeightValue);
   ScaleX := NewSelectionBounds.Width / OldSelectionBounds.Width;
@@ -500,6 +624,48 @@ begin
       LayerIndices, OldBounds, NewBounds));
 end;
 
+function TVectArtObjectPropertiesControl.GetSelectedFillIndices:
+  TArray<Integer>;
+var
+  I: Integer;
+  Indices: TList<Integer>;
+begin
+  Indices := TList<Integer>.Create;
+  try
+    if FDocument <> nil then
+      for I := 1 to FDocument.LayerCount - 1 do
+        if FDocument.IsLayerSelected(I) and
+          ((FDocument[I] is TVectArtRectangleLayer) or
+           (FDocument[I] is TVectArtPathLayer)) then
+          Indices.Add(I);
+    Result := Indices.ToArray;
+  finally
+    Indices.Free;
+  end;
+end;
+
+function TVectArtObjectPropertiesControl.GetSelectedOpacityIndices:
+  TArray<Integer>;
+var
+  I: Integer;
+  Indices: TList<Integer>;
+begin
+  Indices := TList<Integer>.Create;
+  try
+    if FDocument <> nil then
+      for I := 1 to FDocument.LayerCount - 1 do
+        if FDocument.IsLayerSelected(I) and
+          ((FDocument[I] is TVectArtRectangleLayer) or
+           (FDocument[I] is TVectArtLineLayer) or
+           (FDocument[I] is TVectArtPathLayer) or
+           (FDocument[I] is TVectArtImageLayer)) then
+          Indices.Add(I);
+    Result := Indices.ToArray;
+  finally
+    Indices.Free;
+  end;
+end;
+
 procedure TVectArtObjectPropertiesControl.ApplyOpacity;
 var
   Command: TVectArtCompoundCommand;
@@ -518,7 +684,7 @@ begin
     Exit;
   end;
   NewValue := EnsureRange(NewValue, 0.0, 100.0) / 100.0;
-  LayerIndices := GetSelectedRectangleIndices;
+  LayerIndices := GetSelectedOpacityIndices;
   Command := nil;
   if FEditHistory <> nil then
     Command := TVectArtCompoundCommand.Create;
@@ -632,7 +798,8 @@ begin
       for I := 1 to FDocument.LayerCount - 1 do
         if FDocument.IsLayerSelected(I) and
           ((FDocument[I] is TVectArtRectangleLayer) or
-           (FDocument[I] is TVectArtLineLayer)) then
+           (FDocument[I] is TVectArtLineLayer) or
+           (FDocument[I] is TVectArtPathLayer)) then
           Indices.Add(I);
     Result := Indices.ToArray;
   finally
@@ -714,9 +881,11 @@ var
   CommonStrokeStyle: Boolean;
   CommonStrokeWidth: Boolean;
   I: Integer;
+  ImageLayer: TVectArtImageLayer;
   LayerIndices: TArray<Integer>;
   LineLayer: TVectArtLineLayer;
   OpacityValue: Single;
+  PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
   StrokeColorValue: TColor;
   StrokeStyleValue: TVectArtStrokeStyle;
@@ -747,6 +916,69 @@ begin
         Ord(RectangleLayer.StrokeStyle));
       SetEditorsEnabled(True);
       if RectangleLayer.Locked then
+      begin
+        FXEdit.Enabled := False;
+        FYEdit.Enabled := False;
+        FWidthEdit.Enabled := False;
+        FHeightEdit.Enabled := False;
+        FColorEdit.Enabled := False;
+        FStrokeColorEdit.Enabled := False;
+        FStrokeWidthEdit.Enabled := False;
+        FStrokeStyleCombo.Enabled := False;
+      end;
+    end
+    else if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
+      (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer) then
+    begin
+      ImageLayer := TVectArtImageLayer(FDocument[FDocument.SelectedIndex]);
+      FXEdit.Text := FormatFloat('0.##', ImageLayer.Points[0].X);
+      FYEdit.Text := FormatFloat('0.##', ImageLayer.Points[0].Y);
+      FWidthEdit.Text := FormatFloat('0.##', Hypot(
+        ImageLayer.Points[1].X - ImageLayer.Points[0].X,
+        ImageLayer.Points[1].Y - ImageLayer.Points[0].Y));
+      FHeightEdit.Text := FormatFloat('0.##', Hypot(
+        ImageLayer.Points[3].X - ImageLayer.Points[0].X,
+        ImageLayer.Points[3].Y - ImageLayer.Points[0].Y));
+      ClearEditValue(FColorEdit);
+      ClearEditValue(FStrokeColorEdit);
+      ClearEditValue(FStrokeWidthEdit);
+      FStrokeStyleCombo.SetPendingItemIndex(-1);
+      FOpacityEdit.Text := FormatFloat('0.##', ImageLayer.Opacity * 100);
+      SetEditorsEnabled(True);
+      FColorEdit.Enabled := False;
+      FStrokeColorEdit.Enabled := False;
+      FStrokeWidthEdit.Enabled := False;
+      FStrokeStyleCombo.Enabled := False;
+      if ImageLayer.Locked then
+      begin
+        FXEdit.Enabled := False;
+        FYEdit.Enabled := False;
+        FWidthEdit.Enabled := False;
+        FHeightEdit.Enabled := False;
+        FOpacityEdit.Enabled := False;
+      end;
+    end
+    else if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
+      (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
+    begin
+      PathLayer := TVectArtPathLayer(FDocument[FDocument.SelectedIndex]);
+      Bounds := PointsBounds(PathLayer.Points);
+      FXEdit.Text := FormatFloat('0.##', Bounds.Left);
+      FYEdit.Text := FormatFloat('0.##', Bounds.Top);
+      FWidthEdit.Text := FormatFloat('0.##', Bounds.Width);
+      FHeightEdit.Text := FormatFloat('0.##', Bounds.Height);
+      ColorValue := ColorToRGB(PathLayer.FillColor);
+      FColorEdit.Text := Format('#%.2x%.2x%.2x', [GetRValue(ColorValue),
+        GetGValue(ColorValue), GetBValue(ColorValue)]);
+      FOpacityEdit.Text := FormatFloat('0.##', PathLayer.Opacity * 100);
+      StrokeColorValue := ColorToRGB(PathLayer.StrokeColor);
+      FStrokeColorEdit.Text := Format('#%.2x%.2x%.2x',
+        [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
+         GetBValue(StrokeColorValue)]);
+      FStrokeWidthEdit.Text := FormatFloat('0.##', PathLayer.StrokeWidth);
+      FStrokeStyleCombo.SetPendingItemIndex(Ord(PathLayer.StrokeStyle));
+      SetEditorsEnabled(True);
+      if PathLayer.Locked then
       begin
         FXEdit.Enabled := False;
         FYEdit.Enabled := False;

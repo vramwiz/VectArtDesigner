@@ -135,6 +135,7 @@ var
   Command: TVectArtCompoundCommand;
   Data: TVectArtRectangleData;
   LineData: TVectArtLineData;
+  ImageData: TVectArtImageData;
   PathData: TVectArtPathData;
   I: Integer;
   SelectedIndices: TArray<Integer>;
@@ -180,6 +181,16 @@ begin
           if Command <> nil then
             Command.Add(TVectArtDeletePathCommand.Create(FDocument, I,
               PathData, BeforeSelection, AfterSelection));
+        end;
+      end
+      else if FDocument[I] is TVectArtImageLayer then
+      begin
+        if FDocument.RemoveImage(I, ImageData) then
+        begin
+          AfterSelection := FDocument.GetSelectedLayerIndices;
+          if Command <> nil then
+            Command.Add(TVectArtDeleteImageCommand.Create(FDocument, I,
+              ImageData, BeforeSelection, AfterSelection));
         end;
       end;
     end;
@@ -281,7 +292,8 @@ begin
       ((I = 0) or FDocument[I].Locked or
        not ((FDocument[I] is TVectArtRectangleLayer) or
          (FDocument[I] is TVectArtLineLayer) or
-         (FDocument[I] is TVectArtPathLayer))) then
+         (FDocument[I] is TVectArtPathLayer) or
+         (FDocument[I] is TVectArtImageLayer))) then
       Exit(False);
 end;
 

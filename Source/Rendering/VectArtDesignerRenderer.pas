@@ -35,8 +35,10 @@ type
   end;
 
 // Canvas背景を含めず、図形だけを透明RGBA8へ描画する。
+// MinimumStrokeWidthは編集補助用の論理座標幅で、0ならDocumentの線幅を変更しない。
 procedure RenderVectArtDocument(Document: TVectArtDocument;
-  Target: TVectArtRenderBuffer; Width, Height: Integer);
+  Target: TVectArtRenderBuffer; Width, Height: Integer;
+  MinimumStrokeWidth: Single = 0.0);
 // ストレートアルファRGBA8同士をSource-overで合成する。
 procedure CompositeVectArtRgba(const Source: TVectArtRenderBuffer;
   Destination: PVectArtRgbaPixel; Width, Height: Integer);
@@ -104,7 +106,8 @@ begin
 end;
 
 procedure RenderVectArtDocument(Document: TVectArtDocument;
-  Target: TVectArtRenderBuffer; Width, Height: Integer);
+  Target: TVectArtRenderBuffer; Width, Height: Integer;
+  MinimumStrokeWidth: Single);
 var
   Canvas: ISkCanvas;
   CanvasLayer: TVectArtCanvasLayer;
@@ -112,6 +115,12 @@ var
   I: Integer;
   J: Integer;
   ImageInfo: TSkImageInfo;
+  ImageLayer: TVectArtImageLayer;
+  ImagePaint: ISkPaint;
+  RasterImage: ISkImage;
+  EdgeWidth: Single;
+  SignedHeight: Single;
+  RotationDegrees: Single;
   Layer: TVectArtLayer;
   LineLayer: TVectArtLineLayer;
   Paint: ISkPaint;
@@ -121,6 +130,7 @@ var
   RectangleLayer: TVectArtRectangleLayer;
   ScaleX: Single;
   ScaleY: Single;
+  StrokeWidth: Single;
   StrokePaint: ISkPaint;
   Surface: ISkSurface;
 begin
@@ -148,24 +158,65 @@ begin
   Canvas.Clear(TAlphaColorRec.Null);
   ScaleX := Width / Max(CanvasLayer.Width, 1);
   ScaleY := Height / Max(CanvasLayer.Height, 1);
+  MinimumStrokeWidth := Max(MinimumStrokeWidth, 0.0);
   Paint := TSkPaint.Create(TSkPaintStyle.Fill);
   Paint.AntiAlias := True;
   StrokePaint := TSkPaint.Create(TSkPaintStyle.Stroke);
   StrokePaint.AntiAlias := True;
+  ImagePaint := TSkPaint.Create;
+  ImagePaint.AntiAlias := True;
   Canvas.Scale(ScaleX, ScaleY);
   for I := 1 to Document.LayerCount - 1 do
   begin
     Layer := Document[I];
     if not Layer.Visible then
       Continue;
+    if Layer is TVectArtImageLayer then
+    begin
+      ImageLayer := TVectArtImageLayer(Layer);
+      RasterImage := TSkImage.MakeFromEncoded(ImageLayer.PngData);
+      if (RasterImage = nil) or (RasterImage.Width <= 0) or
+        (RasterImage.Height <= 0) then
+        Continue;
+      EdgeWidth := Hypot(
+        ImageLayer.Points[1].X - ImageLayer.Points[0].X,
+        ImageLayer.Points[1].Y - ImageLayer.Points[0].Y);
+      if EdgeWidth <= 0 then
+        Continue;
+      SignedHeight := (
+        (ImageLayer.Points[1].X - ImageLayer.Points[0].X) *
+          (ImageLayer.Points[3].Y - ImageLayer.Points[0].Y) -
+        (ImageLayer.Points[1].Y - ImageLayer.Points[0].Y) *
+          (ImageLayer.Points[3].X - ImageLayer.Points[0].X)) / EdgeWidth;
+      if Abs(SignedHeight) <= 0 then
+        Continue;
+      RotationDegrees := RadToDeg(ArcTan2(
+        ImageLayer.Points[1].Y - ImageLayer.Points[0].Y,
+        ImageLayer.Points[1].X - ImageLayer.Points[0].X));
+      ImagePaint.AlphaF := EnsureRange(ImageLayer.Opacity, 0.0, 1.0);
+      Canvas.Save;
+      try
+        Canvas.Translate(ImageLayer.Points[0].X, ImageLayer.Points[0].Y);
+        Canvas.Rotate(RotationDegrees);
+        Canvas.Scale(EdgeWidth / RasterImage.Width,
+          SignedHeight / RasterImage.Height);
+        Canvas.DrawImage(RasterImage, 0, 0, TSkSamplingOptions.Medium,
+          ImagePaint);
+      finally
+        Canvas.Restore;
+      end;
+      Continue;
+    end;
     if Layer is TVectArtLineLayer then
     begin
       LineLayer := TVectArtLineLayer(Layer);
+      StrokeWidth := Max(Max(LineLayer.StrokeWidth, 0.1),
+        MinimumStrokeWidth);
       StrokePaint.Color := VclColorToAlphaColor(LineLayer.StrokeColor,
         LineLayer.Opacity);
-      StrokePaint.StrokeWidth := Max(LineLayer.StrokeWidth, 0.1);
+      StrokePaint.StrokeWidth := StrokeWidth;
       DashIntervals := VectArtStrokeDashIntervals(LineLayer.StrokeStyle,
-        LineLayer.StrokeWidth);
+        StrokeWidth);
       if Length(DashIntervals) > 0 then
         StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0)
       else
@@ -197,11 +248,12 @@ begin
       end;
       if PathLayer.StrokeWidth > 0 then
       begin
+        StrokeWidth := Max(PathLayer.StrokeWidth, MinimumStrokeWidth);
         StrokePaint.Color := VclColorToAlphaColor(PathLayer.StrokeColor,
           PathLayer.Opacity);
-        StrokePaint.StrokeWidth := PathLayer.StrokeWidth;
+        StrokePaint.StrokeWidth := StrokeWidth;
         DashIntervals := VectArtStrokeDashIntervals(PathLayer.StrokeStyle,
-          PathLayer.StrokeWidth);
+          StrokeWidth);
         if Length(DashIntervals) > 0 then
           StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0)
         else
@@ -227,11 +279,13 @@ begin
       Canvas.DrawRect(RectangleLayer.Bounds, Paint);
       if RectangleLayer.StrokeWidth > 0 then
       begin
+        StrokeWidth := Max(RectangleLayer.StrokeWidth,
+          MinimumStrokeWidth);
         StrokePaint.Color := VclColorToAlphaColor(RectangleLayer.StrokeColor,
           RectangleLayer.Opacity);
-        StrokePaint.StrokeWidth := RectangleLayer.StrokeWidth;
+        StrokePaint.StrokeWidth := StrokeWidth;
         DashIntervals := VectArtStrokeDashIntervals(
-          RectangleLayer.StrokeStyle, RectangleLayer.StrokeWidth);
+          RectangleLayer.StrokeStyle, StrokeWidth);
         if Length(DashIntervals) > 0 then
           StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0)
         else

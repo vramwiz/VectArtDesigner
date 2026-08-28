@@ -69,6 +69,12 @@ position4 = 左下
 同じオブジェクトの`vector original position1..4`は未回転の基準矩形を保持し、
 `vector matrix a..f`は基準矩形から回転後4頂点へのアフィン変換を保持する。
 
+`四角_回転2.mif`との比較から、行列は整数化された`image position1..4`から逆算するのではなく、
+丸め前の回転・拡縮頂点から生成され、行列を`vector original position1..4`へ適用した結果を丸めると
+`image position1..4`へ一致することを確認した。新規Rectangleも同じ順序で行列を生成する。
+同ファイル内でWebArt Designer 7が生成した76x1の四角形用vector IPNGは、新規Rectangle用として
+埋め込んでいる補助IPNGとバイト単位で一致する。
+
 通常値として、
 ```text
 waDAimage alpha  = 255
@@ -139,6 +145,8 @@ element typeではなく、補助の`object type=vector` PNGに格納された�
 - `多角形.mif`の対象パス: 5頂点、`vector closed=1`
 
 各頂点には`vector matrix a..f`を適用してDocument座標へ変換する。
+現行WriterはDocument座標をそのままDouble頂点として格納し、単位行列、Path外接範囲、
+開閉・塗り・線の各メタデータを持つ高さ1pxのvector PNGを新規生成する。
 
 ## 3. 数値の保存形式
 多くの数値はPNG内の独自`waDA`チャンクに保存される。PNGチャンクの構造は次のとおり。
@@ -531,6 +539,10 @@ texture = テクスチャ系
 ペンは `image` へ変換されるため独立型ではない。
 
 # 13. 画像で未確認の項目
+
+実装では通常`image`と`logo`のPNG本体、alpha、hidden、配置4頂点を画像レイヤーへ取り込み、
+複数オブジェクトの順序と回転／反転を表示へ反映している。`logo`の文字・フォント・装飾を編集可能な
+構造へ戻す処理は未対応で、現段階ではラスタライズ済みPNGを正として扱う。
 1. `waDAimage alpha` とGUI透明度の正確な対応
 2. `waDAimage hidden` のON時の値
 3. 縦横比保持チェック状態そのものがMIF保存されるか

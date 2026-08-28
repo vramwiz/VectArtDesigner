@@ -5,10 +5,13 @@ unit VectArtDesignerDocument;
 interface
 
 uses
-  System.Classes, System.Generics.Collections, System.Types, Vcl.Graphics;
+  System.Classes, System.Generics.Collections, System.SysUtils, System.Types,
+  Vcl.Graphics;
 
 type
-  TVectArtLayerKind = (vlkCanvas, vlkRectangle, vlkLine, vlkPath);
+  TVectArtLayerKind = (vlkCanvas, vlkRectangle, vlkLine, vlkPath, vlkImage);
+  TVectArtImageSourceKind = (visImage, visLogo);
+  TVectArtImagePoints = array[0..3] of TPointF;
   // WebArt Designerの線種コンボとMIF vector stroke style 0..8を同順で保持する。
   TVectArtStrokeStyle = (vssSolid, vssDotted, vssShortDash, vssDashDot,
     vssDashDotDot, vssSparseDotted, vssMediumDash, vssLongDashDot,
@@ -146,6 +149,29 @@ type
     Visible: Boolean;
   end;
 
+  TVectArtImageLayer = class(TVectArtLayer)
+  private
+    FPngData: TBytes;
+    FPoints: TVectArtImagePoints;
+    FSourceKind: TVectArtImageSourceKind;
+  public
+    constructor Create(const AName: string; const APngData: TBytes;
+      const APoints: TVectArtImagePoints; ASourceKind: TVectArtImageSourceKind);
+    property PngData: TBytes read FPngData;
+    property Points: TVectArtImagePoints read FPoints write FPoints;
+    property SourceKind: TVectArtImageSourceKind read FSourceKind;
+  end;
+
+  TVectArtImageData = record
+    Locked: Boolean;
+    Name: string;
+    Opacity: Single;
+    PngData: TBytes;
+    Points: TVectArtImagePoints;
+    SourceKind: TVectArtImageSourceKind;
+    Visible: Boolean;
+  end;
+
   TVectArtDocument = class
   private
     FLayers: TObjectList<TVectArtLayer>;
@@ -167,6 +193,7 @@ type
       const Data: TVectArtRectangleData): Integer;
     function InsertLine(Index: Integer; const Data: TVectArtLineData): Integer;
     function InsertPath(Index: Integer; const Data: TVectArtPathData): Integer;
+    function InsertImage(Index: Integer; const Data: TVectArtImageData): Integer;
     function IsLayerSelected(Index: Integer): Boolean;
     procedure SetCanvasSize(AWidth, AHeight: Integer);
     procedure SetRectangleBounds(Index: Integer; const Value: TRectF);
@@ -178,6 +205,9 @@ type
       EndPoint: TPointF);
     procedure SetLineStroke(Index: Integer; Color: TColor; Width: Single;
       Style: TVectArtStrokeStyle);
+    procedure SetImagePoints(Index: Integer;
+      const Points: TVectArtImagePoints);
+    procedure SetPathFill(Index: Integer; Color: TColor; Filled: Boolean);
     procedure SetLayerLocked(Index: Integer; Value: Boolean);
     procedure SetLayerOpacity(Index: Integer; Value: Single);
     procedure SetLayerVisible(Index: Integer; Value: Boolean);
@@ -186,7 +216,10 @@ type
       out Data: TVectArtRectangleData): Boolean;
     function RemoveLine(Index: Integer; out Data: TVectArtLineData): Boolean;
     function RemovePath(Index: Integer; out Data: TVectArtPathData): Boolean;
+    function RemoveImage(Index: Integer; out Data: TVectArtImageData): Boolean;
     procedure SetPathPoints(Index: Integer; const Points: TArray<TPointF>);
+    procedure SetPathStroke(Index: Integer; Color: TColor; Width: Single;
+      Style: TVectArtStrokeStyle);
     procedure SetSelectedLayers(const Indices: array of Integer);
     property CanvasLayer: TVectArtCanvasLayer read GetCanvasLayer;
     property LayerCount: Integer read GetLayerCount;
@@ -312,6 +345,18 @@ begin
   FStrokeWidth := 1.0;
 end;
 
+{ TVectArtImageLayer }
+
+constructor TVectArtImageLayer.Create(const AName: string;
+  const APngData: TBytes; const APoints: TVectArtImagePoints;
+  ASourceKind: TVectArtImageSourceKind);
+begin
+  inherited Create(vlkImage, AName);
+  FPngData := Copy(APngData);
+  FPoints := APoints;
+  FSourceKind := ASourceKind;
+end;
+
 { TVectArtDocument }
 
 constructor TVectArtDocument.Create;
@@ -410,6 +455,27 @@ begin
   PathLayer.StrokeWidth := Max(Data.StrokeWidth, 0.0);
   PathLayer.Visible := Data.Visible;
   FLayers.Insert(Result, PathLayer);
+  for I := 0 to FSelectedLayers.Count - 1 do
+    if FSelectedLayers[I] >= Result then
+      FSelectedLayers[I] := FSelectedLayers[I] + 1;
+  if FSelectedIndex >= Result then
+    Inc(FSelectedIndex);
+  Changed;
+end;
+
+function TVectArtDocument.InsertImage(Index: Integer;
+  const Data: TVectArtImageData): Integer;
+var
+  I: Integer;
+  ImageLayer: TVectArtImageLayer;
+begin
+  Result := EnsureRange(Index, 1, FLayers.Count);
+  ImageLayer := TVectArtImageLayer.Create(Data.Name, Data.PngData,
+    Data.Points, Data.SourceKind);
+  ImageLayer.Locked := Data.Locked;
+  ImageLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
+  ImageLayer.Visible := Data.Visible;
+  FLayers.Insert(Result, ImageLayer);
   for I := 0 to FSelectedLayers.Count - 1 do
     if FSelectedLayers[I] >= Result then
       FSelectedLayers[I] := FSelectedLayers[I] + 1;
@@ -542,6 +608,41 @@ begin
   Data.StrokeStyle := PathLayer.StrokeStyle;
   Data.StrokeWidth := PathLayer.StrokeWidth;
   Data.Visible := PathLayer.Visible;
+  FLayers.Delete(Index);
+  Selection := TList<Integer>.Create;
+  try
+    for I := 0 to FSelectedLayers.Count - 1 do
+      if FSelectedLayers[I] < Index then
+        Selection.Add(FSelectedLayers[I])
+      else if FSelectedLayers[I] > Index then
+        Selection.Add(FSelectedLayers[I] - 1);
+    if (Selection.Count = 0) and (FLayers.Count > 1) then
+      Selection.Add(Min(Index, FLayers.Count - 1));
+    SetSelectedLayers(Selection.ToArray);
+  finally
+    Selection.Free;
+  end;
+end;
+
+function TVectArtDocument.RemoveImage(Index: Integer;
+  out Data: TVectArtImageData): Boolean;
+var
+  I: Integer;
+  ImageLayer: TVectArtImageLayer;
+  Selection: TList<Integer>;
+begin
+  Result := (Index > 0) and (Index < FLayers.Count) and
+    (FLayers[Index] is TVectArtImageLayer);
+  if not Result then
+    Exit;
+  ImageLayer := TVectArtImageLayer(FLayers[Index]);
+  Data.Locked := ImageLayer.Locked;
+  Data.Name := ImageLayer.Name;
+  Data.Opacity := ImageLayer.Opacity;
+  Data.PngData := Copy(ImageLayer.PngData);
+  Data.Points := ImageLayer.Points;
+  Data.SourceKind := ImageLayer.SourceKind;
+  Data.Visible := ImageLayer.Visible;
   FLayers.Delete(Index);
   Selection := TList<Integer>.Create;
   try
@@ -766,6 +867,19 @@ begin
   Changed;
 end;
 
+procedure TVectArtDocument.SetImagePoints(Index: Integer;
+  const Points: TVectArtImagePoints);
+var
+  ImageLayer: TVectArtImageLayer;
+begin
+  if (Index <= 0) or (Index >= FLayers.Count) or
+    not (FLayers[Index] is TVectArtImageLayer) then
+    Exit;
+  ImageLayer := TVectArtImageLayer(FLayers[Index]);
+  ImageLayer.Points := Points;
+  Changed;
+end;
+
 procedure TVectArtDocument.SetPathPoints(Index: Integer;
   const Points: TArray<TPointF>);
 var
@@ -788,6 +902,44 @@ begin
       Exit;
   end;
   PathLayer.Points := Copy(Points);
+  Changed;
+end;
+
+procedure TVectArtDocument.SetPathFill(Index: Integer; Color: TColor;
+  Filled: Boolean);
+var
+  PathLayer: TVectArtPathLayer;
+begin
+  if (Index <= 0) or (Index >= FLayers.Count) or
+    not (FLayers[Index] is TVectArtPathLayer) then
+    Exit;
+  PathLayer := TVectArtPathLayer(FLayers[Index]);
+  Filled := Filled and PathLayer.Closed;
+  if (PathLayer.FillColor = Color) and (PathLayer.Filled = Filled) then
+    Exit;
+  PathLayer.FillColor := Color;
+  PathLayer.Filled := Filled;
+  Changed;
+end;
+
+procedure TVectArtDocument.SetPathStroke(Index: Integer; Color: TColor;
+  Width: Single; Style: TVectArtStrokeStyle);
+var
+  NewWidth: Single;
+  PathLayer: TVectArtPathLayer;
+begin
+  if (Index <= 0) or (Index >= FLayers.Count) or
+    not (FLayers[Index] is TVectArtPathLayer) then
+    Exit;
+  PathLayer := TVectArtPathLayer(FLayers[Index]);
+  NewWidth := Max(Width, 0.0);
+  if (PathLayer.StrokeColor = Color) and
+    SameValue(PathLayer.StrokeWidth, NewWidth) and
+    (PathLayer.StrokeStyle = Style) then
+    Exit;
+  PathLayer.StrokeColor := Color;
+  PathLayer.StrokeWidth := NewWidth;
+  PathLayer.StrokeStyle := Style;
   Changed;
 end;
 
