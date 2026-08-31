@@ -74,13 +74,13 @@ begin
   if FEditorState <> nil then
   begin
     Data.StrokeColor := FEditorState.RectangleStrokeColor;
-    Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
+    Data.MifStrokeStyle := FEditorState.RectangleMifStrokeStyle;
     Data.StrokeWidth := FEditorState.RectangleStrokeWidth;
   end
   else
   begin
     Data.StrokeColor := clBlack;
-    Data.StrokeStyle := vssSolid;
+    Data.MifStrokeStyle := vssSolid;
     Data.StrokeWidth := 0.0;
   end;
   Data.Visible := True;

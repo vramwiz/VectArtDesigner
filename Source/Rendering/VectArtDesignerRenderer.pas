@@ -1,4 +1,5 @@
 // Documentの表示オブジェクトを、各ホストで共有できる透明RGBA8画像へ描画する。
+// 現在の線種と線端マーカー描画はMIF互換装飾を使用する。
 unit VectArtDesignerRenderer;
 
 interface
@@ -136,14 +137,14 @@ var
   StrokePaint: ISkPaint;
   Surface: ISkSurface;
 
-  procedure DrawMarker(Marker: TVectArtLineMarker; const Tip,
-    InsidePoint: TPointF; MarkerSize: Single; AntiAlias: Boolean);
+  procedure DrawMarker(Marker: TVectArtMifLineMarker; const Tip,
+    InsidePoint: TPointF; MarkerSize: Single; MifAntiAlias: Boolean);
   var
     K: Integer;
     MarkerPath: ISkPath;
     MarkerPathBuilder: ISkPathBuilder;
   begin
-    MarkerGeometry := BuildLineMarkerGeometry(Ord(Marker), Tip, InsidePoint,
+    MarkerGeometry := BuildMifLineMarkerGeometry(Ord(Marker), Tip, InsidePoint,
       LineLayer.StrokeWidth, MarkerSize);
     if Length(MarkerGeometry.PrimaryPoints) < 2 then Exit;
     MarkerPathBuilder := TSkPathBuilder.Create;
@@ -155,7 +156,7 @@ var
     if MarkerGeometry.Filled then
     begin
       Paint.Color := StrokePaint.Color;
-      Paint.AntiAlias := AntiAlias;
+      Paint.AntiAlias := MifAntiAlias;
       Canvas.DrawPath(MarkerPath, Paint);
     end
     else
@@ -243,19 +244,19 @@ begin
     if Layer is TVectArtLineLayer then
     begin
       LineLayer := TVectArtLineLayer(Layer);
-      StrokePaint.AntiAlias := LineLayer.AntiAlias;
+      StrokePaint.AntiAlias := LineLayer.MifAntiAlias;
       StrokeWidth := Max(Max(LineLayer.StrokeWidth, 0.1),
         MinimumStrokeWidth);
       StrokePaint.Color := VclColorToAlphaColor(LineLayer.StrokeColor,
         LineLayer.Opacity);
       StrokePaint.StrokeWidth := StrokeWidth;
-      DashIntervals := VectArtStrokeDashIntervals(LineLayer.StrokeStyle,
+      DashIntervals := VectArtStrokeDashIntervals(LineLayer.MifStrokeStyle,
         StrokeWidth);
       if Length(DashIntervals) > 0 then
         StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0)
       else
         StrokePaint.PathEffect := nil;
-      if VectArtStrokeUsesRoundCaps(LineLayer.StrokeStyle) then
+      if VectArtStrokeUsesRoundCaps(LineLayer.MifStrokeStyle) then
         StrokePaint.StrokeCap := TSkStrokeCap.Round
       else
         case LineLayer.LineCap of
@@ -271,10 +272,10 @@ begin
         StrokePaint.StrokeJoin := TSkStrokeJoin.Miter;
       end;
       Canvas.DrawLine(LineLayer.StartPoint, LineLayer.EndPoint, StrokePaint);
-      DrawMarker(LineLayer.StartMarker, LineLayer.StartPoint,
-        LineLayer.EndPoint, LineLayer.StartMarkerSize, LineLayer.AntiAlias);
-      DrawMarker(LineLayer.EndMarker, LineLayer.EndPoint,
-        LineLayer.StartPoint, LineLayer.EndMarkerSize, LineLayer.AntiAlias);
+      DrawMarker(LineLayer.MifStartMarker, LineLayer.StartPoint,
+        LineLayer.EndPoint, LineLayer.MifStartMarkerSize, LineLayer.MifAntiAlias);
+      DrawMarker(LineLayer.MifEndMarker, LineLayer.EndPoint,
+        LineLayer.StartPoint, LineLayer.MifEndMarkerSize, LineLayer.MifAntiAlias);
       Continue;
     end;
     if Layer is TVectArtPathLayer then
@@ -302,13 +303,13 @@ begin
         StrokePaint.Color := VclColorToAlphaColor(PathLayer.StrokeColor,
           PathLayer.Opacity);
         StrokePaint.StrokeWidth := StrokeWidth;
-        DashIntervals := VectArtStrokeDashIntervals(PathLayer.StrokeStyle,
+        DashIntervals := VectArtStrokeDashIntervals(PathLayer.MifStrokeStyle,
           StrokeWidth);
         if Length(DashIntervals) > 0 then
           StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0)
         else
           StrokePaint.PathEffect := nil;
-        if VectArtStrokeUsesRoundCaps(PathLayer.StrokeStyle) then
+        if VectArtStrokeUsesRoundCaps(PathLayer.MifStrokeStyle) then
           StrokePaint.StrokeCap := TSkStrokeCap.Round
         else
           StrokePaint.StrokeCap := TSkStrokeCap.Butt;
@@ -337,12 +338,12 @@ begin
           RectangleLayer.Opacity);
         StrokePaint.StrokeWidth := StrokeWidth;
         DashIntervals := VectArtStrokeDashIntervals(
-          RectangleLayer.StrokeStyle, StrokeWidth);
+          RectangleLayer.MifStrokeStyle, StrokeWidth);
         if Length(DashIntervals) > 0 then
           StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0)
         else
           StrokePaint.PathEffect := nil;
-        if VectArtStrokeUsesRoundCaps(RectangleLayer.StrokeStyle) then
+        if VectArtStrokeUsesRoundCaps(RectangleLayer.MifStrokeStyle) then
           StrokePaint.StrokeCap := TSkStrokeCap.Round
         else
           StrokePaint.StrokeCap := TSkStrokeCap.Butt;

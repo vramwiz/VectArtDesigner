@@ -1,4 +1,5 @@
 // 線種を文字ではなく実際の線パターンで選択する共通コンボボックス。
+// 現在の線パターンとマーカー一覧はWebArt DesignerのMIF値に対応する。
 unit VectArtDesignerStrokeStyleCombo;
 
 interface
@@ -10,7 +11,7 @@ uses
 type
   // Parent未接続のFrame内でItemsへ触れるとTComboBoxがHandleを要求するため、
   // 選択肢の生成を実際のCreateWndまで遅延する。
-  TVectArtStrokeStyleCombo = class(TComboBox)
+  TVectArtMifStrokeStyleCombo = class(TComboBox)
   private
     FPendingItemIndex: Integer;
   protected
@@ -25,12 +26,12 @@ type
     property PendingItemIndex: Integer read FPendingItemIndex;
   end;
 
-  TVectArtLineMarkerCombo = class(TComboBox)
+  TVectArtMifLineMarkerCombo = class(TComboBox)
   private
-    FPendingMarker: TVectArtLineMarker;
+    FPendingMarker: TVectArtMifLineMarker;
     FPendingCommon: Boolean;
-    function IndexForMarker(Value: TVectArtLineMarker): Integer;
-    function MarkerForIndex(Index: Integer): TVectArtLineMarker;
+    function IndexForMarker(Value: TVectArtMifLineMarker): Integer;
+    function MarkerForIndex(Index: Integer): TVectArtMifLineMarker;
   protected
     procedure CreateWnd; override;
     procedure DrawItem(Index: Integer; Rect: TRect;
@@ -39,10 +40,10 @@ type
     // MIF互換順の線端マーカー一覧を遅延構築するコンボボックスを生成する。
     constructor Create(AOwner: TComponent); override;
     // 現在選択されたマーカーを返す。混在表示中または未選択時はvlmNoneを返す。
-    function SelectedMarker: TVectArtLineMarker;
+    function SelectedMarker: TVectArtMifLineMarker;
     // 表示予定マーカーと、複数選択で値が共通かどうかを同時に更新する。
-    procedure SetPendingMarker(Value: TVectArtLineMarker; Common: Boolean);
-    property PendingMarker: TVectArtLineMarker read FPendingMarker;
+    procedure SetPendingMarker(Value: TVectArtMifLineMarker; Common: Boolean);
+    property PendingMarker: TVectArtMifLineMarker read FPendingMarker;
     property PendingCommon: Boolean read FPendingCommon;
   end;
 
@@ -56,13 +57,13 @@ const
   COLOR_EDIT = TColor($00303030);
   COLOR_TEXT = TColor($00EEEEEE);
 
-constructor TVectArtStrokeStyleCombo.Create(AOwner: TComponent);
+constructor TVectArtMifStrokeStyleCombo.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FPendingItemIndex := 0;
 end;
 
-procedure TVectArtStrokeStyleCombo.CreateWnd;
+procedure TVectArtMifStrokeStyleCombo.CreateWnd;
 var
   ChangeEvent: TNotifyEvent;
 begin
@@ -91,14 +92,14 @@ begin
   end;
 end;
 
-procedure TVectArtStrokeStyleCombo.DrawItem(Index: Integer; Rect: TRect;
+procedure TVectArtMifStrokeStyleCombo.DrawItem(Index: Integer; Rect: TRect;
   State: TOwnerDrawState);
 var
   DashIndex: Integer;
   DrawSegment: Boolean;
   Intervals: TArray<Single>;
   SegmentLength: Integer;
-  StyleValue: TVectArtStrokeStyle;
+  StyleValue: TVectArtMifStrokeStyle;
   X: Integer;
   Y: Integer;
 begin
@@ -107,10 +108,10 @@ begin
   else
     Canvas.Brush.Color := COLOR_EDIT;
   Canvas.FillRect(Rect);
-  if not InRange(Index, Ord(Low(TVectArtStrokeStyle)),
-    Ord(High(TVectArtStrokeStyle))) then
+  if not InRange(Index, Ord(Low(TVectArtMifStrokeStyle)),
+    Ord(High(TVectArtMifStrokeStyle))) then
     Exit;
-  StyleValue := TVectArtStrokeStyle(Index);
+  StyleValue := TVectArtMifStrokeStyle(Index);
   Canvas.Pen.Color := COLOR_TEXT;
   Canvas.Pen.Width := 2;
   Canvas.Pen.Style := psSolid;
@@ -144,24 +145,24 @@ begin
   end;
 end;
 
-procedure TVectArtStrokeStyleCombo.SetPendingItemIndex(Value: Integer);
+procedure TVectArtMifStrokeStyleCombo.SetPendingItemIndex(Value: Integer);
 begin
   FPendingItemIndex := Value;
   if HandleAllocated then
     ItemIndex := Value;
 end;
 
-{ TVectArtLineMarkerCombo }
+{ TVectArtMifLineMarkerCombo }
 
-constructor TVectArtLineMarkerCombo.Create(AOwner: TComponent);
+constructor TVectArtMifLineMarkerCombo.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FPendingMarker := vlmNone;
   FPendingCommon := True;
 end;
 
-function TVectArtLineMarkerCombo.IndexForMarker(
-  Value: TVectArtLineMarker): Integer;
+function TVectArtMifLineMarkerCombo.IndexForMarker(
+  Value: TVectArtMifLineMarker): Integer;
 begin
   case Value of
     vlmNone: Result := 0;
@@ -179,8 +180,8 @@ begin
   end;
 end;
 
-function TVectArtLineMarkerCombo.MarkerForIndex(
-  Index: Integer): TVectArtLineMarker;
+function TVectArtMifLineMarkerCombo.MarkerForIndex(
+  Index: Integer): TVectArtMifLineMarker;
 begin
   case Index of
     1: Result := vlmOpenArrow;
@@ -197,7 +198,7 @@ begin
   end;
 end;
 
-procedure TVectArtLineMarkerCombo.CreateWnd;
+procedure TVectArtMifLineMarkerCombo.CreateWnd;
 var
   ChangeEvent: TNotifyEvent;
   I: Integer;
@@ -220,12 +221,12 @@ begin
   end;
 end;
 
-procedure TVectArtLineMarkerCombo.DrawItem(Index: Integer; Rect: TRect;
+procedure TVectArtMifLineMarkerCombo.DrawItem(Index: Integer; Rect: TRect;
   State: TOwnerDrawState);
 var
   Geometry: TVectArtMarkerGeometry;
   I: Integer;
-  Marker: TVectArtLineMarker;
+  Marker: TVectArtMifLineMarker;
   Points: TArray<TPoint>;
   Y: Integer;
 begin
@@ -239,7 +240,7 @@ begin
   Canvas.Pen.Width := 1;
   Canvas.MoveTo(Rect.Left + 8, Y);
   Canvas.LineTo(Rect.Right - 8, Y);
-  Geometry := BuildLineMarkerGeometry(Ord(Marker),
+  Geometry := BuildMifLineMarkerGeometry(Ord(Marker),
     TPointF.Create(Rect.Right - 8, Y), TPointF.Create(Rect.Left + 8, Y),
     1.5, 6.0);
   SetLength(Points, Length(Geometry.PrimaryPoints));
@@ -257,13 +258,13 @@ begin
     Canvas.Polyline(Points);
 end;
 
-function TVectArtLineMarkerCombo.SelectedMarker: TVectArtLineMarker;
+function TVectArtMifLineMarkerCombo.SelectedMarker: TVectArtMifLineMarker;
 begin
   Result := MarkerForIndex(ItemIndex);
 end;
 
-procedure TVectArtLineMarkerCombo.SetPendingMarker(
-  Value: TVectArtLineMarker; Common: Boolean);
+procedure TVectArtMifLineMarkerCombo.SetPendingMarker(
+  Value: TVectArtMifLineMarker; Common: Boolean);
 begin
   FPendingMarker := Value;
   FPendingCommon := Common;

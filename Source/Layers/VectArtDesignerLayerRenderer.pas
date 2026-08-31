@@ -372,7 +372,7 @@ begin
       ACanvas.Pen.Color := BlendThumbnailColor(RectangleLayer.StrokeColor,
         RectangleLayer.Opacity);
       ACanvas.Pen.Width := Max(Round(RectangleLayer.StrokeWidth), 1);
-      if RectangleLayer.StrokeStyle <> vssSolid then
+      if RectangleLayer.MifStrokeStyle <> vssSolid then
         ACanvas.Pen.Style := psDash
       else
         ACanvas.Pen.Style := psSolid;
@@ -393,7 +393,7 @@ begin
     ACanvas.Pen.Color := BlendThumbnailColor(LineLayer.StrokeColor,
       LineLayer.Opacity);
     ACanvas.Pen.Width := LineStrokeWidth;
-    if LineLayer.StrokeStyle <> vssSolid then
+    if LineLayer.MifStrokeStyle <> vssSolid then
       ACanvas.Pen.Style := psDash
     else
       ACanvas.Pen.Style := psSolid;
@@ -449,7 +449,7 @@ begin
           ACanvas.Pen.Color := BlendThumbnailColor(PathLayer.StrokeColor,
             PathLayer.Opacity * 0.35);
         ACanvas.Pen.Width := LineStrokeWidth;
-        if PathLayer.StrokeStyle <> vssSolid then
+        if PathLayer.MifStrokeStyle <> vssSolid then
           ACanvas.Pen.Style := psDash
         else
           ACanvas.Pen.Style := psSolid;
@@ -622,7 +622,7 @@ begin
         ACanvas.Pen.Color := BlendThumbnailColor(RectangleLayer.StrokeColor,
           RectangleLayer.Opacity * 0.35);
       ACanvas.Pen.Width := Max(Round(RectangleLayer.StrokeWidth), 1);
-      if RectangleLayer.StrokeStyle <> vssSolid then
+      if RectangleLayer.MifStrokeStyle <> vssSolid then
         ACanvas.Pen.Style := psDash
       else
         ACanvas.Pen.Style := psSolid;
@@ -643,7 +643,7 @@ begin
     ACanvas.Pen.Color := BlendThumbnailColor(LineLayer.StrokeColor,
       LineLayer.Opacity);
     ACanvas.Pen.Width := LineStrokeWidth;
-    if LineLayer.StrokeStyle <> vssSolid then
+    if LineLayer.MifStrokeStyle <> vssSolid then
       ACanvas.Pen.Style := psDash
     else
       ACanvas.Pen.Style := psSolid;
@@ -697,7 +697,7 @@ begin
           ACanvas.Pen.Color := BlendThumbnailColor(PathLayer.StrokeColor,
             PathLayer.Opacity * 0.35);
         ACanvas.Pen.Width := LineStrokeWidth;
-        if PathLayer.StrokeStyle <> vssSolid then
+        if PathLayer.MifStrokeStyle <> vssSolid then
           ACanvas.Pen.Style := psDash
         else
           ACanvas.Pen.Style := psSolid;

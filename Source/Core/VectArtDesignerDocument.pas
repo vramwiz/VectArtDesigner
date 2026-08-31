@@ -1,5 +1,5 @@
-// 編集対象となる用紙とオブジェクトレイヤーを一元管理する。
-// レイヤー配列の先頭を最背面、末尾を最前面とする。
+// 編集対象となる用紙、オブジェクトレイヤー、編集モードを一元管理する。
+// レイヤー配列の先頭を最背面、末尾を最前面とし、MIF由来の装飾値はMif名で区別する。
 unit VectArtDesignerDocument;
 
 interface
@@ -9,19 +9,23 @@ uses
   Vcl.Graphics;
 
 type
+  // ファイル形式ではなく、編集UIと描画で使用する表現体系を示す。
+  // 将来の編集体系追加に備えてBooleanではなく列挙値として保持する。
+  TVectArtEditingMode = (vemStandard, vemMifCompatible);
   TVectArtLayerKind = (vlkCanvas, vlkRectangle, vlkLine, vlkPath, vlkImage);
   TVectArtImageSourceKind = (visImage, visLogo);
   TVectArtImagePoints = array[0..3] of TPointF;
   // WebArt Designerの線種コンボとMIF vector stroke style 0..8を同順で保持する。
-  TVectArtStrokeStyle = (vssSolid, vssDotted, vssShortDash, vssDashDot,
+  TVectArtMifStrokeStyle = (vssSolid, vssDotted, vssShortDash, vssDashDot,
     vssDashDotDot, vssSparseDotted, vssMediumDash, vssLongDashDot,
     vssLongDash);
   // MIFのvector stroke cap 0..2と同じ順序で保持する。
   TVectArtLineCap = (vlcButt, vlcSquare, vlcRound);
   // MIFのvector stroke join 0..2と同じ順序で保持する。
   TVectArtLineJoin = (vljMiter, vljBevel, vljRound);
-  // vlmArrow remains ordinal 1 so existing VectArtDesigner JSON stays valid.
-  TVectArtLineMarker = (vlmNone, vlmArrow, vlmOpenArrow, vlmWideArrow,
+  // WebArt DesignerのMIFマーカー値0..9を同順で保持する。
+  // 既存JSONとの互換性のため、vlmArrowの序数1を変更しない。
+  TVectArtMifLineMarker = (vlmNone, vlmArrow, vlmOpenArrow, vlmWideArrow,
     vlmCircle, vlmDiamond, vlmConcaveArrow, vlmSmallArrow, vlmSlash,
     vlmStar);
 
@@ -63,7 +67,7 @@ type
     FFillColor: TColor;
     FRotationDegrees: Single;
     FStrokeColor: TColor;
-    FStrokeStyle: TVectArtStrokeStyle;
+    FMifStrokeStyle: TVectArtMifStrokeStyle;
     FStrokeWidth: Single;
   public
     constructor Create(const AName: string; const ABounds: TRectF;
@@ -73,74 +77,74 @@ type
     property RotationDegrees: Single read FRotationDegrees
       write FRotationDegrees;
     property StrokeColor: TColor read FStrokeColor write FStrokeColor;
-    property StrokeStyle: TVectArtStrokeStyle read FStrokeStyle
-      write FStrokeStyle;
+    property MifStrokeStyle: TVectArtMifStrokeStyle read FMifStrokeStyle
+      write FMifStrokeStyle;
     property StrokeWidth: Single read FStrokeWidth write FStrokeWidth;
   end;
 
   TVectArtRectangleData = record
-    Bounds: TRectF;
-    FillColor: TColor;
-    Locked: Boolean;
-    Name: string;
-    Opacity: Single;
-    RotationDegrees: Single;
-    StrokeColor: TColor;
-    StrokeStyle: TVectArtStrokeStyle;
-    StrokeWidth: Single;
-    Visible: Boolean;
+    Bounds: TRectF;                         // 回転前の基本矩形。
+    FillColor: TColor;                      // 内部の塗り色。
+    Locked: Boolean;                        // 編集を禁止する状態。
+    Name: string;                           // レイヤー一覧の表示名。
+    Opacity: Single;                        // 0.0..1.0のレイヤー不透明度。
+    RotationDegrees: Single;                // 中心回りの時計回り角度。
+    StrokeColor: TColor;                    // 枠線色。
+    MifStrokeStyle: TVectArtMifStrokeStyle; // MIF互換の枠線パターン。
+    StrokeWidth: Single;                    // ドキュメント座標の枠線幅。
+    Visible: Boolean;                       // 描画対象に含める状態。
   end;
 
   TVectArtLineLayer = class(TVectArtLayer)
   private
-    FAntiAlias: Boolean;
+    FMifAntiAlias: Boolean;
     FEndPoint: TPointF;
-    FEndMarker: TVectArtLineMarker;
-    FEndMarkerSize: Single;
+    FMifEndMarker: TVectArtMifLineMarker;
+    FMifEndMarkerSize: Single;
     FLineCap: TVectArtLineCap;
     FLineJoin: TVectArtLineJoin;
-    FStartMarker: TVectArtLineMarker;
-    FStartMarkerSize: Single;
+    FMifStartMarker: TVectArtMifLineMarker;
+    FMifStartMarkerSize: Single;
     FStartPoint: TPointF;
     FStrokeColor: TColor;
-    FStrokeStyle: TVectArtStrokeStyle;
+    FMifStrokeStyle: TVectArtMifStrokeStyle;
     FStrokeWidth: Single;
   public
     constructor Create(const AName: string; const AStartPoint,
       AEndPoint: TPointF);
-    property AntiAlias: Boolean read FAntiAlias write FAntiAlias;
+    property MifAntiAlias: Boolean read FMifAntiAlias write FMifAntiAlias;
     property EndPoint: TPointF read FEndPoint write FEndPoint;
-    property EndMarker: TVectArtLineMarker read FEndMarker write FEndMarker;
-    property EndMarkerSize: Single read FEndMarkerSize write FEndMarkerSize;
+    property MifEndMarker: TVectArtMifLineMarker read FMifEndMarker write FMifEndMarker;
+    property MifEndMarkerSize: Single read FMifEndMarkerSize write FMifEndMarkerSize;
     property LineCap: TVectArtLineCap read FLineCap write FLineCap;
     property LineJoin: TVectArtLineJoin read FLineJoin write FLineJoin;
-    property StartMarker: TVectArtLineMarker read FStartMarker
-      write FStartMarker;
-    property StartMarkerSize: Single read FStartMarkerSize write FStartMarkerSize;
+    property MifStartMarker: TVectArtMifLineMarker read FMifStartMarker
+      write FMifStartMarker;
+    property MifStartMarkerSize: Single read FMifStartMarkerSize write FMifStartMarkerSize;
     property StartPoint: TPointF read FStartPoint write FStartPoint;
     property StrokeColor: TColor read FStrokeColor write FStrokeColor;
-    property StrokeStyle: TVectArtStrokeStyle read FStrokeStyle
-      write FStrokeStyle;
+    property MifStrokeStyle: TVectArtMifStrokeStyle read FMifStrokeStyle
+      write FMifStrokeStyle;
     property StrokeWidth: Single read FStrokeWidth write FStrokeWidth;
   end;
 
   TVectArtLineData = record
-    AntiAlias: Boolean;
-    EndPoint: TPointF;
-    EndMarker: TVectArtLineMarker;
-    EndMarkerSize: Single;
-    LineCap: TVectArtLineCap;
-    LineJoin: TVectArtLineJoin;
-    Locked: Boolean;
-    Name: string;
-    Opacity: Single;
-    StartPoint: TPointF;
-    StartMarker: TVectArtLineMarker;
-    StartMarkerSize: Single;
-    StrokeColor: TColor;
-    StrokeStyle: TVectArtStrokeStyle;
-    StrokeWidth: Single;
-    Visible: Boolean;
+    MifAntiAlias: Boolean;                  // MIF vector qualityに対応する品質値。
+    EndPoint: TPointF;                      // 線の終点。
+    MifEndMarker: TVectArtMifLineMarker;    // MIF互換の終点マーカー。
+    MifEndMarkerSize: Single;               // MIF互換の終点マーカー倍率。
+    LineCap: TVectArtLineCap;               // 共通の線端形状。
+    LineJoin: TVectArtLineJoin;             // 共通の線結合形状。
+    Locked: Boolean;                        // 編集を禁止する状態。
+    Name: string;                           // レイヤー一覧の表示名。
+    Opacity: Single;                        // 0.0..1.0のレイヤー不透明度。
+    StartPoint: TPointF;                    // 線の始点。
+    MifStartMarker: TVectArtMifLineMarker;  // MIF互換の始点マーカー。
+    MifStartMarkerSize: Single;             // MIF互換の始点マーカー倍率。
+    StrokeColor: TColor;                    // 線色。
+    MifStrokeStyle: TVectArtMifStrokeStyle; // MIF互換の線パターン。
+    StrokeWidth: Single;                    // ドキュメント座標の線幅。
+    Visible: Boolean;                       // 描画対象に含める状態。
   end;
 
   TVectArtPathLayer = class(TVectArtLayer)
@@ -150,7 +154,7 @@ type
     FFilled: Boolean;
     FPoints: TArray<TPointF>;
     FStrokeColor: TColor;
-    FStrokeStyle: TVectArtStrokeStyle;
+    FMifStrokeStyle: TVectArtMifStrokeStyle;
     FStrokeWidth: Single;
   public
     constructor Create(const AName: string; const APoints: TArray<TPointF>;
@@ -160,23 +164,23 @@ type
     property Filled: Boolean read FFilled write FFilled;
     property Points: TArray<TPointF> read FPoints write FPoints;
     property StrokeColor: TColor read FStrokeColor write FStrokeColor;
-    property StrokeStyle: TVectArtStrokeStyle read FStrokeStyle
-      write FStrokeStyle;
+    property MifStrokeStyle: TVectArtMifStrokeStyle read FMifStrokeStyle
+      write FMifStrokeStyle;
     property StrokeWidth: Single read FStrokeWidth write FStrokeWidth;
   end;
 
   TVectArtPathData = record
-    Closed: Boolean;
-    FillColor: TColor;
-    Filled: Boolean;
-    Locked: Boolean;
-    Name: string;
-    Opacity: Single;
-    Points: TArray<TPointF>;
-    StrokeColor: TColor;
-    StrokeStyle: TVectArtStrokeStyle;
-    StrokeWidth: Single;
-    Visible: Boolean;
+    Closed: Boolean;                        // 終点と始点を閉じる状態。
+    FillColor: TColor;                      // 閉領域の塗り色。
+    Filled: Boolean;                        // 閉領域を塗る状態。
+    Locked: Boolean;                        // 編集を禁止する状態。
+    Name: string;                           // レイヤー一覧の表示名。
+    Opacity: Single;                        // 0.0..1.0のレイヤー不透明度。
+    Points: TArray<TPointF>;                // 描画順に並ぶ頂点列。
+    StrokeColor: TColor;                    // 輪郭線色。
+    MifStrokeStyle: TVectArtMifStrokeStyle; // MIF互換の輪郭線パターン。
+    StrokeWidth: Single;                    // ドキュメント座標の輪郭線幅。
+    Visible: Boolean;                       // 描画対象に含める状態。
   end;
 
   TVectArtImageLayer = class(TVectArtLayer)
@@ -193,17 +197,18 @@ type
   end;
 
   TVectArtImageData = record
-    Locked: Boolean;
-    Name: string;
-    Opacity: Single;
-    PngData: TBytes;
-    Points: TVectArtImagePoints;
-    SourceKind: TVectArtImageSourceKind;
-    Visible: Boolean;
+    Locked: Boolean;                     // 編集を禁止する状態。
+    Name: string;                        // レイヤー一覧の表示名。
+    Opacity: Single;                     // 0.0..1.0のレイヤー不透明度。
+    PngData: TBytes;                     // 埋め込みPNGの全バイト。
+    Points: TVectArtImagePoints;         // 左上から時計回りの配置4頂点。
+    SourceKind: TVectArtImageSourceKind; // MIF由来のimage／logo区分。
+    Visible: Boolean;                    // 描画対象に含める状態。
   end;
 
   TVectArtDocument = class
   private
+    FEditingMode: TVectArtEditingMode;
     FLayers: TObjectList<TVectArtLayer>;
     FChangePending: Boolean;
     FInteractiveChanged: Boolean;
@@ -219,6 +224,7 @@ type
     function GetIsInteractiveUpdate: Boolean;
     function GetSelectionCount: Integer;
     procedure SelectionChanged;
+    procedure SetEditingMode(const Value: TVectArtEditingMode);
     procedure SetSelectedLayersCore(const Indices: array of Integer;
       Notify: Boolean);
     procedure SetSelectedIndex(const Value: Integer);
@@ -242,18 +248,18 @@ type
     procedure SetRectangleFillColor(Index: Integer; Value: TColor);
     procedure SetRectangleRotation(Index: Integer; Value: Single);
     procedure SetRectangleStroke(Index: Integer; Color: TColor;
-      Width: Single; Style: TVectArtStrokeStyle);
+      Width: Single; Style: TVectArtMifStrokeStyle);
     procedure SetLinePoints(Index: Integer; const StartPoint,
       EndPoint: TPointF);
     procedure SetLineCap(Index: Integer; Value: TVectArtLineCap);
-    procedure SetLineAntiAlias(Index: Integer; Value: Boolean);
-    procedure SetLineEndMarker(Index: Integer; Value: TVectArtLineMarker);
-    procedure SetLineEndMarkerSize(Index: Integer; Value: Single);
-    procedure SetLineStartMarker(Index: Integer; Value: TVectArtLineMarker);
-    procedure SetLineStartMarkerSize(Index: Integer; Value: Single);
+    procedure SetLineMifAntiAlias(Index: Integer; Value: Boolean);
+    procedure SetLineMifEndMarker(Index: Integer; Value: TVectArtMifLineMarker);
+    procedure SetLineMifEndMarkerSize(Index: Integer; Value: Single);
+    procedure SetLineMifStartMarker(Index: Integer; Value: TVectArtMifLineMarker);
+    procedure SetLineMifStartMarkerSize(Index: Integer; Value: Single);
     procedure SetLineJoin(Index: Integer; Value: TVectArtLineJoin);
     procedure SetLineStroke(Index: Integer; Color: TColor; Width: Single;
-      Style: TVectArtStrokeStyle);
+      Style: TVectArtMifStrokeStyle);
     procedure SetImagePoints(Index: Integer;
       const Points: TVectArtImagePoints);
     procedure SetPathFill(Index: Integer; Color: TColor; Filled: Boolean);
@@ -268,12 +274,15 @@ type
     function RemoveImage(Index: Integer; out Data: TVectArtImageData): Boolean;
     procedure SetPathPoints(Index: Integer; const Points: TArray<TPointF>);
     procedure SetPathStroke(Index: Integer; Color: TColor; Width: Single;
-      Style: TVectArtStrokeStyle);
+      Style: TVectArtMifStrokeStyle);
     procedure SelectLayerRange(AnchorIndex, TargetIndex: Integer;
       Additive: Boolean);
     procedure SetSelectedLayers(const Indices: array of Integer);
     procedure ToggleSelectedLayer(Index: Integer);
     property CanvasLayer: TVectArtCanvasLayer read GetCanvasLayer;
+    // GUI、操作、描画で選ぶ表現体系。ファイル形式や書出し可否は示さない。
+    property EditingMode: TVectArtEditingMode read FEditingMode
+      write SetEditingMode;
     property LayerCount: Integer read GetLayerCount;
     property Layers[Index: Integer]: TVectArtLayer read GetLayer; default;
     property IsInteractiveUpdate: Boolean read GetIsInteractiveUpdate;
@@ -287,18 +296,18 @@ const
   DEFAULT_CANVAS_WIDTH = 1920;
   DEFAULT_CANVAS_HEIGHT = 1080;
   // 旧実装名はMIF style 3（ダッシュ・ドット）として互換維持する。
-  vssDashed: TVectArtStrokeStyle = vssDashDot;
+  vssDashed: TVectArtMifStrokeStyle = vssDashDot;
 
-function VectArtStrokeDashIntervals(Style: TVectArtStrokeStyle;
+function VectArtStrokeDashIntervals(Style: TVectArtMifStrokeStyle;
   Width: Single): TArray<Single>;
-function VectArtStrokeUsesRoundCaps(Style: TVectArtStrokeStyle): Boolean;
+function VectArtStrokeUsesRoundCaps(Style: TVectArtMifStrokeStyle): Boolean;
 
 implementation
 
 uses
   System.Math, VectArtDesignerGeometry;
 
-function VectArtStrokeDashIntervals(Style: TVectArtStrokeStyle;
+function VectArtStrokeDashIntervals(Style: TVectArtMifStrokeStyle;
   Width: Single): TArray<Single>;
 begin
   Width := Max(Width, 0.1);
@@ -325,7 +334,7 @@ begin
   end;
 end;
 
-function VectArtStrokeUsesRoundCaps(Style: TVectArtStrokeStyle): Boolean;
+function VectArtStrokeUsesRoundCaps(Style: TVectArtMifStrokeStyle): Boolean;
 begin
   Result := Style in [vssDotted, vssDashDot, vssDashDotDot,
     vssSparseDotted, vssLongDashDot];
@@ -366,7 +375,7 @@ begin
   FFillColor := AFillColor;
   FRotationDegrees := 0.0;
   FStrokeColor := clBlack;
-  FStrokeStyle := vssSolid;
+  FMifStrokeStyle := vssSolid;
   FStrokeWidth := 0.0;
 end;
 
@@ -376,17 +385,17 @@ constructor TVectArtLineLayer.Create(const AName: string;
   const AStartPoint, AEndPoint: TPointF);
 begin
   inherited Create(vlkLine, AName);
-  FAntiAlias := True;
-  FEndMarker := vlmNone;
-  FEndMarkerSize := 4.0;
+  FMifAntiAlias := True;
+  FMifEndMarker := vlmNone;
+  FMifEndMarkerSize := 4.0;
   FStartPoint := AStartPoint;
   FEndPoint := AEndPoint;
   FLineCap := vlcButt;
   FLineJoin := vljMiter;
-  FStartMarker := vlmNone;
-  FStartMarkerSize := 4.0;
+  FMifStartMarker := vlmNone;
+  FMifStartMarkerSize := 4.0;
   FStrokeColor := clBlack;
-  FStrokeStyle := vssSolid;
+  FMifStrokeStyle := vssSolid;
   FStrokeWidth := 1.0;
 end;
 
@@ -401,7 +410,7 @@ begin
   FFillColor := clWhite;
   FFilled := AClosed;
   FStrokeColor := clBlack;
-  FStrokeStyle := vssSolid;
+  FMifStrokeStyle := vssSolid;
   FStrokeWidth := 1.0;
 end;
 
@@ -422,11 +431,20 @@ end;
 constructor TVectArtDocument.Create;
 begin
   inherited Create;
+  FEditingMode := vemStandard;
   FLayers := TObjectList<TVectArtLayer>.Create(True);
   FSelectedLayers := TList<Integer>.Create;
   FLayers.Add(TVectArtCanvasLayer.Create(DEFAULT_CANVAS_WIDTH,
     DEFAULT_CANVAS_HEIGHT, clWhite));
   FSelectedIndex := -1;
+end;
+
+procedure TVectArtDocument.SetEditingMode(const Value: TVectArtEditingMode);
+begin
+  if FEditingMode = Value then
+    Exit;
+  FEditingMode := Value;
+  Changed;
 end;
 
 destructor TVectArtDocument.Destroy;
@@ -515,7 +533,7 @@ begin
   RectangleLayer.RotationDegrees := NormalizeAngleDegrees(
     Data.RotationDegrees);
   RectangleLayer.StrokeColor := Data.StrokeColor;
-  RectangleLayer.StrokeStyle := Data.StrokeStyle;
+  RectangleLayer.MifStrokeStyle := Data.MifStrokeStyle;
   RectangleLayer.StrokeWidth := Max(Data.StrokeWidth, 0.0);
   RectangleLayer.Visible := Data.Visible;
   FLayers.Insert(Result, RectangleLayer);
@@ -538,15 +556,15 @@ begin
     Data.EndPoint);
   LineLayer.Locked := Data.Locked;
   LineLayer.LineCap := Data.LineCap;
-  LineLayer.AntiAlias := Data.AntiAlias;
-  LineLayer.EndMarker := Data.EndMarker;
-  LineLayer.EndMarkerSize := Max(Data.EndMarkerSize, 1.0);
+  LineLayer.MifAntiAlias := Data.MifAntiAlias;
+  LineLayer.MifEndMarker := Data.MifEndMarker;
+  LineLayer.MifEndMarkerSize := Max(Data.MifEndMarkerSize, 1.0);
   LineLayer.LineJoin := Data.LineJoin;
-  LineLayer.StartMarker := Data.StartMarker;
-  LineLayer.StartMarkerSize := Max(Data.StartMarkerSize, 1.0);
+  LineLayer.MifStartMarker := Data.MifStartMarker;
+  LineLayer.MifStartMarkerSize := Max(Data.MifStartMarkerSize, 1.0);
   LineLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
   LineLayer.StrokeColor := Data.StrokeColor;
-  LineLayer.StrokeStyle := Data.StrokeStyle;
+  LineLayer.MifStrokeStyle := Data.MifStrokeStyle;
   LineLayer.StrokeWidth := Max(Data.StrokeWidth, 0.1);
   LineLayer.Visible := Data.Visible;
   FLayers.Insert(Result, LineLayer);
@@ -571,7 +589,7 @@ begin
   PathLayer.Locked := Data.Locked;
   PathLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
   PathLayer.StrokeColor := Data.StrokeColor;
-  PathLayer.StrokeStyle := Data.StrokeStyle;
+  PathLayer.MifStrokeStyle := Data.MifStrokeStyle;
   PathLayer.StrokeWidth := Max(Data.StrokeWidth, 0.0);
   PathLayer.Visible := Data.Visible;
   FLayers.Insert(Result, PathLayer);
@@ -650,7 +668,7 @@ begin
   Data.Opacity := RectangleLayer.Opacity;
   Data.RotationDegrees := RectangleLayer.RotationDegrees;
   Data.StrokeColor := RectangleLayer.StrokeColor;
-  Data.StrokeStyle := RectangleLayer.StrokeStyle;
+  Data.MifStrokeStyle := RectangleLayer.MifStrokeStyle;
   Data.StrokeWidth := RectangleLayer.StrokeWidth;
   Data.Visible := RectangleLayer.Visible;
   FLayers.Delete(Index);
@@ -684,18 +702,18 @@ begin
   LineLayer := TVectArtLineLayer(FLayers[Index]);
   Data.EndPoint := LineLayer.EndPoint;
   Data.LineCap := LineLayer.LineCap;
-  Data.AntiAlias := LineLayer.AntiAlias;
-  Data.EndMarker := LineLayer.EndMarker;
-  Data.EndMarkerSize := LineLayer.EndMarkerSize;
+  Data.MifAntiAlias := LineLayer.MifAntiAlias;
+  Data.MifEndMarker := LineLayer.MifEndMarker;
+  Data.MifEndMarkerSize := LineLayer.MifEndMarkerSize;
   Data.LineJoin := LineLayer.LineJoin;
-  Data.StartMarker := LineLayer.StartMarker;
-  Data.StartMarkerSize := LineLayer.StartMarkerSize;
+  Data.MifStartMarker := LineLayer.MifStartMarker;
+  Data.MifStartMarkerSize := LineLayer.MifStartMarkerSize;
   Data.Locked := LineLayer.Locked;
   Data.Name := LineLayer.Name;
   Data.Opacity := LineLayer.Opacity;
   Data.StartPoint := LineLayer.StartPoint;
   Data.StrokeColor := LineLayer.StrokeColor;
-  Data.StrokeStyle := LineLayer.StrokeStyle;
+  Data.MifStrokeStyle := LineLayer.MifStrokeStyle;
   Data.StrokeWidth := LineLayer.StrokeWidth;
   Data.Visible := LineLayer.Visible;
   FLayers.Delete(Index);
@@ -735,7 +753,7 @@ begin
   Data.Opacity := PathLayer.Opacity;
   Data.Points := Copy(PathLayer.Points);
   Data.StrokeColor := PathLayer.StrokeColor;
-  Data.StrokeStyle := PathLayer.StrokeStyle;
+  Data.MifStrokeStyle := PathLayer.MifStrokeStyle;
   Data.StrokeWidth := PathLayer.StrokeWidth;
   Data.Visible := PathLayer.Visible;
   FLayers.Delete(Index);
@@ -994,7 +1012,7 @@ begin
 end;
 
 procedure TVectArtDocument.SetRectangleStroke(Index: Integer; Color: TColor;
-  Width: Single; Style: TVectArtStrokeStyle);
+  Width: Single; Style: TVectArtMifStrokeStyle);
 var
   NewWidth: Single;
   RectangleLayer: TVectArtRectangleLayer;
@@ -1006,11 +1024,11 @@ begin
   NewWidth := Max(Width, 0.0);
   if (RectangleLayer.StrokeColor = Color) and
     SameValue(RectangleLayer.StrokeWidth, NewWidth) and
-    (RectangleLayer.StrokeStyle = Style) then
+    (RectangleLayer.MifStrokeStyle = Style) then
     Exit;
   RectangleLayer.StrokeColor := Color;
   RectangleLayer.StrokeWidth := NewWidth;
-  RectangleLayer.StrokeStyle := Style;
+  RectangleLayer.MifStrokeStyle := Style;
   Changed;
 end;
 
@@ -1048,7 +1066,7 @@ begin
   Changed;
 end;
 
-procedure TVectArtDocument.SetLineAntiAlias(Index: Integer; Value: Boolean);
+procedure TVectArtDocument.SetLineMifAntiAlias(Index: Integer; Value: Boolean);
 var
   LineLayer: TVectArtLineLayer;
 begin
@@ -1056,14 +1074,14 @@ begin
     not (FLayers[Index] is TVectArtLineLayer) then
     Exit;
   LineLayer := TVectArtLineLayer(FLayers[Index]);
-  if LineLayer.AntiAlias = Value then
+  if LineLayer.MifAntiAlias = Value then
     Exit;
-  LineLayer.AntiAlias := Value;
+  LineLayer.MifAntiAlias := Value;
   Changed;
 end;
 
-procedure TVectArtDocument.SetLineEndMarker(Index: Integer;
-  Value: TVectArtLineMarker);
+procedure TVectArtDocument.SetLineMifEndMarker(Index: Integer;
+  Value: TVectArtMifLineMarker);
 var
   LineLayer: TVectArtLineLayer;
 begin
@@ -1071,13 +1089,13 @@ begin
     not (FLayers[Index] is TVectArtLineLayer) then
     Exit;
   LineLayer := TVectArtLineLayer(FLayers[Index]);
-  if LineLayer.EndMarker = Value then
+  if LineLayer.MifEndMarker = Value then
     Exit;
-  LineLayer.EndMarker := Value;
+  LineLayer.MifEndMarker := Value;
   Changed;
 end;
 
-procedure TVectArtDocument.SetLineEndMarkerSize(Index: Integer; Value: Single);
+procedure TVectArtDocument.SetLineMifEndMarkerSize(Index: Integer; Value: Single);
 var
   LineLayer: TVectArtLineLayer;
   NewValue: Single;
@@ -1086,13 +1104,13 @@ begin
     not (FLayers[Index] is TVectArtLineLayer) then Exit;
   LineLayer := TVectArtLineLayer(FLayers[Index]);
   NewValue := Max(Value, 1.0);
-  if SameValue(LineLayer.EndMarkerSize, NewValue) then Exit;
-  LineLayer.EndMarkerSize := NewValue;
+  if SameValue(LineLayer.MifEndMarkerSize, NewValue) then Exit;
+  LineLayer.MifEndMarkerSize := NewValue;
   Changed;
 end;
 
-procedure TVectArtDocument.SetLineStartMarker(Index: Integer;
-  Value: TVectArtLineMarker);
+procedure TVectArtDocument.SetLineMifStartMarker(Index: Integer;
+  Value: TVectArtMifLineMarker);
 var
   LineLayer: TVectArtLineLayer;
 begin
@@ -1100,13 +1118,13 @@ begin
     not (FLayers[Index] is TVectArtLineLayer) then
     Exit;
   LineLayer := TVectArtLineLayer(FLayers[Index]);
-  if LineLayer.StartMarker = Value then
+  if LineLayer.MifStartMarker = Value then
     Exit;
-  LineLayer.StartMarker := Value;
+  LineLayer.MifStartMarker := Value;
   Changed;
 end;
 
-procedure TVectArtDocument.SetLineStartMarkerSize(Index: Integer; Value: Single);
+procedure TVectArtDocument.SetLineMifStartMarkerSize(Index: Integer; Value: Single);
 var
   LineLayer: TVectArtLineLayer;
   NewValue: Single;
@@ -1115,8 +1133,8 @@ begin
     not (FLayers[Index] is TVectArtLineLayer) then Exit;
   LineLayer := TVectArtLineLayer(FLayers[Index]);
   NewValue := Max(Value, 1.0);
-  if SameValue(LineLayer.StartMarkerSize, NewValue) then Exit;
-  LineLayer.StartMarkerSize := NewValue;
+  if SameValue(LineLayer.MifStartMarkerSize, NewValue) then Exit;
+  LineLayer.MifStartMarkerSize := NewValue;
   Changed;
 end;
 
@@ -1136,7 +1154,7 @@ begin
 end;
 
 procedure TVectArtDocument.SetLineStroke(Index: Integer; Color: TColor;
-  Width: Single; Style: TVectArtStrokeStyle);
+  Width: Single; Style: TVectArtMifStrokeStyle);
 var
   LineLayer: TVectArtLineLayer;
   NewWidth: Single;
@@ -1148,11 +1166,11 @@ begin
   NewWidth := Max(Width, 0.1);
   if (LineLayer.StrokeColor = Color) and
     SameValue(LineLayer.StrokeWidth, NewWidth) and
-    (LineLayer.StrokeStyle = Style) then
+    (LineLayer.MifStrokeStyle = Style) then
     Exit;
   LineLayer.StrokeColor := Color;
   LineLayer.StrokeWidth := NewWidth;
-  LineLayer.StrokeStyle := Style;
+  LineLayer.MifStrokeStyle := Style;
   Changed;
 end;
 
@@ -1212,7 +1230,7 @@ begin
 end;
 
 procedure TVectArtDocument.SetPathStroke(Index: Integer; Color: TColor;
-  Width: Single; Style: TVectArtStrokeStyle);
+  Width: Single; Style: TVectArtMifStrokeStyle);
 var
   NewWidth: Single;
   PathLayer: TVectArtPathLayer;
@@ -1224,11 +1242,11 @@ begin
   NewWidth := Max(Width, 0.0);
   if (PathLayer.StrokeColor = Color) and
     SameValue(PathLayer.StrokeWidth, NewWidth) and
-    (PathLayer.StrokeStyle = Style) then
+    (PathLayer.MifStrokeStyle = Style) then
     Exit;
   PathLayer.StrokeColor := Color;
   PathLayer.StrokeWidth := NewWidth;
-  PathLayer.StrokeStyle := Style;
+  PathLayer.MifStrokeStyle := Style;
   Changed;
 end;
 

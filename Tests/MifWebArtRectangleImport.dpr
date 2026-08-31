@@ -98,10 +98,10 @@ begin
       Require(SameValue(Rectangle.StrokeWidth, 1.0, 0.000001),
         'MIF stroke width differs');
       if InputFileName.Contains(#$8907#$96D1#$306A#$70B9#$7DDA) then
-        Require(Rectangle.StrokeStyle = vssDashed,
+        Require(Rectangle.MifStrokeStyle = vssDashed,
           'MIF dashed stroke style differs')
       else
-        Require(Rectangle.StrokeStyle = vssSolid,
+        Require(Rectangle.MifStrokeStyle = vssSolid,
           'MIF solid stroke style differs');
     end;
     Require(TryCreateVectArtMifFromDocument(Document, Container,

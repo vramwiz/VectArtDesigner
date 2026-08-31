@@ -62,7 +62,7 @@ begin
     Data.Filled := True;
     Data.FillColor := clBlue;
     Data.StrokeColor := clBlack;
-    Data.StrokeStyle := vssSolid;
+    Data.MifStrokeStyle := vssSolid;
     Data.StrokeWidth := 2;
     Data.Opacity := 1;
     Data.Visible := True;

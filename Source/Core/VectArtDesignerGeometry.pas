@@ -1,4 +1,5 @@
 ﻿// 回転を持つ図形の四隅、外接範囲、座標変換を共通計算する。
+// MIF互換の線端マーカー形状生成もこの座標計算へ集約する。
 unit VectArtDesignerGeometry;
 
 interface
@@ -10,11 +11,11 @@ type
   TVectArtQuad = array[0..3] of TPointF;
 
   TVectArtMarkerGeometry = record
-    PrimaryPoints: TArray<TPointF>;
-    SecondaryPoints: TArray<TPointF>;
-    PrimaryClosed: Boolean;
-    SecondaryClosed: Boolean;
-    Filled: Boolean;
+    PrimaryPoints: TArray<TPointF>;   // 主形状を構成する点列。
+    SecondaryPoints: TArray<TPointF>; // 星形などの補助形状を構成する点列。
+    PrimaryClosed: Boolean;           // 主形状の終点を始点へ接続する指定。
+    SecondaryClosed: Boolean;         // 補助形状の終点を始点へ接続する指定。
+    Filled: Boolean;                  // 閉じた主形状を塗りつぶす指定。
   end;
 
 function NormalizeAngleDegrees(Value: Single): Single;
@@ -28,7 +29,8 @@ function PointInRotatedRectangle(const Point: TPointF; const Bounds: TRectF;
   RotationDegrees: Single): Boolean;
 function PointInPolygon(const Point: TPointF;
   const Polygon: TArray<TPointF>): Boolean;
-function BuildLineMarkerGeometry(MarkerKind: Integer; const Tip,
+// MIFマーカー番号、線幅、倍率から描画用の点列と閉領域情報を生成する。
+function BuildMifLineMarkerGeometry(MarkerKind: Integer; const Tip,
   InsidePoint: TPointF; StrokeWidth, MarkerSize: Single): TVectArtMarkerGeometry;
 
 implementation
@@ -142,7 +144,7 @@ begin
   end;
 end;
 
-function BuildLineMarkerGeometry(MarkerKind: Integer; const Tip,
+function BuildMifLineMarkerGeometry(MarkerKind: Integer; const Tip,
   InsidePoint: TPointF; StrokeWidth, MarkerSize: Single): TVectArtMarkerGeometry;
 var
   Angle: Double;

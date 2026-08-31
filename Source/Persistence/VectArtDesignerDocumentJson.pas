@@ -6,7 +6,9 @@ interface
 uses
   VectArtDesignerDocument;
 
+// Documentを埋め込み用JSONへ変換する。既存キー名は内部のMif改名後も維持する。
 function SerializeVectArtDocument(Document: TVectArtDocument): string;
+// 既存キーを含むJSONをDocumentへ適用する。Documentを所有しない。
 function TryDeserializeVectArtDocument(const Text: string;
   Document: TVectArtDocument; out ErrorMessage: string): Boolean;
 
@@ -143,16 +145,16 @@ begin
         LineJson.AddPair('strokeWidth',
           TJSONNumber.Create(Line.StrokeWidth));
         LineJson.AddPair('strokeStyle',
-          TJSONNumber.Create(Ord(Line.StrokeStyle)));
+          TJSONNumber.Create(Ord(Line.MifStrokeStyle)));
         LineJson.AddPair('lineCap', TJSONNumber.Create(Ord(Line.LineCap)));
         LineJson.AddPair('lineJoin', TJSONNumber.Create(Ord(Line.LineJoin)));
-        LineJson.AddPair('antiAlias', TJSONBool.Create(Line.AntiAlias));
-        LineJson.AddPair('endMarker', TJSONNumber.Create(Ord(Line.EndMarker)));
-        LineJson.AddPair('endMarkerSize', TJSONNumber.Create(Line.EndMarkerSize));
+        LineJson.AddPair('antiAlias', TJSONBool.Create(Line.MifAntiAlias));
+        LineJson.AddPair('endMarker', TJSONNumber.Create(Ord(Line.MifEndMarker)));
+        LineJson.AddPair('endMarkerSize', TJSONNumber.Create(Line.MifEndMarkerSize));
         LineJson.AddPair('startMarker',
-          TJSONNumber.Create(Ord(Line.StartMarker)));
+          TJSONNumber.Create(Ord(Line.MifStartMarker)));
         LineJson.AddPair('startMarkerSize',
-          TJSONNumber.Create(Line.StartMarkerSize));
+          TJSONNumber.Create(Line.MifStartMarkerSize));
         LineJson.AddPair('visible', TJSONBool.Create(Line.Visible));
         LineJson.AddPair('locked', TJSONBool.Create(Line.Locked));
         LayersJson.AddElement(LineJson);
@@ -174,7 +176,7 @@ begin
         PathJson.AddPair('strokeWidth',
           TJSONNumber.Create(Path.StrokeWidth));
         PathJson.AddPair('strokeStyle',
-          TJSONNumber.Create(Ord(Path.StrokeStyle)));
+          TJSONNumber.Create(Ord(Path.MifStrokeStyle)));
         PathJson.AddPair('visible', TJSONBool.Create(Path.Visible));
         PathJson.AddPair('locked', TJSONBool.Create(Path.Locked));
         PointsJson := TJSONArray.Create;
@@ -213,7 +215,7 @@ begin
       RectangleJson.AddPair('strokeWidth',
         TJSONNumber.Create(Rectangle.StrokeWidth));
       RectangleJson.AddPair('strokeStyle',
-        TJSONNumber.Create(Ord(Rectangle.StrokeStyle)));
+        TJSONNumber.Create(Ord(Rectangle.MifStrokeStyle)));
       RectangleJson.AddPair('visible', TJSONBool.Create(Rectangle.Visible));
       RectangleJson.AddPair('locked', TJSONBool.Create(Rectangle.Locked));
       LayersJson.AddElement(RectangleJson);
@@ -261,7 +263,7 @@ var
   LineCapValue: Integer;
   LineJoinValue: Integer;
   LineMarkerValue: Integer;
-  StrokeStyleValue: Integer;
+  MifStrokeStyleValue: Integer;
   Version: Integer;
 begin
   Result := False;
@@ -348,11 +350,11 @@ begin
             'strokeColor'));
           LineValue.StrokeWidth := Max(ReadSingle(LayerJson,
             'strokeWidth'), 0.1);
-          StrokeStyleValue := ReadInteger(LayerJson, 'strokeStyle');
-          LineValue.StrokeStyle := vssSolid;
-          if InRange(StrokeStyleValue, Ord(Low(TVectArtStrokeStyle)),
-            Ord(High(TVectArtStrokeStyle))) then
-            LineValue.StrokeStyle := TVectArtStrokeStyle(StrokeStyleValue);
+          MifStrokeStyleValue := ReadInteger(LayerJson, 'strokeStyle');
+          LineValue.MifStrokeStyle := vssSolid;
+          if InRange(MifStrokeStyleValue, Ord(Low(TVectArtMifStrokeStyle)),
+            Ord(High(TVectArtMifStrokeStyle))) then
+            LineValue.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyleValue);
           LineValue.LineCap := vlcButt;
           if LayerJson.GetValue('lineCap') is TJSONNumber then
           begin
@@ -371,35 +373,35 @@ begin
               Ord(High(TVectArtLineJoin))) then
               LineValue.LineJoin := TVectArtLineJoin(LineJoinValue);
           end;
-          LineValue.AntiAlias := True;
+          LineValue.MifAntiAlias := True;
           if LayerJson.GetValue('antiAlias') is TJSONBool then
-            LineValue.AntiAlias := TJSONBool(
+            LineValue.MifAntiAlias := TJSONBool(
               LayerJson.GetValue('antiAlias')).AsBoolean;
-          LineValue.EndMarker := vlmNone;
-          LineValue.EndMarkerSize := 4.0;
+          LineValue.MifEndMarker := vlmNone;
+          LineValue.MifEndMarkerSize := 4.0;
           if LayerJson.GetValue('endMarker') is TJSONNumber then
           begin
             LineMarkerValue := TJSONNumber(
               LayerJson.GetValue('endMarker')).AsInt;
-            if InRange(LineMarkerValue, Ord(Low(TVectArtLineMarker)),
-              Ord(High(TVectArtLineMarker))) then
-              LineValue.EndMarker := TVectArtLineMarker(LineMarkerValue);
+            if InRange(LineMarkerValue, Ord(Low(TVectArtMifLineMarker)),
+              Ord(High(TVectArtMifLineMarker))) then
+              LineValue.MifEndMarker := TVectArtMifLineMarker(LineMarkerValue);
           end;
           if LayerJson.GetValue('endMarkerSize') is TJSONNumber then
-            LineValue.EndMarkerSize := Max(TJSONNumber(
+            LineValue.MifEndMarkerSize := Max(TJSONNumber(
               LayerJson.GetValue('endMarkerSize')).AsDouble, 1.0);
-          LineValue.StartMarker := vlmNone;
-          LineValue.StartMarkerSize := 4.0;
+          LineValue.MifStartMarker := vlmNone;
+          LineValue.MifStartMarkerSize := 4.0;
           if LayerJson.GetValue('startMarker') is TJSONNumber then
           begin
             LineMarkerValue := TJSONNumber(
               LayerJson.GetValue('startMarker')).AsInt;
-            if InRange(LineMarkerValue, Ord(Low(TVectArtLineMarker)),
-              Ord(High(TVectArtLineMarker))) then
-              LineValue.StartMarker := TVectArtLineMarker(LineMarkerValue);
+            if InRange(LineMarkerValue, Ord(Low(TVectArtMifLineMarker)),
+              Ord(High(TVectArtMifLineMarker))) then
+              LineValue.MifStartMarker := TVectArtMifLineMarker(LineMarkerValue);
           end;
           if LayerJson.GetValue('startMarkerSize') is TJSONNumber then
-            LineValue.StartMarkerSize := Max(TJSONNumber(
+            LineValue.MifStartMarkerSize := Max(TJSONNumber(
               LayerJson.GetValue('startMarkerSize')).AsDouble, 1.0);
           LineValue.Visible := ReadBoolean(LayerJson, 'visible');
           LineValue.Locked := ReadBoolean(LayerJson, 'locked');
@@ -417,11 +419,11 @@ begin
             'strokeColor'));
           PathValue.StrokeWidth := Max(ReadSingle(LayerJson,
             'strokeWidth'), 0.0);
-          StrokeStyleValue := ReadInteger(LayerJson, 'strokeStyle');
-          PathValue.StrokeStyle := vssSolid;
-          if InRange(StrokeStyleValue, Ord(Low(TVectArtStrokeStyle)),
-            Ord(High(TVectArtStrokeStyle))) then
-            PathValue.StrokeStyle := TVectArtStrokeStyle(StrokeStyleValue);
+          MifStrokeStyleValue := ReadInteger(LayerJson, 'strokeStyle');
+          PathValue.MifStrokeStyle := vssSolid;
+          if InRange(MifStrokeStyleValue, Ord(Low(TVectArtMifStrokeStyle)),
+            Ord(High(TVectArtMifStrokeStyle))) then
+            PathValue.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyleValue);
           PathValue.Visible := ReadBoolean(LayerJson, 'visible');
           PathValue.Locked := ReadBoolean(LayerJson, 'locked');
           PointsJson := TJSONArray(RequireValue(LayerJson, 'points',
@@ -465,14 +467,14 @@ begin
         if LayerJson.GetValue('strokeWidth') is TJSONNumber then
           Data.StrokeWidth := Max(TJSONNumber(
             LayerJson.GetValue('strokeWidth')).AsDouble, 0.0);
-        Data.StrokeStyle := vssSolid;
+        Data.MifStrokeStyle := vssSolid;
         if LayerJson.GetValue('strokeStyle') is TJSONNumber then
         begin
-          StrokeStyleValue := TJSONNumber(
+          MifStrokeStyleValue := TJSONNumber(
             LayerJson.GetValue('strokeStyle')).AsInt;
-          if InRange(StrokeStyleValue, Ord(Low(TVectArtStrokeStyle)),
-            Ord(High(TVectArtStrokeStyle))) then
-            Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleValue);
+          if InRange(MifStrokeStyleValue, Ord(Low(TVectArtMifStrokeStyle)),
+            Ord(High(TVectArtMifStrokeStyle))) then
+            Data.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyleValue);
         end;
         Data.Visible := ReadBoolean(LayerJson, 'visible');
         Data.Locked := ReadBoolean(LayerJson, 'locked');

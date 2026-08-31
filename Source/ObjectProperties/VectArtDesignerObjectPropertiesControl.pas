@@ -1,4 +1,5 @@
 // 選択Rectangleの位置、サイズ、塗り色を表示・編集するダークテーマ用Controlを提供する。
+// 共通項目と現在のMIF互換装飾を扱い、将来の標準装飾パネルはこのControlへ追記しない。
 unit VectArtDesignerObjectPropertiesControl;
 
 interface
@@ -19,7 +20,7 @@ type
     FHeightEdit: TEdit;
     FOpacityEdit: TEdit;
     FStrokeColorEdit: TEdit;
-    FStrokeStyleCombo: TVectArtStrokeStyleCombo;
+    FMifStrokeStyleCombo: TVectArtMifStrokeStyleCombo;
     FStrokeWidthEdit: TEdit;
     FUpdating: Boolean;
     FWidthEdit: TEdit;
@@ -29,7 +30,7 @@ type
     procedure ApplyGeometry;
     procedure ApplyOpacity;
     procedure ApplyStrokeColor;
-    procedure ApplyStrokeStyle(Sender: TObject);
+    procedure ApplyMifStrokeStyle(Sender: TObject);
     procedure ApplyStrokeWidth;
     procedure ClearEditValue(Edit: TEdit);
     procedure EditExit(Sender: TObject);
@@ -40,7 +41,7 @@ type
     function GetSelectedStrokeIndices: TArray<Integer>;
     function SelectedLayersHaveLock: Boolean;
     function NewDarkEdit: TEdit;
-    function NewDarkCombo: TVectArtStrokeStyleCombo;
+    function NewDarkCombo: TVectArtMifStrokeStyleCombo;
     function SelectedBounds(out Bounds: TRectF): Boolean;
     procedure SetDocument(const Value: TVectArtDocument);
     procedure SetEditorsEnabled(Value: Boolean);
@@ -84,7 +85,7 @@ begin
   FColorEdit := NewDarkEdit;
   FStrokeColorEdit := NewDarkEdit;
   FStrokeWidthEdit := NewDarkEdit;
-  FStrokeStyleCombo := NewDarkCombo;
+  FMifStrokeStyleCombo := NewDarkCombo;
   FOpacityEdit := NewDarkEdit;
   SetEditorsEnabled(False);
 end;
@@ -134,7 +135,7 @@ begin
       OldColor := TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor;
       FDocument.SetLineStroke(LayerIndex, NewColor,
         TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth,
-        TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle);
+        TVectArtLineLayer(FDocument[LayerIndex]).MifStrokeStyle);
       RectangleLayer := nil;
     end
     else if FDocument[LayerIndex] is TVectArtPathLayer then
@@ -143,7 +144,7 @@ begin
       PathLayer := TVectArtPathLayer(FDocument[LayerIndex]);
       OldColor := PathLayer.StrokeColor;
       FDocument.SetPathStroke(LayerIndex, NewColor, PathLayer.StrokeWidth,
-        PathLayer.StrokeStyle);
+        PathLayer.MifStrokeStyle);
       RectangleLayer := nil;
     end
     else
@@ -152,25 +153,25 @@ begin
       RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
       OldColor := RectangleLayer.StrokeColor;
       FDocument.SetRectangleStroke(LayerIndex, NewColor,
-        RectangleLayer.StrokeWidth, RectangleLayer.StrokeStyle);
+        RectangleLayer.StrokeWidth, RectangleLayer.MifStrokeStyle);
     end;
     if (Command <> nil) and (OldColor <> NewColor) then
       if FDocument[LayerIndex] is TVectArtLineLayer then
         Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
           OldColor, TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth,
-          TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle, NewColor,
+          TVectArtLineLayer(FDocument[LayerIndex]).MifStrokeStyle, NewColor,
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth,
-          TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle))
+          TVectArtLineLayer(FDocument[LayerIndex]).MifStrokeStyle))
       else if FDocument[LayerIndex] is TVectArtPathLayer then
         Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
           OldColor, TVectArtPathLayer(FDocument[LayerIndex]).StrokeWidth,
-          TVectArtPathLayer(FDocument[LayerIndex]).StrokeStyle, NewColor,
+          TVectArtPathLayer(FDocument[LayerIndex]).MifStrokeStyle, NewColor,
           TVectArtPathLayer(FDocument[LayerIndex]).StrokeWidth,
-          TVectArtPathLayer(FDocument[LayerIndex]).StrokeStyle))
+          TVectArtPathLayer(FDocument[LayerIndex]).MifStrokeStyle))
       else
         Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
-          OldColor, RectangleLayer.StrokeWidth, RectangleLayer.StrokeStyle,
-          NewColor, RectangleLayer.StrokeWidth, RectangleLayer.StrokeStyle));
+          OldColor, RectangleLayer.StrokeWidth, RectangleLayer.MifStrokeStyle,
+          NewColor, RectangleLayer.StrokeWidth, RectangleLayer.MifStrokeStyle));
   end;
   if (Command <> nil) and (Command.Count > 0) then
     FEditHistory.AddApplied(Command)
@@ -185,26 +186,26 @@ begin
   end;
 end;
 
-procedure TVectArtObjectPropertiesControl.ApplyStrokeStyle(Sender: TObject);
+procedure TVectArtObjectPropertiesControl.ApplyMifStrokeStyle(Sender: TObject);
 var
   Command: TVectArtCompoundCommand;
   I: Integer;
   LayerIndex: Integer;
   LayerIndices: TArray<Integer>;
   LinesIncluded: Boolean;
-  NewStyle: TVectArtStrokeStyle;
-  OldStyle: TVectArtStrokeStyle;
+  NewStyle: TVectArtMifStrokeStyle;
+  OldStyle: TVectArtMifStrokeStyle;
   OtherStrokesIncluded: Boolean;
   PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
 begin
   if FUpdating or (FDocument = nil) or (FDocument.SelectionCount = 0) or
-    SelectedLayersHaveLock or (FStrokeStyleCombo.ItemIndex < 0) then
+    SelectedLayersHaveLock or (FMifStrokeStyleCombo.ItemIndex < 0) then
     Exit;
-  if not InRange(FStrokeStyleCombo.ItemIndex,
-    Ord(Low(TVectArtStrokeStyle)), Ord(High(TVectArtStrokeStyle))) then
+  if not InRange(FMifStrokeStyleCombo.ItemIndex,
+    Ord(Low(TVectArtMifStrokeStyle)), Ord(High(TVectArtMifStrokeStyle))) then
     Exit;
-  NewStyle := TVectArtStrokeStyle(FStrokeStyleCombo.ItemIndex);
+  NewStyle := TVectArtMifStrokeStyle(FMifStrokeStyleCombo.ItemIndex);
   LayerIndices := GetSelectedStrokeIndices;
   LinesIncluded := False;
   OtherStrokesIncluded := False;
@@ -217,7 +218,7 @@ begin
     if FDocument[LayerIndex] is TVectArtLineLayer then
     begin
       LinesIncluded := True;
-      OldStyle := TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle;
+      OldStyle := TVectArtLineLayer(FDocument[LayerIndex]).MifStrokeStyle;
       FDocument.SetLineStroke(LayerIndex,
         TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor,
         TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth, NewStyle);
@@ -227,7 +228,7 @@ begin
     begin
       OtherStrokesIncluded := True;
       PathLayer := TVectArtPathLayer(FDocument[LayerIndex]);
-      OldStyle := PathLayer.StrokeStyle;
+      OldStyle := PathLayer.MifStrokeStyle;
       FDocument.SetPathStroke(LayerIndex, PathLayer.StrokeColor,
         PathLayer.StrokeWidth, NewStyle);
       RectangleLayer := nil;
@@ -236,7 +237,7 @@ begin
     begin
       OtherStrokesIncluded := True;
       RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
-      OldStyle := RectangleLayer.StrokeStyle;
+      OldStyle := RectangleLayer.MifStrokeStyle;
       FDocument.SetRectangleStroke(LayerIndex, RectangleLayer.StrokeColor,
         RectangleLayer.StrokeWidth, NewStyle);
     end;
@@ -265,9 +266,9 @@ begin
   if FEditorState <> nil then
   begin
     if OtherStrokesIncluded then
-      FEditorState.RectangleStrokeStyle := NewStyle;
+      FEditorState.RectangleMifStrokeStyle := NewStyle;
     if LinesIncluded then
-      FEditorState.LineStrokeStyle := NewStyle;
+      FEditorState.LineMifStrokeStyle := NewStyle;
   end;
 end;
 
@@ -308,7 +309,7 @@ begin
       OldWidth := TVectArtLineLayer(FDocument[LayerIndex]).StrokeWidth;
       FDocument.SetLineStroke(LayerIndex,
         TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor, NewWidth,
-        TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle);
+        TVectArtLineLayer(FDocument[LayerIndex]).MifStrokeStyle);
       RectangleLayer := nil;
     end
     else if FDocument[LayerIndex] is TVectArtPathLayer then
@@ -317,7 +318,7 @@ begin
       PathLayer := TVectArtPathLayer(FDocument[LayerIndex]);
       OldWidth := PathLayer.StrokeWidth;
       FDocument.SetPathStroke(LayerIndex, PathLayer.StrokeColor, NewWidth,
-        PathLayer.StrokeStyle);
+        PathLayer.MifStrokeStyle);
       RectangleLayer := nil;
     end
     else
@@ -326,25 +327,25 @@ begin
       RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndex]);
       OldWidth := RectangleLayer.StrokeWidth;
       FDocument.SetRectangleStroke(LayerIndex, RectangleLayer.StrokeColor,
-        NewWidth, RectangleLayer.StrokeStyle);
+        NewWidth, RectangleLayer.MifStrokeStyle);
     end;
     if (Command <> nil) and not SameValue(OldWidth, NewWidth) then
       if FDocument[LayerIndex] is TVectArtLineLayer then
         Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor, OldWidth,
-          TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle,
+          TVectArtLineLayer(FDocument[LayerIndex]).MifStrokeStyle,
           TVectArtLineLayer(FDocument[LayerIndex]).StrokeColor, NewWidth,
-          TVectArtLineLayer(FDocument[LayerIndex]).StrokeStyle))
+          TVectArtLineLayer(FDocument[LayerIndex]).MifStrokeStyle))
       else if FDocument[LayerIndex] is TVectArtPathLayer then
         Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
           TVectArtPathLayer(FDocument[LayerIndex]).StrokeColor, OldWidth,
-          TVectArtPathLayer(FDocument[LayerIndex]).StrokeStyle,
+          TVectArtPathLayer(FDocument[LayerIndex]).MifStrokeStyle,
           TVectArtPathLayer(FDocument[LayerIndex]).StrokeColor, NewWidth,
-          TVectArtPathLayer(FDocument[LayerIndex]).StrokeStyle))
+          TVectArtPathLayer(FDocument[LayerIndex]).MifStrokeStyle))
       else
         Command.Add(TVectArtStrokeCommand.Create(FDocument, LayerIndex,
-          RectangleLayer.StrokeColor, OldWidth, RectangleLayer.StrokeStyle,
-          RectangleLayer.StrokeColor, NewWidth, RectangleLayer.StrokeStyle));
+          RectangleLayer.StrokeColor, OldWidth, RectangleLayer.MifStrokeStyle,
+          RectangleLayer.StrokeColor, NewWidth, RectangleLayer.MifStrokeStyle));
   end;
   if (Command <> nil) and (Command.Count > 0) then
     FEditHistory.AddApplied(Command)
@@ -648,9 +649,9 @@ begin
 end;
 
 function TVectArtObjectPropertiesControl.NewDarkCombo:
-  TVectArtStrokeStyleCombo;
+  TVectArtMifStrokeStyleCombo;
 begin
-  Result := TVectArtStrokeStyleCombo.Create(Self);
+  Result := TVectArtMifStrokeStyleCombo.Create(Self);
   Result.Parent := Self;
   Result.Style := csOwnerDrawFixed;
   Result.ItemHeight := 22;
@@ -661,7 +662,7 @@ begin
   Result.Font.Color := COLOR_TEXT;
   Result.ParentColor := False;
   Result.ParentFont := False;
-  Result.OnChange := ApplyStrokeStyle;
+  Result.OnChange := ApplyMifStrokeStyle;
 end;
 
 procedure TVectArtObjectPropertiesControl.EditKeyDown(Sender: TObject;
@@ -806,7 +807,7 @@ var
   CommonColor: Boolean;
   CommonOpacity: Boolean;
   CommonStrokeColor: Boolean;
-  CommonStrokeStyle: Boolean;
+  CommonMifStrokeStyle: Boolean;
   CommonStrokeWidth: Boolean;
   I: Integer;
   ImageLayer: TVectArtImageLayer;
@@ -816,7 +817,7 @@ var
   PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
   StrokeColorValue: TColor;
-  StrokeStyleValue: TVectArtStrokeStyle;
+  MifStrokeStyleValue: TVectArtMifStrokeStyle;
   StrokeWidthValue: Single;
 begin
   FUpdating := True;
@@ -840,8 +841,8 @@ begin
         [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
          GetBValue(StrokeColorValue)]);
       FStrokeWidthEdit.Text := FormatFloat('0.##', RectangleLayer.StrokeWidth);
-      FStrokeStyleCombo.SetPendingItemIndex(
-        Ord(RectangleLayer.StrokeStyle));
+      FMifStrokeStyleCombo.SetPendingItemIndex(
+        Ord(RectangleLayer.MifStrokeStyle));
       SetEditorsEnabled(True);
       if RectangleLayer.Locked then
       begin
@@ -852,7 +853,7 @@ begin
         FColorEdit.Enabled := False;
         FStrokeColorEdit.Enabled := False;
         FStrokeWidthEdit.Enabled := False;
-        FStrokeStyleCombo.Enabled := False;
+        FMifStrokeStyleCombo.Enabled := False;
       end;
     end
     else if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
@@ -870,13 +871,13 @@ begin
       ClearEditValue(FColorEdit);
       ClearEditValue(FStrokeColorEdit);
       ClearEditValue(FStrokeWidthEdit);
-      FStrokeStyleCombo.SetPendingItemIndex(-1);
+      FMifStrokeStyleCombo.SetPendingItemIndex(-1);
       FOpacityEdit.Text := FormatFloat('0.##', ImageLayer.Opacity * 100);
       SetEditorsEnabled(True);
       FColorEdit.Enabled := False;
       FStrokeColorEdit.Enabled := False;
       FStrokeWidthEdit.Enabled := False;
-      FStrokeStyleCombo.Enabled := False;
+      FMifStrokeStyleCombo.Enabled := False;
       if ImageLayer.Locked then
       begin
         FXEdit.Enabled := False;
@@ -904,7 +905,7 @@ begin
         [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
          GetBValue(StrokeColorValue)]);
       FStrokeWidthEdit.Text := FormatFloat('0.##', PathLayer.StrokeWidth);
-      FStrokeStyleCombo.SetPendingItemIndex(Ord(PathLayer.StrokeStyle));
+      FMifStrokeStyleCombo.SetPendingItemIndex(Ord(PathLayer.MifStrokeStyle));
       SetEditorsEnabled(True);
       if PathLayer.Locked then
       begin
@@ -915,7 +916,7 @@ begin
         FColorEdit.Enabled := False;
         FStrokeColorEdit.Enabled := False;
         FStrokeWidthEdit.Enabled := False;
-        FStrokeStyleCombo.Enabled := False;
+        FMifStrokeStyleCombo.Enabled := False;
       end;
     end
     else if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
@@ -933,7 +934,7 @@ begin
         [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
          GetBValue(StrokeColorValue)]);
       FStrokeWidthEdit.Text := FormatFloat('0.##', LineLayer.StrokeWidth);
-      FStrokeStyleCombo.SetPendingItemIndex(Ord(LineLayer.StrokeStyle));
+      FMifStrokeStyleCombo.SetPendingItemIndex(Ord(LineLayer.MifStrokeStyle));
       SetEditorsEnabled(True);
       FXEdit.Enabled := False;
       FYEdit.Enabled := False;
@@ -945,7 +946,7 @@ begin
       begin
         FStrokeColorEdit.Enabled := False;
         FStrokeWidthEdit.Enabled := False;
-        FStrokeStyleCombo.Enabled := False;
+        FMifStrokeStyleCombo.Enabled := False;
       end;
     end
     else if (FDocument <> nil) and (FDocument.SelectionCount > 1) and
@@ -960,12 +961,12 @@ begin
       ColorValue := RectangleLayer.FillColor;
       OpacityValue := RectangleLayer.Opacity;
       StrokeColorValue := RectangleLayer.StrokeColor;
-      StrokeStyleValue := RectangleLayer.StrokeStyle;
+      MifStrokeStyleValue := RectangleLayer.MifStrokeStyle;
       StrokeWidthValue := RectangleLayer.StrokeWidth;
       CommonColor := True;
       CommonOpacity := True;
       CommonStrokeColor := True;
-      CommonStrokeStyle := True;
+      CommonMifStrokeStyle := True;
       CommonStrokeWidth := True;
       for I := 1 to High(LayerIndices) do
       begin
@@ -976,8 +977,8 @@ begin
           SameValue(RectangleLayer.Opacity, OpacityValue);
         CommonStrokeColor := CommonStrokeColor and
           (RectangleLayer.StrokeColor = StrokeColorValue);
-        CommonStrokeStyle := CommonStrokeStyle and
-          (RectangleLayer.StrokeStyle = StrokeStyleValue);
+        CommonMifStrokeStyle := CommonMifStrokeStyle and
+          (RectangleLayer.MifStrokeStyle = MifStrokeStyleValue);
         CommonStrokeWidth := CommonStrokeWidth and
           SameValue(RectangleLayer.StrokeWidth, StrokeWidthValue);
       end;
@@ -1006,12 +1007,12 @@ begin
         FStrokeWidthEdit.Text := FormatFloat('0.##', StrokeWidthValue)
       else
         ClearEditValue(FStrokeWidthEdit);
-      if CommonStrokeStyle then
+      if CommonMifStrokeStyle then
       begin
-        FStrokeStyleCombo.SetPendingItemIndex(Ord(StrokeStyleValue));
+        FMifStrokeStyleCombo.SetPendingItemIndex(Ord(MifStrokeStyleValue));
       end
       else
-        FStrokeStyleCombo.SetPendingItemIndex(-1);
+        FMifStrokeStyleCombo.SetPendingItemIndex(-1);
       SetEditorsEnabled(True);
       if SelectedLayersHaveLock then
       begin
@@ -1022,7 +1023,7 @@ begin
         FColorEdit.Enabled := False;
         FStrokeColorEdit.Enabled := False;
         FStrokeWidthEdit.Enabled := False;
-        FStrokeStyleCombo.Enabled := False;
+        FMifStrokeStyleCombo.Enabled := False;
       end;
     end
     else
@@ -1034,7 +1035,7 @@ begin
       ClearEditValue(FColorEdit);
       ClearEditValue(FStrokeColorEdit);
       ClearEditValue(FStrokeWidthEdit);
-      FStrokeStyleCombo.SetPendingItemIndex(-1);
+      FMifStrokeStyleCombo.SetPendingItemIndex(-1);
       ClearEditValue(FOpacityEdit);
       SetEditorsEnabled(False);
     end;
@@ -1088,7 +1089,7 @@ begin
   FColorEdit.SetBounds(12, 158, Max(ClientWidth - 66, 48), EDIT_HEIGHT);
   FStrokeColorEdit.SetBounds(12, 207, Max(ClientWidth - 66, 48), EDIT_HEIGHT);
   FStrokeWidthEdit.SetBounds(12, 256, ColumnWidth, EDIT_HEIGHT);
-  FStrokeStyleCombo.SetBounds((ClientWidth div 2) + 4, 256, ColumnWidth,
+  FMifStrokeStyleCombo.SetBounds((ClientWidth div 2) + 4, 256, ColumnWidth,
     EDIT_HEIGHT);
   FOpacityEdit.SetBounds(12, 305, Max(ClientWidth - 24, 48), EDIT_HEIGHT);
 end;
@@ -1111,7 +1112,7 @@ begin
   FColorEdit.Enabled := Value;
   FStrokeColorEdit.Enabled := Value;
   FStrokeWidthEdit.Enabled := Value;
-  FStrokeStyleCombo.Enabled := Value;
+  FMifStrokeStyleCombo.Enabled := Value;
   FOpacityEdit.Enabled := Value;
 end;
 

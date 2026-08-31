@@ -121,7 +121,7 @@ begin
           RectangleData.Opacity := RectangleLayer.Opacity;
           RectangleData.RotationDegrees := RectangleLayer.RotationDegrees;
           RectangleData.StrokeColor := RectangleLayer.StrokeColor;
-          RectangleData.StrokeStyle := RectangleLayer.StrokeStyle;
+          RectangleData.MifStrokeStyle := RectangleLayer.MifStrokeStyle;
           RectangleData.StrokeWidth := RectangleLayer.StrokeWidth;
           RectangleData.Visible := RectangleLayer.Visible;
           DataList.Add(RectangleData);

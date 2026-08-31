@@ -1,4 +1,5 @@
 // Line詳細設定で使うダークボタンと線端・接合・AAの選択アイコンを描画する。
+// 線端と接合は共通値、AAボタンはMIF vector qualityとして扱う。
 unit VectArtDesignerLineStyleControls;
 
 interface
@@ -54,7 +55,7 @@ type
     property Selected: Boolean read FSelected write SetSelected;
   end;
 
-  TVectArtAntiAliasButton = class(TVectArtDarkButton)
+  TVectArtMifAntiAliasButton = class(TVectArtDarkButton)
   private
     FSelected: Boolean;
     procedure SetSelected(Value: Boolean);
@@ -332,9 +333,9 @@ begin
   Invalidate;
 end;
 
-{ TVectArtAntiAliasButton }
+{ TVectArtMifAntiAliasButton }
 
-procedure TVectArtAntiAliasButton.Paint;
+procedure TVectArtMifAntiAliasButton.Paint;
 var
   Bounds: TRect;
 begin
@@ -351,7 +352,7 @@ begin
   Canvas.Rectangle(Bounds);
 end;
 
-procedure TVectArtAntiAliasButton.SetSelected(Value: Boolean);
+procedure TVectArtMifAntiAliasButton.SetSelected(Value: Boolean);
 begin
   if FSelected = Value then
     Exit;

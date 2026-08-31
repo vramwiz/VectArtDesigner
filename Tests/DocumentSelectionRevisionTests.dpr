@@ -37,7 +37,7 @@ begin
   Result.Opacity := 1.0;
   Result.RotationDegrees := 0.0;
   Result.StrokeColor := clBlack;
-  Result.StrokeStyle := vssSolid;
+  Result.MifStrokeStyle := vssSolid;
   Result.StrokeWidth := 0.0;
   Result.Visible := True;
 end;
@@ -51,6 +51,8 @@ begin
   Document := TVectArtDocument.Create;
   Changes := TChangeCounter.Create;
   try
+    Require(Document.EditingMode = vemStandard,
+      'New document did not use standard editing mode');
     Document.OnChanged := Changes.Changed;
     Document.InsertRectangle(1, RectangleData('One'));
     Document.InsertRectangle(2, RectangleData('Two'));

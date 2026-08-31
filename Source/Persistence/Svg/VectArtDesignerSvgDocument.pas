@@ -1,5 +1,6 @@
 ﻿// Rectangle Documentを標準SVGへ可逆保存し、対応するSVGのキャンバスと四角形を復元する。
 // 標準属性を描画情報の正本とし、SVGに表現できない編集情報だけをvad名前空間へ保持する。
+// Rectangle、Line、Path、Imageを扱い、読込後は標準編集モードを選択する。
 unit VectArtDesignerSvgDocument;
 
 interface
@@ -10,7 +11,7 @@ uses
 // DocumentをUTF-8で保存可能なSVG文字列へ変換する。Documentを所有しない。
 function TryCreateVectArtSvg(Document: TVectArtDocument; out SvgText,
   ErrorMessage: string): Boolean;
-// SVG文字列から対応するキャンバスとRectangleをDocumentへ適用する。Documentを所有しない。
+// SVG文字列から対応内容をDocumentへ適用し、標準編集モードにする。Documentを所有しない。
 function TryLoadVectArtDocumentFromSvg(const SvgText: string;
   Document: TVectArtDocument; out ErrorMessage: string): Boolean;
 // SVGファイルを読み、対応内容をDocumentへ適用する。例外を呼び出し側へ漏らさない。
@@ -165,7 +166,7 @@ begin
   end;
 end;
 
-function LineMarkerName(Value: TVectArtLineMarker): string;
+function MifLineMarkerName(Value: TVectArtMifLineMarker): string;
 begin
   case Value of
     vlmArrow: Result := 'arrow';
@@ -182,13 +183,13 @@ begin
   end;
 end;
 
-function TryParseLineMarkerName(const Value: string;
-  out Marker: TVectArtLineMarker): Boolean;
+function TryParseMifLineMarkerName(const Value: string;
+  out Marker: TVectArtMifLineMarker): Boolean;
 var
-  Candidate: TVectArtLineMarker;
+  Candidate: TVectArtMifLineMarker;
 begin
-  for Candidate := Low(TVectArtLineMarker) to High(TVectArtLineMarker) do
-    if SameText(Trim(Value), LineMarkerName(Candidate)) then
+  for Candidate := Low(TVectArtMifLineMarker) to High(TVectArtMifLineMarker) do
+    if SameText(Trim(Value), MifLineMarkerName(Candidate)) then
     begin
       Marker := Candidate;
       Exit(True);
@@ -196,7 +197,7 @@ begin
   Result := False;
 end;
 
-function SvgMarkerBody(Value: TVectArtLineMarker; MarkerSize: Single): string;
+function SvgMifMarkerBody(Value: TVectArtMifLineMarker; MarkerSize: Single): string;
 var
   OutlineWidth: string;
 begin
@@ -228,7 +229,7 @@ begin
 end;
 
 procedure AppendSvgStroke(Builder: TStringBuilder; Color: TColor;
-  Width: Single; Style: TVectArtStrokeStyle);
+  Width: Single; Style: TVectArtMifStrokeStyle);
 var
   DashIndex: Integer;
   DashIntervals: TArray<Single>;
@@ -302,19 +303,19 @@ begin
         if Document[I] is TVectArtLineLayer then
         begin
           Line := TVectArtLineLayer(Document[I]);
-          if Line.EndMarker <> vlmNone then
+          if Line.MifEndMarker <> vlmNone then
             Builder.Append('    <marker id="vad-end-marker-').Append(I)
-              .Append('" markerWidth="').Append(SvgNumber(Line.EndMarkerSize))
-              .Append('" markerHeight="').Append(SvgNumber(Line.EndMarkerSize))
+              .Append('" markerWidth="').Append(SvgNumber(Line.MifEndMarkerSize))
+              .Append('" markerHeight="').Append(SvgNumber(Line.MifEndMarkerSize))
               .Append('" refX="4" refY="2" viewBox="-1 -1 6 6" orient="auto" markerUnits="strokeWidth">')
-              .Append(SvgMarkerBody(Line.EndMarker, Line.EndMarkerSize))
+              .Append(SvgMifMarkerBody(Line.MifEndMarker, Line.MifEndMarkerSize))
               .AppendLine('</marker>');
-          if Line.StartMarker <> vlmNone then
+          if Line.MifStartMarker <> vlmNone then
             Builder.Append('    <marker id="vad-start-marker-').Append(I)
-              .Append('" markerWidth="').Append(SvgNumber(Line.StartMarkerSize))
-              .Append('" markerHeight="').Append(SvgNumber(Line.StartMarkerSize))
+              .Append('" markerWidth="').Append(SvgNumber(Line.MifStartMarkerSize))
+              .Append('" markerHeight="').Append(SvgNumber(Line.MifStartMarkerSize))
               .Append('" refX="4" refY="2" viewBox="-1 -1 6 6" orient="auto-start-reverse" markerUnits="strokeWidth">')
-              .Append(SvgMarkerBody(Line.StartMarker, Line.StartMarkerSize))
+              .Append(SvgMifMarkerBody(Line.MifStartMarker, Line.MifStartMarkerSize))
               .AppendLine('</marker>');
         end;
       Builder.AppendLine('  </defs>');
@@ -365,25 +366,25 @@ begin
             .Append('" y2="').Append(SvgNumber(Line.EndPoint.Y))
             .Append('" fill="none"');
           AppendSvgStroke(Builder, Line.StrokeColor, Line.StrokeWidth,
-            Line.StrokeStyle);
+            Line.MifStrokeStyle);
           Builder.Append(' opacity="').Append(SvgNumber(Line.Opacity))
             .Append('" stroke-linecap="')
             .Append(SvgLineCap(Line.LineCap)).Append('" stroke-linejoin="')
             .Append(SvgLineJoin(Line.LineJoin)).Append('" vad:name="')
             .Append(XmlEscape(Line.Name)).Append('" vad:locked="')
             .Append(BooleanText(Line.Locked)).Append('"');
-          if not Line.AntiAlias then
+          if not Line.MifAntiAlias then
             Builder.Append(' shape-rendering="crispEdges"');
-          if Line.EndMarker <> vlmNone then
+          if Line.MifEndMarker <> vlmNone then
             Builder.Append(' marker-end="url(#vad-end-marker-').Append(I)
-              .Append(')" vad:end-marker="').Append(LineMarkerName(Line.EndMarker))
+              .Append(')" vad:end-marker="').Append(MifLineMarkerName(Line.MifEndMarker))
               .Append('" vad:end-marker-size="')
-              .Append(SvgNumber(Line.EndMarkerSize)).Append('"');
-          if Line.StartMarker <> vlmNone then
+              .Append(SvgNumber(Line.MifEndMarkerSize)).Append('"');
+          if Line.MifStartMarker <> vlmNone then
             Builder.Append(' marker-start="url(#vad-start-marker-').Append(I)
-              .Append(')" vad:start-marker="').Append(LineMarkerName(Line.StartMarker))
+              .Append(')" vad:start-marker="').Append(MifLineMarkerName(Line.MifStartMarker))
               .Append('" vad:start-marker-size="')
-              .Append(SvgNumber(Line.StartMarkerSize)).Append('"');
+              .Append(SvgNumber(Line.MifStartMarkerSize)).Append('"');
           if not Line.Visible then
             Builder.Append(' display="none"');
           Builder.Append('><title>').Append(XmlEscape(Line.Name))
@@ -411,7 +412,7 @@ begin
             Builder.Append('none');
           Builder.Append('"');
           AppendSvgStroke(Builder, Path.StrokeColor, Path.StrokeWidth,
-            Path.StrokeStyle);
+            Path.MifStrokeStyle);
           Builder.Append(' opacity="').Append(SvgNumber(Path.Opacity))
             .Append('" vad:fill-color="').Append(Integer(Path.FillColor))
             .Append('" vad:name="').Append(XmlEscape(Path.Name))
@@ -440,7 +441,7 @@ begin
           .Append(Integer(Rectangle.FillColor))
           .Append('"');
         AppendSvgStroke(Builder, Rectangle.StrokeColor,
-          Rectangle.StrokeWidth, Rectangle.StrokeStyle);
+          Rectangle.StrokeWidth, Rectangle.MifStrokeStyle);
         Builder
           .Append(' vad:name="').Append(XmlEscape(Rectangle.Name))
           .Append('" vad:locked="').Append(BooleanText(Rectangle.Locked))
@@ -865,7 +866,7 @@ var
   Opacity: Single;
   OpacityText: string;
   StrokeInteger: Integer;
-  StrokeStyleInteger: Integer;
+  MifStrokeStyleInteger: Integer;
   StrokeText: string;
   StrokeWidth: Single;
   ValueText: string;
@@ -900,7 +901,7 @@ begin
     (ColorToRGB(TColor(FillInteger)) = ColorToRGB(Data.FillColor)) then
     Data.FillColor := TColor(FillInteger);
   Data.StrokeColor := clBlack;
-  Data.StrokeStyle := vssSolid;
+  Data.MifStrokeStyle := vssSolid;
   Data.StrokeWidth := 0.0;
   StrokeText := 'none';
   if TryGetPresentationValueOrInherited(Node, InheritedStyles, 'stroke',
@@ -921,14 +922,14 @@ begin
       Exit;
     Data.StrokeWidth := StrokeWidth;
     if TryGetAttribute(Node, 'vad:stroke-style', ValueText) and
-      TryStrToInt(ValueText, StrokeStyleInteger) and
-      InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
-        Ord(High(TVectArtStrokeStyle))) then
-      Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
+      TryStrToInt(ValueText, MifStrokeStyleInteger) and
+      InRange(MifStrokeStyleInteger, Ord(Low(TVectArtMifStrokeStyle)),
+        Ord(High(TVectArtMifStrokeStyle))) then
+      Data.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyleInteger)
     else if TryGetPresentationValueOrInherited(Node, InheritedStyles,
       'stroke-dasharray', ValueText) and
       (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
-      Data.StrokeStyle := vssDashed;
+      Data.MifStrokeStyle := vssDashed;
   end;
   Opacity := 1.0;
   if TryGetPresentationValue(Node, 'opacity', OpacityText) and
@@ -967,7 +968,7 @@ var
   OpacityText: string;
   StrokeInteger: Integer;
   StrokeOpacity: Single;
-  StrokeStyleInteger: Integer;
+  MifStrokeStyleInteger: Integer;
   StrokeText: string;
   ValueText: string;
   VisibilityValue: string;
@@ -999,16 +1000,16 @@ begin
     (not TryParseSvgNumber(ValueText, Data.StrokeWidth) or
      (Data.StrokeWidth <= 0)) then
     Exit(False);
-  Data.StrokeStyle := vssSolid;
+  Data.MifStrokeStyle := vssSolid;
   if TryGetAttribute(Node, 'vad:stroke-style', ValueText) and
-    TryStrToInt(ValueText, StrokeStyleInteger) and
-    InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
-      Ord(High(TVectArtStrokeStyle))) then
-    Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
+    TryStrToInt(ValueText, MifStrokeStyleInteger) and
+    InRange(MifStrokeStyleInteger, Ord(Low(TVectArtMifStrokeStyle)),
+      Ord(High(TVectArtMifStrokeStyle))) then
+    Data.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyleInteger)
   else if TryGetPresentationValueOrInherited(Node, InheritedStyles,
     'stroke-dasharray', ValueText) and
     (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
-    Data.StrokeStyle := vssDashed;
+    Data.MifStrokeStyle := vssDashed;
   Data.LineCap := vlcButt;
   if TryGetPresentationValueOrInherited(Node, InheritedStyles,
     'stroke-linecap', LineCapText) then
@@ -1023,25 +1024,25 @@ begin
       Data.LineJoin := vljBevel
     else if SameText(Trim(LineJoinText), 'round') then
       Data.LineJoin := vljRound;
-  Data.AntiAlias := True;
+  Data.MifAntiAlias := True;
   if TryGetPresentationValueOrInherited(Node, InheritedStyles,
     'shape-rendering', ValueText) and
     SameText(Trim(ValueText), 'crispEdges') then
-    Data.AntiAlias := False;
-  Data.EndMarker := vlmNone;
-  Data.EndMarkerSize := 4.0;
+    Data.MifAntiAlias := False;
+  Data.MifEndMarker := vlmNone;
+  Data.MifEndMarkerSize := 4.0;
   if TryGetAttribute(Node, 'vad:end-marker', ValueText) then
-    TryParseLineMarkerName(ValueText, Data.EndMarker);
+    TryParseMifLineMarkerName(ValueText, Data.MifEndMarker);
   if TryGetAttribute(Node, 'vad:end-marker-size', ValueText) then
-    if not TryParseSvgNumber(ValueText, Data.EndMarkerSize) or
-      (Data.EndMarkerSize < 1.0) then Data.EndMarkerSize := 4.0;
-  Data.StartMarker := vlmNone;
-  Data.StartMarkerSize := 4.0;
+    if not TryParseSvgNumber(ValueText, Data.MifEndMarkerSize) or
+      (Data.MifEndMarkerSize < 1.0) then Data.MifEndMarkerSize := 4.0;
+  Data.MifStartMarker := vlmNone;
+  Data.MifStartMarkerSize := 4.0;
   if TryGetAttribute(Node, 'vad:start-marker', ValueText) then
-    TryParseLineMarkerName(ValueText, Data.StartMarker);
+    TryParseMifLineMarkerName(ValueText, Data.MifStartMarker);
   if TryGetAttribute(Node, 'vad:start-marker-size', ValueText) then
-    if not TryParseSvgNumber(ValueText, Data.StartMarkerSize) or
-      (Data.StartMarkerSize < 1.0) then Data.StartMarkerSize := 4.0;
+    if not TryParseSvgNumber(ValueText, Data.MifStartMarkerSize) or
+      (Data.MifStartMarkerSize < 1.0) then Data.MifStartMarkerSize := 4.0;
   Data.Opacity := 1.0;
   if TryGetPresentationValue(Node, 'opacity', OpacityText) and
     not TryParseSvgNumber(OpacityText, Data.Opacity) then
@@ -1433,7 +1434,7 @@ var
   Parts: TStringList;
   PointsText: string;
   StrokeOpacity: Single;
-  StrokeStyleInteger: Integer;
+  MifStrokeStyleInteger: Integer;
   ValueText: string;
   VisibilityValue: string;
 begin
@@ -1507,16 +1508,16 @@ begin
     TryStrToInt(ValueText, ColorInteger) and
     (ColorToRGB(TColor(ColorInteger)) = ColorToRGB(Data.StrokeColor)) then
     Data.StrokeColor := TColor(ColorInteger);
-  Data.StrokeStyle := vssSolid;
+  Data.MifStrokeStyle := vssSolid;
   if TryGetAttribute(Node, 'vad:stroke-style', ValueText) and
-    TryStrToInt(ValueText, StrokeStyleInteger) and
-    InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
-      Ord(High(TVectArtStrokeStyle))) then
-    Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
+    TryStrToInt(ValueText, MifStrokeStyleInteger) and
+    InRange(MifStrokeStyleInteger, Ord(Low(TVectArtMifStrokeStyle)),
+      Ord(High(TVectArtMifStrokeStyle))) then
+    Data.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyleInteger)
   else if TryGetPresentationValueOrInherited(Node, InheritedStyles,
     'stroke-dasharray', ValueText) and
     (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
-    Data.StrokeStyle := vssDashed;
+    Data.MifStrokeStyle := vssDashed;
   if not Data.Filled and (Data.StrokeWidth <= 0) then
     Exit(False);
   Opacity := 1.0;
@@ -1659,7 +1660,7 @@ begin
   for I := Low(Corners) to High(Corners) do
     Result.Points[I] := Corners[I];
   Result.StrokeColor := RectangleData.StrokeColor;
-  Result.StrokeStyle := RectangleData.StrokeStyle;
+  Result.MifStrokeStyle := RectangleData.MifStrokeStyle;
   Result.StrokeWidth := RectangleData.StrokeWidth * StrokeScale;
   Result.Visible := RectangleData.Visible;
 end;
@@ -1909,6 +1910,7 @@ begin
             Paths[-I - 1000001])
         else
           Document.InsertLine(Document.LayerCount, Lines[-I - 1]);
+      Document.EditingMode := vemStandard;
       Document.SelectedIndex := SelectedIndex;
       Document.Changed;
       Result := True;

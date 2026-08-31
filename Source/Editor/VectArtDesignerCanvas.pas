@@ -115,7 +115,7 @@ type
   end;
 
 function BuildStyledPreviewSegments(const StartPoint, EndPoint: TPoint;
-  Width: Single; Style: TVectArtStrokeStyle): TArray<TPreviewLineSegment>;
+  Width: Single; Style: TVectArtMifStrokeStyle): TArray<TPreviewLineSegment>;
 var
   CurrentDistance: Single;
   DashIndex: Integer;
@@ -170,9 +170,9 @@ end;
 
 procedure DrawStyledPreviewLine(Target: TCanvas; const StartPoint,
   EndPoint: TPoint; Color: TColor; Width: Single;
-  Style: TVectArtStrokeStyle; LineCap: TVectArtLineCap;
-  AntiAlias: Boolean; StartMarker, EndMarker: TVectArtLineMarker;
-  StartMarkerSize, EndMarkerSize: Single); overload;
+  Style: TVectArtMifStrokeStyle; LineCap: TVectArtLineCap;
+  MifAntiAlias: Boolean; MifStartMarker, MifEndMarker: TVectArtMifLineMarker;
+  MifStartMarkerSize, MifEndMarkerSize: Single); overload;
 var
   DX: Single;
   DY: Single;
@@ -227,11 +227,11 @@ begin
   for I := 0 to 1 do
   begin
     if I = 0 then
-      Geometry := BuildLineMarkerGeometry(Ord(StartMarker), StartPoint,
-        EndPoint, Width, StartMarkerSize)
+      Geometry := BuildMifLineMarkerGeometry(Ord(MifStartMarker), StartPoint,
+        EndPoint, Width, MifStartMarkerSize)
     else
-      Geometry := BuildLineMarkerGeometry(Ord(EndMarker), EndPoint,
-        StartPoint, Width, EndMarkerSize);
+      Geometry := BuildMifLineMarkerGeometry(Ord(MifEndMarker), EndPoint,
+        StartPoint, Width, MifEndMarkerSize);
     SetLength(MarkerPoints, Length(Geometry.PrimaryPoints));
     for Radius := 0 to High(MarkerPoints) do
       MarkerPoints[Radius] := Point(Round(Geometry.PrimaryPoints[Radius].X),
@@ -254,9 +254,9 @@ end;
 
 procedure DrawStyledPreviewLine(Target: TDirect2DCanvas;
   const StartPoint, EndPoint: TPoint; Color: TColor; Width: Single;
-  Style: TVectArtStrokeStyle; LineCap: TVectArtLineCap;
-  AntiAlias: Boolean; StartMarker, EndMarker: TVectArtLineMarker;
-  StartMarkerSize, EndMarkerSize: Single); overload;
+  Style: TVectArtMifStrokeStyle; LineCap: TVectArtLineCap;
+  MifAntiAlias: Boolean; MifStartMarker, MifEndMarker: TVectArtMifLineMarker;
+  MifStartMarkerSize, MifEndMarkerSize: Single); overload;
 var
   DX: Single;
   DY: Single;
@@ -270,7 +270,7 @@ var
   MarkerPoints: TArray<TPoint>;
   Segments: TArray<TPreviewLineSegment>;
 begin
-  if AntiAlias then
+  if MifAntiAlias then
     Target.RenderTarget.SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE)
   else
     Target.RenderTarget.SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
@@ -315,11 +315,11 @@ begin
   for I := 0 to 1 do
   begin
     if I = 0 then
-      Geometry := BuildLineMarkerGeometry(Ord(StartMarker), StartPoint,
-        EndPoint, Width, StartMarkerSize)
+      Geometry := BuildMifLineMarkerGeometry(Ord(MifStartMarker), StartPoint,
+        EndPoint, Width, MifStartMarkerSize)
     else
-      Geometry := BuildLineMarkerGeometry(Ord(EndMarker), EndPoint,
-        StartPoint, Width, EndMarkerSize);
+      Geometry := BuildMifLineMarkerGeometry(Ord(MifEndMarker), EndPoint,
+        StartPoint, Width, MifEndMarkerSize);
     SetLength(MarkerPoints, Length(Geometry.PrimaryPoints));
     for Radius := 0 to High(MarkerPoints) do
       MarkerPoints[Radius] := Point(Round(Geometry.PrimaryPoints[Radius].X),
@@ -974,10 +974,10 @@ begin
         DrawStyledPreviewLine(Direct2DCanvas, LineStart, LineEnd,
           FEditorState.LineStrokeColor,
           FEditorState.LineStrokeWidth * FZoom,
-          FEditorState.LineStrokeStyle, FEditorState.LineCap,
-          FEditorState.LineAntiAlias, FEditorState.LineStartMarker,
-          FEditorState.LineEndMarker, FEditorState.LineStartMarkerSize,
-          FEditorState.LineEndMarkerSize);
+          FEditorState.LineMifStrokeStyle, FEditorState.LineCap,
+          FEditorState.LineMifAntiAlias, FEditorState.LineMifStartMarker,
+          FEditorState.LineMifEndMarker, FEditorState.LineMifStartMarkerSize,
+          FEditorState.LineMifEndMarkerSize);
       if FShapeCreation.PreviewPath(PathPreview) then
       begin
         Direct2DCanvas.Pen.Color := COLOR_SELECTION;
@@ -1262,10 +1262,10 @@ begin
   if FShapeCreation.PreviewLine(LineStart, LineEnd) then
     DrawStyledPreviewLine(Canvas, LineStart, LineEnd,
       FEditorState.LineStrokeColor, FEditorState.LineStrokeWidth * FZoom,
-      FEditorState.LineStrokeStyle, FEditorState.LineCap,
-      FEditorState.LineAntiAlias, FEditorState.LineStartMarker,
-      FEditorState.LineEndMarker, FEditorState.LineStartMarkerSize,
-      FEditorState.LineEndMarkerSize);
+      FEditorState.LineMifStrokeStyle, FEditorState.LineCap,
+      FEditorState.LineMifAntiAlias, FEditorState.LineMifStartMarker,
+      FEditorState.LineMifEndMarker, FEditorState.LineMifStartMarkerSize,
+      FEditorState.LineMifEndMarkerSize);
   if FShapeCreation.PreviewPath(PathPreview) then
   begin
     Canvas.Pen.Color := COLOR_SELECTION;

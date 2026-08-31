@@ -117,17 +117,17 @@ type
     FDocument: TVectArtDocument;
     FLayerIndex: Integer;
     FNewColor: TColor;
-    FNewStyle: TVectArtStrokeStyle;
+    FNewStyle: TVectArtMifStrokeStyle;
     FNewWidth: Single;
     FOldColor: TColor;
-    FOldStyle: TVectArtStrokeStyle;
+    FOldStyle: TVectArtMifStrokeStyle;
     FOldWidth: Single;
     procedure Apply(Color: TColor; Width: Single;
-      Style: TVectArtStrokeStyle);
+      Style: TVectArtMifStrokeStyle);
   public
     constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
-      OldColor: TColor; OldWidth: Single; OldStyle: TVectArtStrokeStyle;
-      NewColor: TColor; NewWidth: Single; NewStyle: TVectArtStrokeStyle);
+      OldColor: TColor; OldWidth: Single; OldStyle: TVectArtMifStrokeStyle;
+      NewColor: TColor; NewWidth: Single; NewStyle: TVectArtMifStrokeStyle);
     procedure Execute; override;
     procedure Undo; override;
   end;
@@ -145,7 +145,7 @@ type
     procedure Undo; override;
   end;
 
-  TVectArtLineAntiAliasCommand = class(TVectArtEditCommand)
+  TVectArtLineMifAntiAliasCommand = class(TVectArtEditCommand)
   private
     FDocument: TVectArtDocument;
     FLayerIndex: Integer;
@@ -158,43 +158,43 @@ type
     procedure Undo; override;
   end;
 
-  TVectArtLineEndMarkerCommand = class(TVectArtEditCommand)
+  TVectArtLineMifEndMarkerCommand = class(TVectArtEditCommand)
   private
     FDocument: TVectArtDocument;
     FLayerIndex: Integer;
-    FNewValue: TVectArtLineMarker;
-    FOldValue: TVectArtLineMarker;
+    FNewValue: TVectArtMifLineMarker;
+    FOldValue: TVectArtMifLineMarker;
   public
     constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
-      OldValue, NewValue: TVectArtLineMarker);
+      OldValue, NewValue: TVectArtMifLineMarker);
     procedure Execute; override;
     procedure Undo; override;
   end;
 
-  TVectArtLineStartMarkerCommand = class(TVectArtEditCommand)
+  TVectArtLineMifStartMarkerCommand = class(TVectArtEditCommand)
   private
     FDocument: TVectArtDocument;
     FLayerIndex: Integer;
-    FNewValue: TVectArtLineMarker;
-    FOldValue: TVectArtLineMarker;
+    FNewValue: TVectArtMifLineMarker;
+    FOldValue: TVectArtMifLineMarker;
   public
     constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
-      OldValue, NewValue: TVectArtLineMarker);
+      OldValue, NewValue: TVectArtMifLineMarker);
     procedure Execute; override;
     procedure Undo; override;
   end;
 
-  TVectArtLineMarkerSizeCommand = class(TVectArtEditCommand)
+  TVectArtMifLineMarkerSizeCommand = class(TVectArtEditCommand)
   private
     FDocument: TVectArtDocument;
     FLayerIndex: Integer;
     FNewValue: Single;
     FOldValue: Single;
-    FStartMarker: Boolean;
+    FMifStartMarker: Boolean;
     procedure ApplyValue(Value: Single);
   public
     constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
-      StartMarker: Boolean; OldValue, NewValue: Single);
+      MifStartMarker: Boolean; OldValue, NewValue: Single);
     procedure Execute; override;
     procedure Undo; override;
   end;
@@ -436,7 +436,7 @@ begin
 end;
 
 procedure TVectArtStrokeCommand.Apply(Color: TColor; Width: Single;
-  Style: TVectArtStrokeStyle);
+  Style: TVectArtMifStrokeStyle);
 begin
   if FDocument = nil then
     Exit;
@@ -450,8 +450,8 @@ end;
 
 constructor TVectArtStrokeCommand.Create(ADocument: TVectArtDocument;
   LayerIndex: Integer; OldColor: TColor; OldWidth: Single;
-  OldStyle: TVectArtStrokeStyle; NewColor: TColor; NewWidth: Single;
-  NewStyle: TVectArtStrokeStyle);
+  OldStyle: TVectArtMifStrokeStyle; NewColor: TColor; NewWidth: Single;
+  NewStyle: TVectArtMifStrokeStyle);
 begin
   inherited Create;
   FDocument := ADocument;
@@ -506,7 +506,7 @@ begin
   FNewValue := NewValue;
 end;
 
-constructor TVectArtLineAntiAliasCommand.Create(ADocument: TVectArtDocument;
+constructor TVectArtLineMifAntiAliasCommand.Create(ADocument: TVectArtDocument;
   LayerIndex: Integer; OldValue, NewValue: Boolean);
 begin
   inherited Create;
@@ -516,20 +516,20 @@ begin
   FNewValue := NewValue;
 end;
 
-procedure TVectArtLineAntiAliasCommand.Execute;
+procedure TVectArtLineMifAntiAliasCommand.Execute;
 begin
   if FDocument <> nil then
-    FDocument.SetLineAntiAlias(FLayerIndex, FNewValue);
+    FDocument.SetLineMifAntiAlias(FLayerIndex, FNewValue);
 end;
 
-procedure TVectArtLineAntiAliasCommand.Undo;
+procedure TVectArtLineMifAntiAliasCommand.Undo;
 begin
   if FDocument <> nil then
-    FDocument.SetLineAntiAlias(FLayerIndex, FOldValue);
+    FDocument.SetLineMifAntiAlias(FLayerIndex, FOldValue);
 end;
 
-constructor TVectArtLineEndMarkerCommand.Create(ADocument: TVectArtDocument;
-  LayerIndex: Integer; OldValue, NewValue: TVectArtLineMarker);
+constructor TVectArtLineMifEndMarkerCommand.Create(ADocument: TVectArtDocument;
+  LayerIndex: Integer; OldValue, NewValue: TVectArtMifLineMarker);
 begin
   inherited Create;
   FDocument := ADocument;
@@ -538,21 +538,21 @@ begin
   FNewValue := NewValue;
 end;
 
-procedure TVectArtLineEndMarkerCommand.Execute;
+procedure TVectArtLineMifEndMarkerCommand.Execute;
 begin
   if FDocument <> nil then
-    FDocument.SetLineEndMarker(FLayerIndex, FNewValue);
+    FDocument.SetLineMifEndMarker(FLayerIndex, FNewValue);
 end;
 
-procedure TVectArtLineEndMarkerCommand.Undo;
+procedure TVectArtLineMifEndMarkerCommand.Undo;
 begin
   if FDocument <> nil then
-    FDocument.SetLineEndMarker(FLayerIndex, FOldValue);
+    FDocument.SetLineMifEndMarker(FLayerIndex, FOldValue);
 end;
 
-constructor TVectArtLineStartMarkerCommand.Create(
+constructor TVectArtLineMifStartMarkerCommand.Create(
   ADocument: TVectArtDocument; LayerIndex: Integer;
-  OldValue, NewValue: TVectArtLineMarker);
+  OldValue, NewValue: TVectArtMifLineMarker);
 begin
   inherited Create;
   FDocument := ADocument;
@@ -561,44 +561,44 @@ begin
   FNewValue := NewValue;
 end;
 
-procedure TVectArtLineStartMarkerCommand.Execute;
+procedure TVectArtLineMifStartMarkerCommand.Execute;
 begin
   if FDocument <> nil then
-    FDocument.SetLineStartMarker(FLayerIndex, FNewValue);
+    FDocument.SetLineMifStartMarker(FLayerIndex, FNewValue);
 end;
 
-procedure TVectArtLineStartMarkerCommand.Undo;
+procedure TVectArtLineMifStartMarkerCommand.Undo;
 begin
   if FDocument <> nil then
-    FDocument.SetLineStartMarker(FLayerIndex, FOldValue);
+    FDocument.SetLineMifStartMarker(FLayerIndex, FOldValue);
 end;
 
-procedure TVectArtLineMarkerSizeCommand.ApplyValue(Value: Single);
+procedure TVectArtMifLineMarkerSizeCommand.ApplyValue(Value: Single);
 begin
   if FDocument = nil then Exit;
-  if FStartMarker then
-    FDocument.SetLineStartMarkerSize(FLayerIndex, Value)
+  if FMifStartMarker then
+    FDocument.SetLineMifStartMarkerSize(FLayerIndex, Value)
   else
-    FDocument.SetLineEndMarkerSize(FLayerIndex, Value);
+    FDocument.SetLineMifEndMarkerSize(FLayerIndex, Value);
 end;
 
-constructor TVectArtLineMarkerSizeCommand.Create(ADocument: TVectArtDocument;
-  LayerIndex: Integer; StartMarker: Boolean; OldValue, NewValue: Single);
+constructor TVectArtMifLineMarkerSizeCommand.Create(ADocument: TVectArtDocument;
+  LayerIndex: Integer; MifStartMarker: Boolean; OldValue, NewValue: Single);
 begin
   inherited Create;
   FDocument := ADocument;
   FLayerIndex := LayerIndex;
-  FStartMarker := StartMarker;
+  FMifStartMarker := MifStartMarker;
   FOldValue := OldValue;
   FNewValue := NewValue;
 end;
 
-procedure TVectArtLineMarkerSizeCommand.Execute;
+procedure TVectArtMifLineMarkerSizeCommand.Execute;
 begin
   ApplyValue(FNewValue);
 end;
 
-procedure TVectArtLineMarkerSizeCommand.Undo;
+procedure TVectArtMifLineMarkerSizeCommand.Undo;
 begin
   ApplyValue(FOldValue);
 end;

@@ -92,7 +92,7 @@ begin
     Data.Opacity := 0.625;
     Data.RotationDegrees := 27.5;
     Data.StrokeColor := TColor($00112233);
-    Data.StrokeStyle := vssDashDotDot;
+    Data.MifStrokeStyle := vssDashDotDot;
     Data.StrokeWidth := 3.5;
     Data.Visible := False;
     Data.Locked := True;
@@ -103,7 +103,7 @@ begin
     Data2.Opacity := 1.0;
     Data2.RotationDegrees := 0.0;
     Data2.StrokeColor := clBlack;
-    Data2.StrokeStyle := vssSolid;
+    Data2.MifStrokeStyle := vssSolid;
     Data2.StrokeWidth := 0.0;
     Data2.Visible := True;
     Data2.Locked := False;
@@ -112,16 +112,16 @@ begin
     LineData.EndPoint := TPointF.Create(500, 300);
     LineData.Locked := False;
     LineData.LineCap := vlcRound;
-    LineData.AntiAlias := False;
-    LineData.EndMarker := vlmStar;
-    LineData.EndMarkerSize := 9.0;
-    LineData.StartMarker := vlmOpenArrow;
-    LineData.StartMarkerSize := 6.0;
+    LineData.MifAntiAlias := False;
+    LineData.MifEndMarker := vlmStar;
+    LineData.MifEndMarkerSize := 9.0;
+    LineData.MifStartMarker := vlmOpenArrow;
+    LineData.MifStartMarkerSize := 6.0;
     LineData.LineJoin := vljBevel;
     LineData.Name := '斜線';
     LineData.Opacity := 0.8;
     LineData.StrokeColor := TColor($0000AAFF);
-    LineData.StrokeStyle := vssShortDash;
+    LineData.MifStrokeStyle := vssShortDash;
     LineData.StrokeWidth := 6.0;
     LineData.Visible := True;
     SourceDocument.InsertLine(3, LineData);
@@ -134,7 +134,7 @@ begin
     PathData.Locked := False;
     PathData.Opacity := 0.7;
     PathData.StrokeColor := TColor($00AA2200);
-    PathData.StrokeStyle := vssLongDash;
+    PathData.MifStrokeStyle := vssLongDash;
     PathData.StrokeWidth := 4;
     PathData.Visible := True;
     SourceDocument.InsertPath(4, PathData);
@@ -165,6 +165,8 @@ begin
       'SVG embedded PNG is missing');
     Require(TryLoadVectArtDocumentFromSvg(SvgText, TargetDocument,
       ErrorMessage), ErrorMessage);
+    Require(TargetDocument.EditingMode = vemStandard,
+      'SVG load did not select standard editing mode');
     Require((TargetDocument.CanvasLayer.Width = 854) and
       (TargetDocument.CanvasLayer.Height = 480), 'Canvas size differs');
     Require(TargetDocument.CanvasLayer.Transparent,
@@ -182,7 +184,7 @@ begin
       'Stroke color differs');
     Require(SameValue(Rectangle.StrokeWidth, Data.StrokeWidth),
       'Stroke width differs');
-    Require(Rectangle.StrokeStyle = Data.StrokeStyle,
+    Require(Rectangle.MifStrokeStyle = Data.MifStrokeStyle,
       'Stroke style differs');
     RequireSameSingle(Data.Bounds.Left, Rectangle.Bounds.Left,
       'Left differs');
@@ -207,14 +209,14 @@ begin
     RequireSameSingle(LineData.EndPoint.Y, Line.EndPoint.Y,
       'Line end differs');
     Require((Line.StrokeColor = LineData.StrokeColor) and
-      (Line.StrokeStyle = LineData.StrokeStyle) and
+      (Line.MifStrokeStyle = LineData.MifStrokeStyle) and
       (Line.LineCap = LineData.LineCap) and
       (Line.LineJoin = LineData.LineJoin) and
-      (Line.AntiAlias = LineData.AntiAlias) and
-      (Line.EndMarker = LineData.EndMarker) and
-      (Line.StartMarker = LineData.StartMarker) and
-      SameValue(Line.EndMarkerSize, LineData.EndMarkerSize) and
-      SameValue(Line.StartMarkerSize, LineData.StartMarkerSize),
+      (Line.MifAntiAlias = LineData.MifAntiAlias) and
+      (Line.MifEndMarker = LineData.MifEndMarker) and
+      (Line.MifStartMarker = LineData.MifStartMarker) and
+      SameValue(Line.MifEndMarkerSize, LineData.MifEndMarkerSize) and
+      SameValue(Line.MifStartMarkerSize, LineData.MifStartMarkerSize),
       'Line stroke differs');
     Path := TVectArtPathLayer(TargetDocument[4]);
     Require((Length(Path.Points) = Length(PathData.Points)) and
@@ -225,7 +227,7 @@ begin
       'Path point Y differs');
     Require((Path.FillColor = PathData.FillColor) and
       (Path.StrokeColor = PathData.StrokeColor) and
-      (Path.StrokeStyle = PathData.StrokeStyle), 'Path style differs');
+      (Path.MifStrokeStyle = PathData.MifStrokeStyle), 'Path style differs');
     Image := TVectArtImageLayer(TargetDocument[5]);
     Require((Image.Name = ImageData.Name) and Image.Locked and
       not Image.Visible and (Image.SourceKind = visLogo),
@@ -302,7 +304,7 @@ begin
       'External SVG line end differs');
     Require((Line.StrokeColor = TColor($00BC3A12)) and
       SameValue(Line.StrokeWidth, 2.5) and
-      (Line.StrokeStyle = vssDashed) and (Line.LineCap = vlcSquare) and
+      (Line.MifStrokeStyle = vssDashed) and (Line.LineCap = vlcSquare) and
       (Line.LineJoin = vljRound), 'External SVG line stroke differs');
     RequireSameSingle(0.3, Line.Opacity,
       'External SVG line opacity differs');
@@ -340,7 +342,7 @@ begin
       'External SVG polyline points differ');
     Require((Path.StrokeColor = TColor($00332211)) and
       SameValue(Path.StrokeWidth, 3.5) and
-      (Path.StrokeStyle = vssDashed),
+      (Path.MifStrokeStyle = vssDashed),
       'External SVG polyline stroke differs');
     RequireSameSingle(0.2, Path.Opacity,
       'External SVG polyline opacity differs');
@@ -445,15 +447,15 @@ begin
     Require((Rectangle.FillColor = TColor($00332211)) and
       (Rectangle.StrokeColor = TColor($00665544)) and
       SameValue(Rectangle.StrokeWidth, 3.0) and
-      (Rectangle.StrokeStyle = vssDashed),
+      (Rectangle.MifStrokeStyle = vssDashed),
       'Inherited SVG Rectangle style differs');
     RequireSameSingle(0.5, Rectangle.Opacity,
       'Inherited SVG Rectangle opacity differs');
     Line := TVectArtLineLayer(ExternalDocument[2]);
     Require((Line.StrokeColor = TColor($00665544)) and
       SameValue(Line.StrokeWidth, 3.0) and
-      (Line.StrokeStyle = vssDashed) and (Line.LineCap = vlcRound) and
-      (Line.LineJoin = vljBevel) and not Line.AntiAlias,
+      (Line.MifStrokeStyle = vssDashed) and (Line.LineCap = vlcRound) and
+      (Line.LineJoin = vljBevel) and not Line.MifAntiAlias,
       'Inherited SVG Line style differs');
     RequireSameSingle(0.25, Line.Opacity,
       'Inherited SVG Line opacity differs');
@@ -461,14 +463,14 @@ begin
     Require((Path.FillColor = TColor($00332211)) and
       (Path.StrokeColor = TColor($00665544)) and
       SameValue(Path.StrokeWidth, 3.0) and
-      (Path.StrokeStyle = vssDashed),
+      (Path.MifStrokeStyle = vssDashed),
       'Inherited SVG Path style differs');
     RequireSameSingle(0.5, Path.Opacity,
       'Inherited SVG Path opacity differs');
     Line := TVectArtLineLayer(ExternalDocument[4]);
     Require((Line.StrokeColor = clBlue) and
       SameValue(Line.StrokeWidth, 2.0) and
-      (Line.StrokeStyle = vssDashed),
+      (Line.MifStrokeStyle = vssDashed),
       'Child SVG style did not override inherited style');
     SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
       'height="180"><g transform="matrix(1 0 0 1 5 0) ' +

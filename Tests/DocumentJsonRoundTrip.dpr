@@ -56,7 +56,7 @@ begin
     Data.Opacity := 0.625;
     Data.RotationDegrees := 27.5;
     Data.StrokeColor := TColor($00112233);
-    Data.StrokeStyle := vssLongDashDot;
+    Data.MifStrokeStyle := vssLongDashDot;
     Data.StrokeWidth := 3.5;
     Data.Visible := True;
     SourceDocument.InsertRectangle(SourceDocument.LayerCount, Data);
@@ -64,16 +64,16 @@ begin
     LineData.EndPoint := TPointF.Create(220, 130);
     LineData.Locked := False;
     LineData.LineCap := vlcSquare;
-    LineData.AntiAlias := False;
-    LineData.EndMarker := vlmCircle;
-    LineData.EndMarkerSize := 9.0;
-    LineData.StartMarker := vlmDiamond;
-    LineData.StartMarkerSize := 6.0;
+    LineData.MifAntiAlias := False;
+    LineData.MifEndMarker := vlmCircle;
+    LineData.MifEndMarkerSize := 9.0;
+    LineData.MifStartMarker := vlmDiamond;
+    LineData.MifStartMarkerSize := 6.0;
     LineData.LineJoin := vljBevel;
     LineData.Name := 'Line 1';
     LineData.Opacity := 0.75;
     LineData.StrokeColor := clRed;
-    LineData.StrokeStyle := vssMediumDash;
+    LineData.MifStrokeStyle := vssMediumDash;
     LineData.StrokeWidth := 5.0;
     LineData.Visible := True;
     SourceDocument.InsertLine(SourceDocument.LayerCount, LineData);
@@ -86,7 +86,7 @@ begin
     PathData.Locked := False;
     PathData.Opacity := 0.6;
     PathData.StrokeColor := clBlue;
-    PathData.StrokeStyle := vssDashDotDot;
+    PathData.MifStrokeStyle := vssDashDotDot;
     PathData.StrokeWidth := 4.0;
     PathData.Visible := True;
     SourceDocument.InsertPath(SourceDocument.LayerCount, PathData);
@@ -125,7 +125,7 @@ begin
       'Layer stroke color differs');
     Require(SameValue(Rectangle.StrokeWidth, Data.StrokeWidth),
       'Layer stroke width differs');
-    Require(Rectangle.StrokeStyle = Data.StrokeStyle,
+    Require(Rectangle.MifStrokeStyle = Data.MifStrokeStyle,
       'Layer stroke style differs');
     Require(SameValue(Rectangle.Bounds.Left, 12.5), 'Bounds differ');
     TargetLine := TVectArtLineLayer(TargetDocument[2]);
@@ -135,14 +135,14 @@ begin
       'Line points differ');
     Require((TargetLine.StrokeColor = LineData.StrokeColor) and
       SameValue(TargetLine.StrokeWidth, LineData.StrokeWidth) and
-      (TargetLine.StrokeStyle = LineData.StrokeStyle) and
+      (TargetLine.MifStrokeStyle = LineData.MifStrokeStyle) and
       (TargetLine.LineCap = LineData.LineCap) and
       (TargetLine.LineJoin = LineData.LineJoin) and
-      (TargetLine.AntiAlias = LineData.AntiAlias) and
-      (TargetLine.EndMarker = LineData.EndMarker) and
-      (TargetLine.StartMarker = LineData.StartMarker) and
-      SameValue(TargetLine.EndMarkerSize, LineData.EndMarkerSize) and
-      SameValue(TargetLine.StartMarkerSize, LineData.StartMarkerSize),
+      (TargetLine.MifAntiAlias = LineData.MifAntiAlias) and
+      (TargetLine.MifEndMarker = LineData.MifEndMarker) and
+      (TargetLine.MifStartMarker = LineData.MifStartMarker) and
+      SameValue(TargetLine.MifEndMarkerSize, LineData.MifEndMarkerSize) and
+      SameValue(TargetLine.MifStartMarkerSize, LineData.MifStartMarkerSize),
       'Line stroke differs');
     TargetPath := TVectArtPathLayer(TargetDocument[3]);
     Require((Length(TargetPath.Points) = 3) and TargetPath.Closed and
@@ -153,7 +153,7 @@ begin
     Require((TargetPath.FillColor = PathData.FillColor) and
       (TargetPath.StrokeColor = PathData.StrokeColor) and
       SameValue(TargetPath.StrokeWidth, PathData.StrokeWidth) and
-      (TargetPath.StrokeStyle = PathData.StrokeStyle),
+      (TargetPath.MifStrokeStyle = PathData.MifStrokeStyle),
       'Path style differs');
     TargetImage := TVectArtImageLayer(TargetDocument[4]);
     Require((TargetImage.Name = ImageData.Name) and
