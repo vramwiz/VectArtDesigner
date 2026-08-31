@@ -112,6 +112,18 @@
 
 ## MIF固有方針
 
+- SVGへの読み書きを単独アプリの主経路とし、デザインと編集機能はMIF互換性に縛られず自由に設計する。
+- MIF読込は既存データをVectArtDesignerへ移行するための機能として維持する。
+- MIF書出しは可能な範囲で行う補助的なおまけ機能とする。編集内容をMIFへそのまま記録できない場合は、
+  書出し可能な機能やデータへ制限を設け、MIF互換性のためにDocumentや編集機能を制限しない。
+- MIFコンテナー生成時に互換性レポートも同時に作り、完全対応、変換あり、非対応を判定する。注意確認後は
+  再変換せず、判定時に生成した同じコンテナーをファイルへ書き込む。
+- 互換性判定はRectangle、Line、Path、Imageの順に段階的に追加する。
+- Rectangle、Line、Path、ImageはMIF生成と同時に互換性を判定する。レイヤー名、編集ロック、不透明度、座標や寸法、
+  線幅、マーカーサイズ、Pathの頂点数と塗りなど、MIF保存で変換または消失する内容を生成結果と同じ値から
+  報告する。2頂点PathはLineへの変換、2頂点未満は非対応として扱う。
+- ImageはPNG本体をMIF生成前に検証し、Image／Logo種別と配置メタデータを準備した同じPNGをContainerへ
+  格納する。四隅座標の整数化を報告し、破損PNGやMIFへ格納できないPNG構造は非対応として保存を中止する。
 - 調査用`.mif`ファイルはGit同期対象とし、バイナリーファイルとして扱う。
 - MIFコンテナーではMIMGシグネチャ、MHDR、IPNG、MENDを境界検査付きで読み書きする。
 - Reader単体では診断と安全な読込のため未解釈チャンクを保持するが、Documentへ読み込んだ後の保存では
@@ -139,6 +151,34 @@
   小矢印、斜線、星形として取り込み・保存する。
 - 直線の選択表示は選択枠を描かず、始点と終点の外側へ6px空けた四角ハンドル2個だけを描く。
   ハンドル位置は画面座標基準とし、ズーム率にかかわらず見た目の間隔を一定にする。
+- レイヤー一覧のサムネイルはRectangle、Line、Path、Imageを描画する。Pathは点列全体の縦横比を保って
+  サムネイル内へ収め、開いた連続直線、閉じた線、塗りつぶしをGDI／Direct2Dの両方で表示する。
+- SVGはRectangle、Line、Path、Imageの読み書きに対応する。Rectangle、Line、Pathの標準stroke属性は
+  共通の生成処理を使い、外部SVGではstyle属性をプレゼンテーション属性より優先してLineへ取り込む。
+- 外部SVGのpolyline／polygonはカンマ、空白、タブ、改行を含むpointsを読み取り、標準のfill既定値と
+  fill-opacity／stroke-opacityをDocumentの単一Opacityへ反映する。塗りと線で不透明度が異なるpolygonは、
+  Documentで両方を別管理できないため塗りの不透明度を優先する。
+- SVG ImageはPNGのdata URIだけを受け付け、デコード後に画像として開けることを確認してからDocumentへ
+  取り込む。x／y／width／heightとmatrixを同時に適用して四隅座標へ変換し、不正PNGは他の有効レイヤーを
+  巻き込まず読み飛ばす。SVG保存時に不正PNGが残っている場合は保存を中止する。
+- SVG保存は保存先と同じフォルダーへUTF-8 BOMなしの一時ファイルを書き、完了後にwrite-through指定で
+  既存ファイルと置換する。書き込みまたは置換に失敗した場合は既存ファイルを維持し、一時ファイルを削除する。
+- 外部SVGの`path d`は単一サブパスのM／L／H／V／Zを絶対・相対指定ともPathへ取り込む。Mに続く
+  暗黙Lineと符号区切りの数値に対応し、曲線コマンドや複数サブパスは推測で変換せず対象外として読み飛ばす。
+- transformを持たない外部SVGの`g`は再帰的に展開し、子要素の描画順、opacityの乗算、display／visibilityを
+  Documentへ反映する。Documentにグループ合成状態がないため子レイヤーへ平坦化し、transform付きグループは
+  共通アフィン行列へ平坦化する。
+- SVGグループのmatrix／translate／scale／rotateは記述順と親子順を保って合成し、Line、Path、Imageの
+  座標へ適用する。Line／Pathの線幅は変換2軸の拡大率の平均を使い、非均等拡大ではDocumentの単一線幅へ
+  近似する。未対応transformを持つグループは誤配置せず読み飛ばす。
+- SVG Rectangleへ移動・回転・拡大縮小を適用して辺の直交性が維持される場合は、Rectangleの中心、幅、高さ、
+  回転角へ復元する。せん断で平行四辺形になる場合は、塗り、線、名前、状態を引き継いだ4頂点の閉じたPathへ
+  変換して形状を維持する。
+- SVGルートとグループのfill、stroke、stroke-width、stroke-dasharray、stroke-linecap、stroke-linejoin、
+  fill-opacity、stroke-opacity、shape-renderingは子要素へ継承する。入れ子では内側のグループを優先し、子要素
+  自身のstyleまたはプレゼンテーション属性を最優先する。
+- skewX／skewYは共通アフィン行列へ合成し、他のtransformと同じ経路で各レイヤーへ適用する。せん断された
+  RectangleはPathへ変換し、90度など正接を有限座標で表せない変換は対象グループだけを読み飛ばす。
 
 ## VectArtDesignerビルド
 

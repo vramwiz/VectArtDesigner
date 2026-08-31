@@ -1,4 +1,4 @@
-program MifDocumentRoundTrip;
+﻿program MifDocumentRoundTrip;
 
 {$APPTYPE CONSOLE}
 
@@ -30,6 +30,20 @@ procedure Require(Condition: Boolean; const MessageText: string);
 begin
   if not Condition then
     raise Exception.Create(MessageText);
+end;
+
+function HasExportIssue(const Report: TMifExportReport; LayerIndex: Integer;
+  Kind: TMifExportIssueKind; const MessageFragment: string): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 0 to High(Report.Issues) do
+    if (Report.Issues[I].LayerIndex = LayerIndex) and
+      (Report.Issues[I].Kind = Kind) and
+      ((MessageFragment = '') or
+      (Pos(MessageFragment, Report.Issues[I].MessageText) > 0)) then
+      Exit(True);
 end;
 
 function ReadUInt32BE(const Bytes: TBytes; Offset: Integer): UInt32;
@@ -131,6 +145,9 @@ var
   Container: TVectArtMifContainer;
   Data: TVectArtRectangleData;
   ErrorMessage: string;
+  ExactContainer: TVectArtMifContainer;
+  ExactDocument: TVectArtDocument;
+  ExportReport: TMifExportReport;
   I: Integer;
   MatrixA: Double;
   MatrixB: Double;
@@ -149,16 +166,101 @@ var
   TargetRectangle: TVectArtRectangleLayer;
   TargetLine: TVectArtLineLayer;
   TargetPath: TVectArtPathLayer;
+  TwoPointContainer: TVectArtMifContainer;
+  TwoPointDocument: TVectArtDocument;
+  TwoPointReadDocument: TVectArtDocument;
+  UnsupportedContainer: TVectArtMifContainer;
+  UnsupportedDocument: TVectArtDocument;
   Writer: IVectArtMifContainerWriter;
 begin
   TTextRendererSkiaRuntime.Acquire(BundledSkiaRuntimeFileName);
   SourceDocument := TVectArtDocument.Create;
   TargetDocument := TVectArtDocument.Create;
   Container := nil;
+  ExactContainer := nil;
+  ExactDocument := TVectArtDocument.Create;
   ReadContainer := nil;
   ReferenceContainer := nil;
+  TwoPointContainer := nil;
+  TwoPointDocument := TVectArtDocument.Create;
+  TwoPointReadDocument := TVectArtDocument.Create;
+  UnsupportedContainer := nil;
+  UnsupportedDocument := TVectArtDocument.Create;
   Memory := TMemoryStream.Create;
   try
+    Data := Default(TVectArtRectangleData);
+    Data.Name := 'Rectangle 1';
+    Data.Bounds := TRectF.Create(40, 50, 220, 180);
+    Data.FillColor := clWhite;
+    Data.Opacity := 1.0;
+    Data.Visible := True;
+    ExactDocument.InsertRectangle(1, Data);
+    LineData := Default(TVectArtLineData);
+    LineData.AntiAlias := True;
+    LineData.EndPoint := TPointF.Create(300, 200);
+    LineData.EndMarkerSize := 4.0;
+    LineData.Name := 'Line 1';
+    LineData.Opacity := 1.0;
+    LineData.StartMarkerSize := 4.0;
+    LineData.StartPoint := TPointF.Create(100, 100);
+    LineData.StrokeColor := clBlack;
+    LineData.StrokeWidth := 1.0;
+    LineData.Visible := True;
+    ExactDocument.InsertLine(2, LineData);
+    PathData := Default(TVectArtPathData);
+    PathData.Name := 'Path 1';
+    PathData.Points := [PointF(100, 200), PointF(200, 250),
+      PointF(300, 200)];
+    PathData.FillColor := clWhite;
+    PathData.Opacity := 1.0;
+    PathData.StrokeColor := clBlack;
+    PathData.StrokeWidth := 1.0;
+    PathData.Visible := True;
+    ExactDocument.InsertPath(3, PathData);
+    Require(TryCreateVectArtMifFromDocument(ExactDocument, nil,
+      ExactContainer, ExportReport, ErrorMessage), ErrorMessage);
+    Require(ExportReport.Compatibility = mecExact,
+      'Exactly representable document was reported as incompatible');
+    Require(Length(ExportReport.Issues) = 0,
+      'Exactly representable document has export issues');
+
+    PathData := Default(TVectArtPathData);
+    PathData.Name := 'Path 1';
+    PathData.Points := [PointF(100, 100)];
+    PathData.Opacity := 1.0;
+    PathData.StrokeColor := clBlack;
+    PathData.StrokeWidth := 1.0;
+    PathData.Visible := True;
+    UnsupportedDocument.InsertPath(1, PathData);
+    Require(not TryCreateVectArtMifFromDocument(UnsupportedDocument, nil,
+      UnsupportedContainer, ExportReport, ErrorMessage),
+      'One-point Path unexpectedly generated a MIF');
+    Require((UnsupportedContainer = nil) and
+      (ExportReport.Compatibility = mecUnsupported),
+      'One-point Path was not reported as unsupported');
+    Require(HasExportIssue(ExportReport, 1, meikUnsupported, '頂点'),
+      'One-point Path issue details are missing');
+
+    PathData.Points := [PointF(100, 100), PointF(300, 200)];
+    PathData.Name := 'Two-point path';
+    TwoPointDocument.InsertPath(1, PathData);
+    Require(TryCreateVectArtMifFromDocument(TwoPointDocument, nil,
+      TwoPointContainer, ExportReport, ErrorMessage), ErrorMessage);
+    Require((ExportReport.Compatibility = mecNeedsConfirmation) and
+      HasExportIssue(ExportReport, 1, meikConversion, 'Line 1'),
+      'Two-point Path conversion was not reported');
+    Require(TryLoadVectArtDocumentFromMif(TwoPointContainer,
+      TwoPointReadDocument, ErrorMessage), ErrorMessage);
+    Require((TwoPointReadDocument.LayerCount = 2) and
+      (TwoPointReadDocument[1] is TVectArtLineLayer),
+      'Two-point Path was not converted to a Line as reported');
+    TargetLine := TVectArtLineLayer(TwoPointReadDocument[1]);
+    Require(SameValue(TargetLine.StartPoint.X, 100.0, 0.000001) and
+      SameValue(TargetLine.StartPoint.Y, 100.0, 0.000001) and
+      SameValue(TargetLine.EndPoint.X, 300.0, 0.000001) and
+      SameValue(TargetLine.EndPoint.Y, 200.0, 0.000001),
+      'Two-point Path endpoints changed during Line conversion');
+
     SourceDocument.SetCanvasSize(640, 360);
     SourceDocument.CanvasLayer.BackgroundColor := TColor($00302010);
     Data.Name := 'MIF layer';
@@ -178,7 +280,7 @@ begin
     LineData.LineCap := vlcRound;
     LineData.AntiAlias := False;
     LineData.EndMarker := vlmSlash;
-    LineData.EndMarkerSize := 9.0;
+    LineData.EndMarkerSize := 100.0;
     LineData.StartMarker := vlmConcaveArrow;
     LineData.StartMarkerSize := 6.0;
     LineData.LineJoin := vljBevel;
@@ -203,8 +305,24 @@ begin
     PathData.Locked := False;
     SourceDocument.InsertPath(3, PathData);
 
-    Require(TryCreateVectArtMifFromDocument(SourceDocument, Container,
-      ErrorMessage), ErrorMessage);
+    Require(TryCreateVectArtMifFromDocument(SourceDocument, nil, Container,
+      ExportReport, ErrorMessage), ErrorMessage);
+    Require(ExportReport.Compatibility = mecNeedsConfirmation,
+      'MIF export compatibility warning was not reported');
+    Require(Length(ExportReport.Issues) >= 4,
+      'MIF export issue details are missing');
+    Require((ExportReport.Issues[0].LayerIndex = 1) and
+      (ExportReport.Issues[0].Kind = meikConversion),
+      'Rectangle conversion issue was not reported first');
+    Require(HasExportIssue(ExportReport, 2, meikConversion,
+      '終点マーカーサイズ'),
+      'Line marker-size conversion was not reported');
+    Require(not HasExportIssue(ExportReport, 2, meikUnchecked, ''),
+      'Line is still reported as unchecked');
+    Require(HasExportIssue(ExportReport, 3, meikConversion, '不透明度'),
+      'Path opacity conversion was not reported');
+    Require(not HasExportIssue(ExportReport, 3, meikUnchecked, ''),
+      'Path is still reported as unchecked');
     Require(Container.ChunkCount = 16, 'Unexpected MIF chunk count');
     Require((Length(Container[0].Data) = 4) and
       (Container[0].Data[0] = 0) and (Container[0].Data[1] = 0) and
@@ -281,8 +399,8 @@ begin
       'Line end marker differs');
     Require(TargetLine.StartMarker = LineData.StartMarker,
       'Line start marker differs');
-    Require(SameValue(TargetLine.EndMarkerSize, LineData.EndMarkerSize),
-      'Line end marker size differs');
+    Require(SameValue(TargetLine.EndMarkerSize, 20.0),
+      'Line end marker size was not converted as reported');
     Require(SameValue(TargetLine.StartMarkerSize, LineData.StartMarkerSize),
       'Line start marker size differs');
     TargetPath := TVectArtPathLayer(TargetDocument[3]);
@@ -304,6 +422,13 @@ begin
     Memory.Free;
     ReadContainer.Free;
     ReferenceContainer.Free;
+    ExactContainer.Free;
+    ExactDocument.Free;
+    TwoPointContainer.Free;
+    TwoPointDocument.Free;
+    TwoPointReadDocument.Free;
+    UnsupportedContainer.Free;
+    UnsupportedDocument.Free;
     Container.Free;
     TargetDocument.Free;
     SourceDocument.Free;

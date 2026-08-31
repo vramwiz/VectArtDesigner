@@ -3,9 +3,12 @@ program MifWebArtImageImport;
 {$APPTYPE CONSOLE}
 
 uses
+  System.Classes,
+  System.Math,
   System.SysUtils,
   System.Types,
   Vcl.Graphics,
+  Vcl.Imaging.pngimage,
   TextRendererSkiaBootstrap in
     'Lib\TextRenderer\TextRendererSkiaBootstrap.pas',
   TextRendererSkiaRuntime in
@@ -30,6 +33,46 @@ begin
     raise Exception.Create(MessageText);
 end;
 
+function HasExportIssue(const Report: TMifExportReport; LayerIndex: Integer;
+  Kind: TMifExportIssueKind): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 0 to High(Report.Issues) do
+    if (Report.Issues[I].LayerIndex = LayerIndex) and
+      (Report.Issues[I].Kind = Kind) then
+      Exit(True);
+end;
+
+function CreatePlainPng: TBytes;
+var
+  Bitmap: TBitmap;
+  Png: TPngImage;
+  Stream: TMemoryStream;
+begin
+  Bitmap := TBitmap.Create;
+  Png := TPngImage.Create;
+  Stream := TMemoryStream.Create;
+  try
+    Bitmap.SetSize(8, 8);
+    Bitmap.Canvas.Brush.Color := clRed;
+    Bitmap.Canvas.FillRect(Rect(0, 0, 8, 8));
+    Png.Assign(Bitmap);
+    Png.SaveToStream(Stream);
+    SetLength(Result, Stream.Size);
+    if Stream.Size > 0 then
+    begin
+      Stream.Position := 0;
+      Stream.ReadBuffer(Result[0], Stream.Size);
+    end;
+  finally
+    Stream.Free;
+    Png.Free;
+    Bitmap.Free;
+  end;
+end;
+
 procedure LoadDocument(const FileName: string; Document: TVectArtDocument);
 var
   Container: TVectArtMifContainer;
@@ -52,14 +95,21 @@ var
   Bitmap: TBitmap;
   Document: TVectArtDocument;
   ErrorMessage: string;
+  ExportReport: TMifExportReport;
   I: NativeInt;
   ImageLayer: TVectArtImageLayer;
+  InvalidContainer: TVectArtMifContainer;
+  InvalidDocument: TVectArtDocument;
+  InvalidImageData: TVectArtImageData;
   ItemRect: TRect;
   LayerRenderer: TVectArtLayerRenderer;
   ModifiedPoints: TVectArtImagePoints;
   NonCheckerPixelCount: Integer;
   OpaquePixelCount: Integer;
   PixelColor: TColor;
+  PlainContainer: TVectArtMifContainer;
+  PlainDocument: TVectArtDocument;
+  PlainReadDocument: TVectArtDocument;
   Rendered: TVectArtRenderBuffer;
   SavedContainer: TVectArtMifContainer;
   X: Integer;
@@ -67,6 +117,11 @@ var
 begin
   TTextRendererSkiaRuntime.Acquire(BundledSkiaRuntimeFileName);
   Document := TVectArtDocument.Create;
+  InvalidContainer := nil;
+  InvalidDocument := TVectArtDocument.Create;
+  PlainContainer := nil;
+  PlainDocument := TVectArtDocument.Create;
+  PlainReadDocument := TVectArtDocument.Create;
   Rendered := TVectArtRenderBuffer.Create;
   Bitmap := TBitmap.Create;
   LayerRenderer := TVectArtLayerRenderer.Create;
@@ -106,13 +161,19 @@ begin
       'Image layer thumbnail was not rendered');
     ModifiedPoints := TVectArtImageLayer(Document[1]).Points;
     for I := 0 to High(ModifiedPoints) do
-      ModifiedPoints[I] := TPointF.Create(ModifiedPoints[I].X + 17,
-        ModifiedPoints[I].Y + 9);
+      ModifiedPoints[I] := TPointF.Create(ModifiedPoints[I].X + 17.25,
+        ModifiedPoints[I].Y + 9.5);
     Document.SetImagePoints(1, ModifiedPoints);
+    ImageLayer := TVectArtImageLayer(Document[1]);
+    ImageLayer.Opacity := 0.5;
+    ImageLayer.Locked := True;
     SavedContainer := nil;
     try
-      Require(TryCreateVectArtMifFromDocument(Document, SavedContainer,
-        ErrorMessage), ErrorMessage);
+      Require(TryCreateVectArtMifFromDocument(Document, nil, SavedContainer,
+        ExportReport, ErrorMessage), ErrorMessage);
+      Require((ExportReport.Compatibility = mecNeedsConfirmation) and
+        HasExportIssue(ExportReport, 1, meikConversion),
+        'Image conversion warning was not reported');
       Require(SavedContainer.ChunkCount = 10,
         'Multiple-image MIF chunk count differs');
       Require(TryLoadVectArtDocumentFromMif(SavedContainer, Document,
@@ -120,9 +181,13 @@ begin
       Require(Document.LayerCount = 4,
         'Multiple images did not survive MIF round trip');
       Require((TVectArtImageLayer(Document[1]).Points[0].X =
-        ModifiedPoints[0].X) and
+        Round(ModifiedPoints[0].X)) and
         (TVectArtImageLayer(Document[1]).Points[0].Y =
-        ModifiedPoints[0].Y), 'Edited image placement was not saved');
+        Round(ModifiedPoints[0].Y)), 'Edited image placement was not saved');
+      Require(SameValue(TVectArtImageLayer(Document[1]).Opacity,
+        128 / 255.0, 0.000001) and
+        not TVectArtImageLayer(Document[1]).Locked,
+        'Image opacity or lock conversion differs from the report');
     finally
       SavedContainer.Free;
     end;
@@ -134,8 +199,10 @@ begin
       'Logo source kind differs');
     SavedContainer := nil;
     try
-      Require(TryCreateVectArtMifFromDocument(Document, SavedContainer,
-        ErrorMessage), ErrorMessage);
+      Require(TryCreateVectArtMifFromDocument(Document, nil, SavedContainer,
+        ExportReport, ErrorMessage), ErrorMessage);
+      Require(ExportReport.Compatibility = mecExact,
+        'Unchanged Logo was not reported as exactly representable');
       Require(TryLoadVectArtDocumentFromMif(SavedContainer, Document,
         ErrorMessage), ErrorMessage);
       Require((Document.LayerCount = 2) and
@@ -145,8 +212,44 @@ begin
     finally
       SavedContainer.Free;
     end;
+
+    InvalidImageData := Default(TVectArtImageData);
+    InvalidImageData.Name := 'Image 1';
+    InvalidImageData.Opacity := 1.0;
+    InvalidImageData.PngData := TBytes.Create(1, 2, 3);
+    InvalidImageData.Points[0] := PointF(0, 0);
+    InvalidImageData.Points[1] := PointF(100, 0);
+    InvalidImageData.Points[2] := PointF(100, 100);
+    InvalidImageData.Points[3] := PointF(0, 100);
+    InvalidImageData.Visible := True;
+    InvalidDocument.InsertImage(1, InvalidImageData);
+    Require(not TryCreateVectArtMifFromDocument(InvalidDocument, nil,
+      InvalidContainer, ExportReport, ErrorMessage),
+      'Invalid PNG unexpectedly generated a MIF');
+    Require((InvalidContainer = nil) and
+      (ExportReport.Compatibility = mecUnsupported) and
+      HasExportIssue(ExportReport, 1, meikUnsupported),
+      'Invalid PNG was not reported as unsupported');
+
+    InvalidImageData.PngData := CreatePlainPng;
+    PlainDocument.InsertImage(1, InvalidImageData);
+    Require(TryCreateVectArtMifFromDocument(PlainDocument, nil,
+      PlainContainer, ExportReport, ErrorMessage), ErrorMessage);
+    Require(ExportReport.Compatibility = mecExact,
+      'Plain PNG was not reported as exactly representable');
+    Require(TryLoadVectArtDocumentFromMif(PlainContainer,
+      PlainReadDocument, ErrorMessage), ErrorMessage);
+    Require((PlainReadDocument.LayerCount = 2) and
+      (PlainReadDocument[1] is TVectArtImageLayer) and
+      (TVectArtImageLayer(PlainReadDocument[1]).SourceKind = visImage),
+      'Plain PNG did not survive MIF round trip as an Image');
     Writeln('WebArt image and logo import: PASS');
   finally
+    InvalidContainer.Free;
+    InvalidDocument.Free;
+    PlainContainer.Free;
+    PlainDocument.Free;
+    PlainReadDocument.Free;
     LayerRenderer.Free;
     Bitmap.Free;
     Rendered.Free;

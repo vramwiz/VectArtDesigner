@@ -359,6 +359,8 @@ procedure TMainForm.FileSaveRequest(Sender: TObject; const FileName: string);
 var
   Container: TVectArtMifContainer;
   ErrorMessage: string;
+  ExportMessage: string;
+  ExportReport: TMifExportReport;
   Extension: string;
 begin
   ErrorMessage := '';
@@ -401,10 +403,33 @@ begin
     Exit;
   end;
   if not TryCreateVectArtMifFromDocument(FDocument, FMifContainer, Container,
-    ErrorMessage) then
+    ExportReport, ErrorMessage) then
   begin
+    if ExportReport.Compatibility = mecUnsupported then
+    begin
+      ExportMessage := 'MIFへ書き出せない項目があります。' +
+        sLineBreak + sLineBreak + ExportReport.ToDisplayText;
+      Application.MessageBox(PChar(ExportMessage), 'MIF書き出し',
+        MB_OK or MB_ICONWARNING);
+      lblStatus.Caption := 'MIF save cancelled: unsupported content';
+      Exit;
+    end;
     lblStatus.Caption := 'MIF document generation error: ' + ErrorMessage;
     Exit;
+  end;
+  if ExportReport.Compatibility = mecNeedsConfirmation then
+  begin
+    ExportMessage := 'MIFへの書き出しには注意が必要です。' +
+      sLineBreak + sLineBreak + ExportReport.ToDisplayText +
+      sLineBreak + sLineBreak + 'この内容で書き出しますか？';
+    if Application.MessageBox(PChar(ExportMessage), 'MIF書き出しの確認',
+      MB_OKCANCEL or MB_ICONWARNING) <> IDOK then
+    begin
+      Container.Free;
+      Container := nil;
+      lblStatus.Caption := 'MIF save cancelled';
+      Exit;
+    end;
   end;
   try
     if (FMifWriter = nil) or

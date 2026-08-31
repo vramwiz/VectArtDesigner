@@ -51,6 +51,9 @@ type
 function VectArtLineThumbnailStrokeWidth(StrokeWidth: Single): Integer;
 procedure VectArtLineThumbnailPoints(const ThumbnailRect: TRect;
   PreviewStrokeWidth: Integer; out StartPoint, EndPoint: TPoint);
+// Path全体を縦横比を保ってサムネイル内へ収めた画面座標を返す。
+function VectArtPathThumbnailPoints(const SourcePoints: TArray<TPointF>;
+  const ThumbnailRect: TRect; PreviewStrokeWidth: Integer): TArray<TPoint>;
 
 implementation
 
@@ -190,6 +193,69 @@ begin
     ThumbnailRect.Top + Margin);
 end;
 
+function VectArtPathThumbnailPoints(const SourcePoints: TArray<TPointF>;
+  const ThumbnailRect: TRect; PreviewStrokeWidth: Integer): TArray<TPoint>;
+var
+  AvailableHeight: Integer;
+  AvailableWidth: Integer;
+  I: Integer;
+  InnerLeft: Single;
+  InnerTop: Single;
+  Margin: Integer;
+  MaximumX: Single;
+  MaximumY: Single;
+  MinimumX: Single;
+  MinimumY: Single;
+  OffsetX: Single;
+  OffsetY: Single;
+  Scale: Single;
+  SourceHeight: Single;
+  SourceWidth: Single;
+begin
+  SetLength(Result, Length(SourcePoints));
+  if Length(SourcePoints) = 0 then
+    Exit;
+  PreviewStrokeWidth := EnsureRange(PreviewStrokeWidth, 1,
+    LINE_THUMBNAIL_MAX_STROKE);
+  Margin := Max(LINE_THUMBNAIL_MIN_MARGIN,
+    ((PreviewStrokeWidth + 1) div 2) + 3);
+  Margin := Min(Margin, Max(Min(ThumbnailRect.Width,
+    ThumbnailRect.Height) div 2, 0));
+  AvailableWidth := Max(ThumbnailRect.Width - 2 * Margin, 0);
+  AvailableHeight := Max(ThumbnailRect.Height - 2 * Margin, 0);
+
+  MinimumX := SourcePoints[0].X;
+  MaximumX := MinimumX;
+  MinimumY := SourcePoints[0].Y;
+  MaximumY := MinimumY;
+  for I := 1 to High(SourcePoints) do
+  begin
+    MinimumX := Min(MinimumX, SourcePoints[I].X);
+    MaximumX := Max(MaximumX, SourcePoints[I].X);
+    MinimumY := Min(MinimumY, SourcePoints[I].Y);
+    MaximumY := Max(MaximumY, SourcePoints[I].Y);
+  end;
+  SourceWidth := MaximumX - MinimumX;
+  SourceHeight := MaximumY - MinimumY;
+  if (SourceWidth > 0) and (SourceHeight > 0) then
+    Scale := Min(AvailableWidth / SourceWidth,
+      AvailableHeight / SourceHeight)
+  else if SourceWidth > 0 then
+    Scale := AvailableWidth / SourceWidth
+  else if SourceHeight > 0 then
+    Scale := AvailableHeight / SourceHeight
+  else
+    Scale := 0;
+  InnerLeft := ThumbnailRect.Left + Margin;
+  InnerTop := ThumbnailRect.Top + Margin;
+  OffsetX := InnerLeft + (AvailableWidth - SourceWidth * Scale) * 0.5;
+  OffsetY := InnerTop + (AvailableHeight - SourceHeight * Scale) * 0.5;
+  for I := 0 to High(SourcePoints) do
+    Result[I] := Point(
+      Round(OffsetX + (SourcePoints[I].X - MinimumX) * Scale),
+      Round(OffsetY + (SourcePoints[I].Y - MinimumY) * Scale));
+end;
+
 procedure TVectArtLayerRenderer.DrawImageThumbnail(ACanvas: TCustomCanvas;
   const ThumbnailRect: TRect; ImageLayer: TVectArtImageLayer);
 var
@@ -219,6 +285,9 @@ var
   LineEnd: TPoint;
   LineStart: TPoint;
   LineStrokeWidth: Integer;
+  PathDrawPoints: TArray<TPoint>;
+  PathLayer: TVectArtPathLayer;
+  PathPoints: TArray<TPoint>;
   RectangleLayer: TVectArtRectangleLayer;
   RectangleRect: TRect;
   Row: Integer;
@@ -340,6 +409,59 @@ begin
     ACanvas.Pen.Style := psSolid;
     ACanvas.Pen.Width := 1;
   end;
+  if Layer is TVectArtPathLayer then
+  begin
+    PathLayer := TVectArtPathLayer(Layer);
+    LineStrokeWidth := VectArtLineThumbnailStrokeWidth(
+      PathLayer.StrokeWidth);
+    PathPoints := VectArtPathThumbnailPoints(PathLayer.Points,
+      ThumbnailRect, LineStrokeWidth);
+    SavedDC := SaveDC(ACanvas.Handle);
+    try
+      IntersectClipRect(ACanvas.Handle, ThumbnailRect.Left,
+        ThumbnailRect.Top, ThumbnailRect.Right, ThumbnailRect.Bottom);
+      if PathLayer.Closed and PathLayer.Filled and
+        (Length(PathPoints) >= 3) then
+      begin
+        ACanvas.Pen.Style := psClear;
+        ACanvas.Brush.Style := bsSolid;
+        if Layer.Visible then
+          ACanvas.Brush.Color := BlendThumbnailColor(PathLayer.FillColor,
+            PathLayer.Opacity)
+        else
+          ACanvas.Brush.Color := BlendThumbnailColor(PathLayer.FillColor,
+            PathLayer.Opacity * 0.35);
+        ACanvas.Polygon(PathPoints);
+      end;
+      if (PathLayer.StrokeWidth > 0) and (Length(PathPoints) >= 2) then
+      begin
+        PathDrawPoints := Copy(PathPoints);
+        if PathLayer.Closed then
+        begin
+          SetLength(PathDrawPoints, Length(PathDrawPoints) + 1);
+          PathDrawPoints[High(PathDrawPoints)] := PathDrawPoints[0];
+        end;
+        ACanvas.Brush.Style := bsClear;
+        if Layer.Visible then
+          ACanvas.Pen.Color := BlendThumbnailColor(PathLayer.StrokeColor,
+            PathLayer.Opacity)
+        else
+          ACanvas.Pen.Color := BlendThumbnailColor(PathLayer.StrokeColor,
+            PathLayer.Opacity * 0.35);
+        ACanvas.Pen.Width := LineStrokeWidth;
+        if PathLayer.StrokeStyle <> vssSolid then
+          ACanvas.Pen.Style := psDash
+        else
+          ACanvas.Pen.Style := psSolid;
+        ACanvas.Polyline(PathDrawPoints);
+      end;
+    finally
+      RestoreDC(ACanvas.Handle, SavedDC);
+    end;
+    ACanvas.Brush.Style := bsSolid;
+    ACanvas.Pen.Style := psSolid;
+    ACanvas.Pen.Width := 1;
+  end;
   if Layer is TVectArtImageLayer then
     DrawImageThumbnail(ACanvas, ThumbnailRect,
       TVectArtImageLayer(Layer));
@@ -410,6 +532,9 @@ var
   LineEnd: TPoint;
   LineStart: TPoint;
   LineStrokeWidth: Integer;
+  PathDrawPoints: TArray<TPoint>;
+  PathLayer: TVectArtPathLayer;
+  PathPoints: TArray<TPoint>;
   RectangleLayer: TVectArtRectangleLayer;
   RectangleRect: TRect;
   Row: Integer;
@@ -530,6 +655,59 @@ begin
     finally
       ACanvas.RenderTarget.PopAxisAlignedClip;
     end;
+    ACanvas.Pen.Style := psSolid;
+    ACanvas.Pen.Width := 1;
+  end;
+  if Layer is TVectArtPathLayer then
+  begin
+    PathLayer := TVectArtPathLayer(Layer);
+    LineStrokeWidth := VectArtLineThumbnailStrokeWidth(
+      PathLayer.StrokeWidth);
+    PathPoints := VectArtPathThumbnailPoints(PathLayer.Points,
+      ThumbnailRect, LineStrokeWidth);
+    ACanvas.RenderTarget.PushAxisAlignedClip(ThumbnailRect,
+      D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    try
+      if PathLayer.Closed and PathLayer.Filled and
+        (Length(PathPoints) >= 3) then
+      begin
+        ACanvas.Pen.Style := psClear;
+        ACanvas.Brush.Style := bsSolid;
+        ACanvas.Brush.Color := PathLayer.FillColor;
+        if Layer.Visible then
+          ACanvas.Brush.Handle.SetOpacity(PathLayer.Opacity)
+        else
+          ACanvas.Brush.Handle.SetOpacity(PathLayer.Opacity * 0.35);
+        ACanvas.Polygon(PathPoints);
+        ACanvas.Brush.Handle.SetOpacity(1.0);
+      end;
+      if (PathLayer.StrokeWidth > 0) and (Length(PathPoints) >= 2) then
+      begin
+        PathDrawPoints := Copy(PathPoints);
+        if PathLayer.Closed then
+        begin
+          SetLength(PathDrawPoints, Length(PathDrawPoints) + 1);
+          PathDrawPoints[High(PathDrawPoints)] := PathDrawPoints[0];
+        end;
+        ACanvas.Brush.Style := bsClear;
+        if Layer.Visible then
+          ACanvas.Pen.Color := BlendThumbnailColor(PathLayer.StrokeColor,
+            PathLayer.Opacity)
+        else
+          ACanvas.Pen.Color := BlendThumbnailColor(PathLayer.StrokeColor,
+            PathLayer.Opacity * 0.35);
+        ACanvas.Pen.Width := LineStrokeWidth;
+        if PathLayer.StrokeStyle <> vssSolid then
+          ACanvas.Pen.Style := psDash
+        else
+          ACanvas.Pen.Style := psSolid;
+        ACanvas.Polyline(PathDrawPoints);
+      end;
+    finally
+      ACanvas.Brush.Handle.SetOpacity(1.0);
+      ACanvas.RenderTarget.PopAxisAlignedClip;
+    end;
+    ACanvas.Brush.Style := bsSolid;
     ACanvas.Pen.Style := psSolid;
     ACanvas.Pen.Width := 1;
   end;

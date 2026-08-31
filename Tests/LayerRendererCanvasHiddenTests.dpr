@@ -42,6 +42,25 @@ begin
   Result.Visible := True;
 end;
 
+function PathData: TVectArtPathData;
+begin
+  Result.Closed := False;
+  Result.FillColor := clWhite;
+  Result.Filled := False;
+  Result.Locked := False;
+  Result.Name := 'Continuous line';
+  Result.Opacity := 1.0;
+  SetLength(Result.Points, 4);
+  Result.Points[0] := TPointF.Create(0, 80);
+  Result.Points[1] := TPointF.Create(30, 0);
+  Result.Points[2] := TPointF.Create(70, 80);
+  Result.Points[3] := TPointF.Create(100, 20);
+  Result.StrokeColor := clBlue;
+  Result.StrokeStyle := vssSolid;
+  Result.StrokeWidth := 5.0;
+  Result.Visible := True;
+end;
+
 var
   Bitmap: TBitmap;
   Bounds: TRect;
@@ -52,6 +71,10 @@ var
   LineItemRect: TRect;
   LineStart: TPoint;
   LineThumbnailRect: TRect;
+  PathItemRect: TRect;
+  PathThumbnailRect: TRect;
+  BlueInside: Integer;
+  BlueOutside: Integer;
   RedInside: Integer;
   RedOutside: Integer;
   Renderer: TVectArtLayerRenderer;
@@ -123,6 +146,24 @@ begin
             Inc(RedOutside);
     Require((RedInside > 0) and (RedOutside = 0),
       'Thick line thumbnail escaped its background');
+    Document.InsertPath(Document.LayerCount, PathData);
+    Renderer.DrawLayers(Bitmap.Canvas, Bounds);
+    PathItemRect := Renderer.LayerItemRect(Bounds, 4);
+    PathThumbnailRect := Rect(PathItemRect.Left + 30,
+      PathItemRect.Top + (PathItemRect.Height - 54) div 2,
+      PathItemRect.Left + 30 + 96,
+      PathItemRect.Top + (PathItemRect.Height + 54) div 2);
+    BlueInside := 0;
+    BlueOutside := 0;
+    for Y := PathItemRect.Top to PathItemRect.Bottom - 1 do
+      for X := PathItemRect.Left to PathItemRect.Right - 1 do
+        if ColorToRGB(Bitmap.Canvas.Pixels[X, Y]) = ColorToRGB(clBlue) then
+          if PtInRect(PathThumbnailRect, Point(X, Y)) then
+            Inc(BlueInside)
+          else
+            Inc(BlueOutside);
+    Require((BlueInside > 0) and (BlueOutside = 0),
+      'Continuous-line thumbnail was not drawn inside its background');
     Writeln('Layer renderer canvas-hidden tests: PASS');
   finally
     Bitmap.Free;

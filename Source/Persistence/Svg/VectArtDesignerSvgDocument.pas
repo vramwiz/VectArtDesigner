@@ -16,7 +16,7 @@ function TryLoadVectArtDocumentFromSvg(const SvgText: string;
 // SVGファイルを読み、対応内容をDocumentへ適用する。例外を呼び出し側へ漏らさない。
 function TryLoadVectArtDocumentFromSvgFile(const FileName: string;
   Document: TVectArtDocument; out ErrorMessage: string): Boolean;
-// DocumentをUTF-8 BOMなしのSVGファイルへ保存する。例外を呼び出し側へ漏らさない。
+// 同じフォルダーの一時ファイルを置換してUTF-8 BOMなしのSVGを保存する。失敗時は既存ファイルを維持する。
 function TrySaveVectArtDocumentToSvgFile(Document: TVectArtDocument;
   const FileName: string; out ErrorMessage: string): Boolean;
 
@@ -25,7 +25,7 @@ implementation
 uses
   System.Classes, System.Generics.Collections, System.IOUtils, System.Math,
   System.NetEncoding, System.SysUtils, System.Types, System.Variants,
-  Vcl.Graphics, Winapi.Windows,
+  Vcl.Graphics, Vcl.Imaging.pngimage, Winapi.Windows,
   VectArtDesignerGeometry, Xml.omnixmldom, Xml.XMLDoc, Xml.XMLIntf,
   Xml.xmldom;
 
@@ -33,6 +33,57 @@ const
   SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
   VAD_NAMESPACE = 'urn:vectartdesigner:document:1';
   VAD_FORMAT_VERSION = 1;
+
+type
+  TSvgAffineMatrix = record
+    A: Single;
+    B: Single;
+    C: Single;
+    D: Single;
+    E: Single;
+    F: Single;
+  end;
+  TSvgInheritedStyles = TDictionary<string, string>;
+
+const
+  SVG_INHERITED_STYLE_NAMES: array[0..8] of string = (
+    'fill', 'stroke', 'stroke-width', 'stroke-dasharray',
+    'stroke-linecap', 'stroke-linejoin', 'fill-opacity',
+    'stroke-opacity', 'shape-rendering');
+
+function SvgIdentityMatrix: TSvgAffineMatrix;
+begin
+  Result.A := 1;
+  Result.B := 0;
+  Result.C := 0;
+  Result.D := 1;
+  Result.E := 0;
+  Result.F := 0;
+end;
+
+function MultiplySvgMatrices(const Left, Right: TSvgAffineMatrix):
+  TSvgAffineMatrix;
+begin
+  Result.A := Left.A * Right.A + Left.C * Right.B;
+  Result.B := Left.B * Right.A + Left.D * Right.B;
+  Result.C := Left.A * Right.C + Left.C * Right.D;
+  Result.D := Left.B * Right.C + Left.D * Right.D;
+  Result.E := Left.A * Right.E + Left.C * Right.F + Left.E;
+  Result.F := Left.B * Right.E + Left.D * Right.F + Left.F;
+end;
+
+function SvgTransformPoint(const Matrix: TSvgAffineMatrix;
+  const Point: TPointF): TPointF;
+begin
+  Result := PointF(Matrix.A * Point.X + Matrix.C * Point.Y + Matrix.E,
+    Matrix.B * Point.X + Matrix.D * Point.Y + Matrix.F);
+end;
+
+function SvgStrokeScale(const Matrix: TSvgAffineMatrix): Single;
+begin
+  Result := (Hypot(Matrix.A, Matrix.B) +
+    Hypot(Matrix.C, Matrix.D)) * 0.5;
+end;
 
 function XmlEscape(const Value: string): string;
 begin
@@ -68,6 +119,30 @@ begin
     Result := 'true'
   else
     Result := 'false';
+end;
+
+function IsDecodablePng(const Data: TBytes): Boolean;
+var
+  Image: TPngImage;
+  Stream: TBytesStream;
+begin
+  Result := False;
+  if Length(Data) = 0 then
+    Exit;
+  Image := TPngImage.Create;
+  Stream := TBytesStream.Create(Data);
+  try
+    try
+      Image.LoadFromStream(Stream);
+      Result := (Image.Width > 0) and (Image.Height > 0);
+    except
+      on Exception do
+        Result := False;
+    end;
+  finally
+    Stream.Free;
+    Image.Free;
+  end;
 end;
 
 function SvgLineCap(Value: TVectArtLineCap): string;
@@ -152,13 +227,39 @@ begin
   end;
 end;
 
+procedure AppendSvgStroke(Builder: TStringBuilder; Color: TColor;
+  Width: Single; Style: TVectArtStrokeStyle);
+var
+  DashIndex: Integer;
+  DashIntervals: TArray<Single>;
+begin
+  if Width <= 0 then
+  begin
+    Builder.Append(' stroke="none"');
+    Exit;
+  end;
+  Builder.Append(' stroke="').Append(SvgColor(Color))
+    .Append('" stroke-width="').Append(SvgNumber(Width))
+    .Append('" vad:stroke-color="').Append(Integer(Color))
+    .Append('" vad:stroke-style="').Append(Ord(Style)).Append('"');
+  DashIntervals := VectArtStrokeDashIntervals(Style, Width);
+  if Length(DashIntervals) = 0 then
+    Exit;
+  Builder.Append(' stroke-dasharray="');
+  for DashIndex := 0 to High(DashIntervals) do
+  begin
+    if DashIndex > 0 then
+      Builder.Append(' ');
+    Builder.Append(SvgNumber(DashIntervals[DashIndex]));
+  end;
+  Builder.Append('"');
+end;
+
 function TryCreateVectArtSvg(Document: TVectArtDocument; out SvgText,
   ErrorMessage: string): Boolean;
 var
   Builder: TStringBuilder;
   Canvas: TVectArtCanvasLayer;
-  DashIndex: Integer;
-  DashIntervals: TArray<Single>;
   I: Integer;
   Image: TVectArtImageLayer;
   Layer: TVectArtLayer;
@@ -223,6 +324,10 @@ begin
         if Layer is TVectArtImageLayer then
         begin
           Image := TVectArtImageLayer(Layer);
+          if not IsDecodablePng(Image.PngData) then
+            raise EConvertError.CreateFmt(
+              'Image layer "%s" does not contain a valid PNG',
+              [Image.Name]);
           Builder.Append('  <image x="0" y="0" width="1" height="1"')
             .Append(' preserveAspectRatio="none" href="data:image/png;base64,')
             .Append(TNetEncoding.Base64.EncodeBytesToString(Image.PngData))
@@ -258,12 +363,11 @@ begin
             .Append('" y1="').Append(SvgNumber(Line.StartPoint.Y))
             .Append('" x2="').Append(SvgNumber(Line.EndPoint.X))
             .Append('" y2="').Append(SvgNumber(Line.EndPoint.Y))
-            .Append('" fill="none" stroke="')
-            .Append(SvgColor(Line.StrokeColor)).Append('" stroke-width="')
-            .Append(SvgNumber(Line.StrokeWidth)).Append('" opacity="')
-            .Append(SvgNumber(Line.Opacity)).Append('" vad:stroke-color="')
-            .Append(Integer(Line.StrokeColor)).Append('" vad:stroke-style="')
-            .Append(Ord(Line.StrokeStyle)).Append('" stroke-linecap="')
+            .Append('" fill="none"');
+          AppendSvgStroke(Builder, Line.StrokeColor, Line.StrokeWidth,
+            Line.StrokeStyle);
+          Builder.Append(' opacity="').Append(SvgNumber(Line.Opacity))
+            .Append('" stroke-linecap="')
             .Append(SvgLineCap(Line.LineCap)).Append('" stroke-linejoin="')
             .Append(SvgLineJoin(Line.LineJoin)).Append('" vad:name="')
             .Append(XmlEscape(Line.Name)).Append('" vad:locked="')
@@ -280,19 +384,6 @@ begin
               .Append(')" vad:start-marker="').Append(LineMarkerName(Line.StartMarker))
               .Append('" vad:start-marker-size="')
               .Append(SvgNumber(Line.StartMarkerSize)).Append('"');
-          DashIntervals := VectArtStrokeDashIntervals(Line.StrokeStyle,
-            Line.StrokeWidth);
-          if Length(DashIntervals) > 0 then
-          begin
-            Builder.Append(' stroke-dasharray="');
-            for DashIndex := 0 to High(DashIntervals) do
-            begin
-              if DashIndex > 0 then
-                Builder.Append(' ');
-              Builder.Append(SvgNumber(DashIntervals[DashIndex]));
-            end;
-            Builder.Append('"');
-          end;
           if not Line.Visible then
             Builder.Append(' display="none"');
           Builder.Append('><title>').Append(XmlEscape(Line.Name))
@@ -319,30 +410,8 @@ begin
           else
             Builder.Append('none');
           Builder.Append('"');
-          if Path.StrokeWidth > 0 then
-          begin
-            Builder.Append(' stroke="').Append(SvgColor(Path.StrokeColor))
-              .Append('" stroke-width="').Append(SvgNumber(Path.StrokeWidth))
-              .Append('" vad:stroke-color="')
-              .Append(Integer(Path.StrokeColor))
-              .Append('" vad:stroke-style="')
-              .Append(Ord(Path.StrokeStyle)).Append('"');
-            DashIntervals := VectArtStrokeDashIntervals(Path.StrokeStyle,
-              Path.StrokeWidth);
-            if Length(DashIntervals) > 0 then
-            begin
-              Builder.Append(' stroke-dasharray="');
-              for DashIndex := 0 to High(DashIntervals) do
-              begin
-                if DashIndex > 0 then
-                  Builder.Append(' ');
-                Builder.Append(SvgNumber(DashIntervals[DashIndex]));
-              end;
-              Builder.Append('"');
-            end;
-          end
-          else
-            Builder.Append(' stroke="none"');
+          AppendSvgStroke(Builder, Path.StrokeColor, Path.StrokeWidth,
+            Path.StrokeStyle);
           Builder.Append(' opacity="').Append(SvgNumber(Path.Opacity))
             .Append('" vad:fill-color="').Append(Integer(Path.FillColor))
             .Append('" vad:name="').Append(XmlEscape(Path.Name))
@@ -370,30 +439,8 @@ begin
           .Append('" vad:fill-color="')
           .Append(Integer(Rectangle.FillColor))
           .Append('"');
-        if Rectangle.StrokeWidth > 0 then
-        begin
-          Builder.Append(' stroke="').Append(SvgColor(Rectangle.StrokeColor))
-            .Append('" stroke-width="').Append(SvgNumber(Rectangle.StrokeWidth))
-            .Append('" vad:stroke-color="')
-            .Append(Integer(Rectangle.StrokeColor))
-            .Append('" vad:stroke-style="')
-            .Append(Ord(Rectangle.StrokeStyle)).Append('"');
-          DashIntervals := VectArtStrokeDashIntervals(
-            Rectangle.StrokeStyle, Rectangle.StrokeWidth);
-          if Length(DashIntervals) > 0 then
-          begin
-            Builder.Append(' stroke-dasharray="');
-            for DashIndex := 0 to High(DashIntervals) do
-            begin
-              if DashIndex > 0 then
-                Builder.Append(' ');
-              Builder.Append(SvgNumber(DashIntervals[DashIndex]));
-            end;
-            Builder.Append('"');
-          end;
-        end
-        else
-          Builder.Append(' stroke="none"');
+        AppendSvgStroke(Builder, Rectangle.StrokeColor,
+          Rectangle.StrokeWidth, Rectangle.StrokeStyle);
         Builder
           .Append(' vad:name="').Append(XmlEscape(Rectangle.Name))
           .Append('" vad:locked="').Append(BooleanText(Rectangle.Locked))
@@ -480,11 +527,46 @@ begin
 end;
 
 function TryGetPresentationValue(const Node: IXMLNode; const Name: string;
-  out Value: string): Boolean;
+  var Value: string): Boolean;
+var
+  Candidate: string;
 begin
-  Result := TryGetStyleValue(Node, Name, Value);
+  Result := TryGetStyleValue(Node, Name, Candidate);
   if not Result then
-    Result := TryGetAttribute(Node, Name, Value);
+    Result := TryGetAttribute(Node, Name, Candidate);
+  if Result then
+    Value := Candidate;
+end;
+
+function TryGetPresentationValueOrInherited(const Node: IXMLNode;
+  InheritedStyles: TSvgInheritedStyles; const Name: string;
+  var Value: string): Boolean;
+var
+  InheritedValue: string;
+begin
+  Result := TryGetPresentationValue(Node, Name, Value);
+  if not Result and (InheritedStyles <> nil) and
+    InheritedStyles.TryGetValue(LowerCase(Name), InheritedValue) then
+  begin
+    Value := InheritedValue;
+    Result := True;
+  end;
+end;
+
+function CreateInheritedStyles(ParentStyles: TSvgInheritedStyles;
+  const Node: IXMLNode): TSvgInheritedStyles;
+var
+  Name: string;
+  Pair: TPair<string, string>;
+  Value: string;
+begin
+  Result := TSvgInheritedStyles.Create;
+  if ParentStyles <> nil then
+    for Pair in ParentStyles do
+      Result.AddOrSetValue(Pair.Key, Pair.Value);
+  for Name in SVG_INHERITED_STYLE_NAMES do
+    if TryGetPresentationValue(Node, Name, Value) then
+      Result.AddOrSetValue(Name, Value);
 end;
 
 function TryParseSvgNumber(const Text: string; out Value: Single): Boolean;
@@ -570,7 +652,8 @@ begin
     Value := clBlack;
 end;
 
-function RectangleName(const Node: IXMLNode; Index: Integer): string;
+function LayerName(const Node: IXMLNode; const KindName: string;
+  Index: Integer): string;
 var
   Child: IXMLNode;
   I: Integer;
@@ -585,7 +668,7 @@ begin
     Exit;
   if TryGetAttribute(Node, 'id', Result) and (Result <> '') then
     Exit;
-  Result := Format('Rectangle %d', [Index]);
+  Result := Format('%s %d', [KindName, Index]);
 end;
 
 function ImageName(const Node: IXMLNode; Index: Integer): string;
@@ -652,10 +735,44 @@ begin
     B * Point.X + D * Point.Y + F);
 end;
 
+function TryDecodePngDataUri(const Uri: string; out Data: TBytes): Boolean;
+const
+  PNG_DATA_HEADER = 'data:image/png;base64';
+var
+  CommaIndex: Integer;
+  EncodedData: string;
+  Header: string;
+begin
+  Result := False;
+  Data := nil;
+  CommaIndex := Uri.IndexOf(',');
+  if CommaIndex < 0 then
+    Exit;
+  Header := Trim(Uri.Substring(0, CommaIndex));
+  if not SameText(Header, PNG_DATA_HEADER) then
+    Exit;
+  EncodedData := Uri.Substring(CommaIndex + 1);
+  EncodedData := StringReplace(EncodedData, ' ', '', [rfReplaceAll]);
+  EncodedData := StringReplace(EncodedData, #9, '', [rfReplaceAll]);
+  EncodedData := StringReplace(EncodedData, #10, '', [rfReplaceAll]);
+  EncodedData := StringReplace(EncodedData, #13, '', [rfReplaceAll]);
+  if EncodedData = '' then
+    Exit;
+  try
+    Data := TNetEncoding.Base64.DecodeStringToBytes(EncodedData);
+    Result := IsDecodablePng(Data);
+    if not Result then
+      Data := nil;
+  except
+    on EConvertError do
+      Data := nil;
+    on EEncodingError do
+      Data := nil;
+  end;
+end;
+
 function TryParseImage(const Node: IXMLNode; Index: Integer;
   out Data: TVectArtImageData): Boolean;
-const
-  PNG_DATA_PREFIX = 'data:image/png;base64,';
 var
   A: Single;
   B: Single;
@@ -680,11 +797,7 @@ begin
   if not TryGetAttribute(Node, 'href', Href) then
     if not TryGetAttribute(Node, 'xlink:href', Href) then
       Exit;
-  if not SameText(Copy(Href, 1, Length(PNG_DATA_PREFIX)), PNG_DATA_PREFIX) then
-    Exit;
-  Data.PngData := TNetEncoding.Base64.DecodeStringToBytes(
-    Copy(Href, Length(PNG_DATA_PREFIX) + 1, MaxInt));
-  if Length(Data.PngData) = 0 then
+  if not TryDecodePngDataUri(Trim(Href), Data.PngData) then
     Exit;
   if not TryGetAttribute(Node, 'x', ValueText) then
     ValueText := '0';
@@ -739,58 +852,8 @@ begin
   Result := True;
 end;
 
-function TryParseRotation(const Node: IXMLNode; var Bounds: TRectF;
-  out Angle: Single): Boolean;
-var
-  CloseIndex: Integer;
-  Center: TPointF;
-  I: Integer;
-  NewCenter: TPointF;
-  OpenIndex: Integer;
-  Parts: TStringList;
-  Pivot: TPointF;
-  TransformText: string;
-begin
-  Angle := 0.0;
-  if not TryGetAttribute(Node, 'transform', TransformText) then
-    Exit(True);
-  TransformText := Trim(TransformText);
-  OpenIndex := TransformText.IndexOf('(');
-  CloseIndex := TransformText.LastIndexOf(')');
-  if (OpenIndex < 0) or (CloseIndex <= OpenIndex) or
-    not SameText(Trim(TransformText.Substring(0, OpenIndex)), 'rotate') then
-    Exit(False);
-  TransformText := TransformText.Substring(OpenIndex + 1,
-    CloseIndex - OpenIndex - 1).Replace(',', ' ');
-  Parts := TStringList.Create;
-  try
-    Parts.StrictDelimiter := True;
-    Parts.Delimiter := ' ';
-    Parts.DelimitedText := TransformText;
-    for I := Parts.Count - 1 downto 0 do
-      if Parts[I] = '' then
-        Parts.Delete(I);
-    Result := (Parts.Count in [1, 3]) and
-      TryParseSvgNumber(Parts[0], Angle);
-    if not Result then
-      Exit;
-    Pivot := TPointF.Create(0, 0);
-    if Parts.Count = 3 then
-      Result := TryParseSvgNumber(Parts[1], Pivot.X) and
-        TryParseSvgNumber(Parts[2], Pivot.Y);
-    if Result then
-    begin
-      Center := TPointF.Create((Bounds.Left + Bounds.Right) * 0.5,
-        (Bounds.Top + Bounds.Bottom) * 0.5);
-      NewCenter := RotatePointAround(Center, Pivot, Angle);
-      Bounds.Offset(NewCenter.X - Center.X, NewCenter.Y - Center.Y);
-    end;
-  finally
-    Parts.Free;
-  end;
-end;
-
-function TryParseRectangle(const Node: IXMLNode; Index: Integer;
+function TryParseRectangle(const Node: IXMLNode;
+  InheritedStyles: TSvgInheritedStyles; Index: Integer;
   out Data: TVectArtRectangleData): Boolean;
 var
   DisplayValue: string;
@@ -827,7 +890,8 @@ begin
     not TryParseSvgNumber(ValueText, Height) or (Height < 0) then
     Exit;
   FillText := 'black';
-  TryGetPresentationValue(Node, 'fill', FillText);
+  TryGetPresentationValueOrInherited(Node, InheritedStyles, 'fill',
+    FillText);
   if SameText(Trim(FillText), 'none') or
     not TryParseSvgColor(FillText, Data.FillColor) then
     Exit;
@@ -839,7 +903,8 @@ begin
   Data.StrokeStyle := vssSolid;
   Data.StrokeWidth := 0.0;
   StrokeText := 'none';
-  if TryGetPresentationValue(Node, 'stroke', StrokeText) and
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles, 'stroke',
+    StrokeText) and
     not SameText(Trim(StrokeText), 'none') then
   begin
     if not TryParseSvgColor(StrokeText, Data.StrokeColor) then
@@ -850,7 +915,8 @@ begin
        ColorToRGB(Data.StrokeColor)) then
       Data.StrokeColor := TColor(StrokeInteger);
     StrokeWidth := 1.0;
-    if TryGetPresentationValue(Node, 'stroke-width', ValueText) and
+    if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+      'stroke-width', ValueText) and
       (not TryParseSvgNumber(ValueText, StrokeWidth) or (StrokeWidth < 0)) then
       Exit;
     Data.StrokeWidth := StrokeWidth;
@@ -859,7 +925,8 @@ begin
       InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
         Ord(High(TVectArtStrokeStyle))) then
       Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
-    else if TryGetPresentationValue(Node, 'stroke-dasharray', ValueText) and
+    else if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+      'stroke-dasharray', ValueText) and
       (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
       Data.StrokeStyle := vssDashed;
   end;
@@ -868,14 +935,14 @@ begin
     not TryParseSvgNumber(OpacityText, Opacity) then
     Exit;
   FillOpacity := 1.0;
-  if TryGetPresentationValue(Node, 'fill-opacity', OpacityText) and
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'fill-opacity', OpacityText) and
     not TryParseSvgNumber(OpacityText, FillOpacity) then
     Exit;
   Data.Bounds := TRectF.Create(X, Y, X + Width, Y + Height);
-  Data.Name := RectangleName(Node, Index);
+  Data.Name := LayerName(Node, 'Rectangle', Index);
   Data.Opacity := EnsureRange(Opacity * FillOpacity, 0.0, 1.0);
-  if not TryParseRotation(Node, Data.Bounds, Data.RotationDegrees) then
-    Exit;
+  Data.RotationDegrees := 0.0;
   Data.Visible := True;
   if TryGetPresentationValue(Node, 'display', DisplayValue) then
     Data.Visible := not SameText(Trim(DisplayValue), 'none');
@@ -889,7 +956,8 @@ begin
   Result := True;
 end;
 
-function TryParseLine(const Node: IXMLNode; Index: Integer;
+function TryParseLine(const Node: IXMLNode;
+  InheritedStyles: TSvgInheritedStyles; Index: Integer;
   out Data: TVectArtLineData): Boolean;
 var
   DisplayValue: string;
@@ -898,6 +966,7 @@ var
   LockedText: string;
   OpacityText: string;
   StrokeInteger: Integer;
+  StrokeOpacity: Single;
   StrokeStyleInteger: Integer;
   StrokeText: string;
   ValueText: string;
@@ -913,8 +982,9 @@ begin
     TryParseSvgNumber(ValueText, Data.EndPoint.Y);
   if not Result then
     Exit;
-  StrokeText := 'black';
-  TryGetPresentationValue(Node, 'stroke', StrokeText);
+  StrokeText := 'none';
+  TryGetPresentationValueOrInherited(Node, InheritedStyles, 'stroke',
+    StrokeText);
   if SameText(Trim(StrokeText), 'none') or
     not TryParseSvgColor(StrokeText, Data.StrokeColor) then
     Exit(False);
@@ -924,7 +994,8 @@ begin
      ColorToRGB(Data.StrokeColor)) then
     Data.StrokeColor := TColor(StrokeInteger);
   Data.StrokeWidth := 1.0;
-  if TryGetPresentationValue(Node, 'stroke-width', ValueText) and
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'stroke-width', ValueText) and
     (not TryParseSvgNumber(ValueText, Data.StrokeWidth) or
      (Data.StrokeWidth <= 0)) then
     Exit(False);
@@ -934,23 +1005,27 @@ begin
     InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
       Ord(High(TVectArtStrokeStyle))) then
     Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
-  else if TryGetPresentationValue(Node, 'stroke-dasharray', ValueText) and
+  else if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'stroke-dasharray', ValueText) and
     (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
     Data.StrokeStyle := vssDashed;
   Data.LineCap := vlcButt;
-  if TryGetPresentationValue(Node, 'stroke-linecap', LineCapText) then
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'stroke-linecap', LineCapText) then
     if SameText(Trim(LineCapText), 'square') then
       Data.LineCap := vlcSquare
     else if SameText(Trim(LineCapText), 'round') then
       Data.LineCap := vlcRound;
   Data.LineJoin := vljMiter;
-  if TryGetPresentationValue(Node, 'stroke-linejoin', LineJoinText) then
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'stroke-linejoin', LineJoinText) then
     if SameText(Trim(LineJoinText), 'bevel') then
       Data.LineJoin := vljBevel
     else if SameText(Trim(LineJoinText), 'round') then
       Data.LineJoin := vljRound;
   Data.AntiAlias := True;
-  if TryGetPresentationValue(Node, 'shape-rendering', ValueText) and
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'shape-rendering', ValueText) and
     SameText(Trim(ValueText), 'crispEdges') then
     Data.AntiAlias := False;
   Data.EndMarker := vlmNone;
@@ -971,8 +1046,13 @@ begin
   if TryGetPresentationValue(Node, 'opacity', OpacityText) and
     not TryParseSvgNumber(OpacityText, Data.Opacity) then
     Exit(False);
-  Data.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
-  Data.Name := RectangleName(Node, Index);
+  StrokeOpacity := 1.0;
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'stroke-opacity', OpacityText) and
+    not TryParseSvgNumber(OpacityText, StrokeOpacity) then
+    Exit(False);
+  Data.Opacity := EnsureRange(Data.Opacity * StrokeOpacity, 0.0, 1.0);
+  Data.Name := LayerName(Node, 'Line', Index);
   Data.Visible := True;
   if TryGetPresentationValue(Node, 'display', DisplayValue) then
     Data.Visible := not SameText(Trim(DisplayValue), 'none');
@@ -986,45 +1066,418 @@ begin
   Result := True;
 end;
 
-function TryParsePath(const Node: IXMLNode; Index: Integer; Closed: Boolean;
+function IsSvgPathCommand(Value: Char): Boolean;
+begin
+  Result := CharInSet(Value, ['M', 'm', 'L', 'l', 'H', 'h', 'V', 'v',
+    'Z', 'z']);
+end;
+
+procedure SkipSvgPathSeparators(const Text: string; var Index: Integer);
+begin
+  while (Index <= Length(Text)) and
+    CharInSet(Text[Index], [' ', #9, #10, #13, ',']) do
+    Inc(Index);
+end;
+
+function TryReadSvgPathNumber(const Text: string; var Index: Integer;
+  out Value: Single): Boolean;
+var
+  DigitFound: Boolean;
+  ExponentDigits: Boolean;
+  StartIndex: Integer;
+begin
+  Result := False;
+  SkipSvgPathSeparators(Text, Index);
+  StartIndex := Index;
+  if (Index <= Length(Text)) and CharInSet(Text[Index], ['+', '-']) then
+    Inc(Index);
+  DigitFound := False;
+  while (Index <= Length(Text)) and CharInSet(Text[Index], ['0'..'9']) do
+  begin
+    DigitFound := True;
+    Inc(Index);
+  end;
+  if (Index <= Length(Text)) and (Text[Index] = '.') then
+  begin
+    Inc(Index);
+    while (Index <= Length(Text)) and CharInSet(Text[Index], ['0'..'9']) do
+    begin
+      DigitFound := True;
+      Inc(Index);
+    end;
+  end;
+  if not DigitFound then
+  begin
+    Index := StartIndex;
+    Exit;
+  end;
+  if (Index <= Length(Text)) and CharInSet(Text[Index], ['E', 'e']) then
+  begin
+    Inc(Index);
+    if (Index <= Length(Text)) and CharInSet(Text[Index], ['+', '-']) then
+      Inc(Index);
+    ExponentDigits := False;
+    while (Index <= Length(Text)) and CharInSet(Text[Index], ['0'..'9']) do
+    begin
+      ExponentDigits := True;
+      Inc(Index);
+    end;
+    if not ExponentDigits then
+    begin
+      Index := StartIndex;
+      Exit;
+    end;
+  end;
+  Result := TryParseSvgNumber(Copy(Text, StartIndex, Index - StartIndex),
+    Value);
+  if not Result then
+    Index := StartIndex;
+end;
+
+function TryParseSvgTransformArguments(const Text: string;
+  out Values: TArray<Single>): Boolean;
+var
+  Index: Integer;
+  ParsedValues: TList<Single>;
+  Value: Single;
+begin
+  Result := False;
+  Values := nil;
+  Index := 1;
+  ParsedValues := TList<Single>.Create;
+  try
+    SkipSvgPathSeparators(Text, Index);
+    while Index <= Length(Text) do
+    begin
+      if not TryReadSvgPathNumber(Text, Index, Value) then
+        Exit;
+      ParsedValues.Add(Value);
+      SkipSvgPathSeparators(Text, Index);
+    end;
+    Values := ParsedValues.ToArray;
+    Result := True;
+  finally
+    ParsedValues.Free;
+  end;
+end;
+
+function TryParseSvgTransform(const Text: string;
+  out Matrix: TSvgAffineMatrix): Boolean;
+var
+  Angle: Single;
+  ArgumentStart: Integer;
+  Arguments: TArray<Single>;
+  CloseIndex: Integer;
+  Cosine: Single;
+  Index: Integer;
+  Name: string;
+  NameStart: Integer;
+  Operation: TSvgAffineMatrix;
+  Rotation: TSvgAffineMatrix;
+  Sine: Single;
+  TranslateBack: TSvgAffineMatrix;
+  TranslateToOrigin: TSvgAffineMatrix;
+  Value: Single;
+begin
+  Result := False;
+  Matrix := SvgIdentityMatrix;
+  Index := 1;
+  while True do
+  begin
+    SkipSvgPathSeparators(Text, Index);
+    if Index > Length(Text) then
+      Break;
+    NameStart := Index;
+    while (Index <= Length(Text)) and
+      CharInSet(Text[Index], ['A'..'Z', 'a'..'z']) do
+      Inc(Index);
+    if NameStart = Index then
+      Exit;
+    Name := Copy(Text, NameStart, Index - NameStart);
+    while (Index <= Length(Text)) and
+      CharInSet(Text[Index], [' ', #9, #10, #13]) do
+      Inc(Index);
+    if (Index > Length(Text)) or (Text[Index] <> '(') then
+      Exit;
+    ArgumentStart := Index + 1;
+    CloseIndex := ArgumentStart;
+    while (CloseIndex <= Length(Text)) and (Text[CloseIndex] <> ')') do
+      Inc(CloseIndex);
+    if CloseIndex > Length(Text) then
+      Exit;
+    if not TryParseSvgTransformArguments(Copy(Text, ArgumentStart,
+      CloseIndex - ArgumentStart), Arguments) then
+      Exit;
+    Operation := SvgIdentityMatrix;
+    if SameText(Name, 'matrix') then
+    begin
+      if Length(Arguments) <> 6 then
+        Exit;
+      Operation.A := Arguments[0];
+      Operation.B := Arguments[1];
+      Operation.C := Arguments[2];
+      Operation.D := Arguments[3];
+      Operation.E := Arguments[4];
+      Operation.F := Arguments[5];
+    end
+    else if SameText(Name, 'translate') then
+    begin
+      if not (Length(Arguments) in [1, 2]) then
+        Exit;
+      Operation.E := Arguments[0];
+      if Length(Arguments) = 2 then
+        Operation.F := Arguments[1];
+    end
+    else if SameText(Name, 'scale') then
+    begin
+      if not (Length(Arguments) in [1, 2]) then
+        Exit;
+      Operation.A := Arguments[0];
+      if Length(Arguments) = 2 then
+        Operation.D := Arguments[1]
+      else
+        Operation.D := Arguments[0];
+    end
+    else if SameText(Name, 'rotate') then
+    begin
+      if not (Length(Arguments) in [1, 3]) then
+        Exit;
+      Angle := DegToRad(Arguments[0]);
+      Sine := Sin(Angle);
+      Cosine := Cos(Angle);
+      Rotation := SvgIdentityMatrix;
+      Rotation.A := Cosine;
+      Rotation.B := Sine;
+      Rotation.C := -Sine;
+      Rotation.D := Cosine;
+      if Length(Arguments) = 1 then
+        Operation := Rotation
+      else
+      begin
+        TranslateBack := SvgIdentityMatrix;
+        TranslateBack.E := Arguments[1];
+        TranslateBack.F := Arguments[2];
+        TranslateToOrigin := SvgIdentityMatrix;
+        TranslateToOrigin.E := -Arguments[1];
+        TranslateToOrigin.F := -Arguments[2];
+        Operation := MultiplySvgMatrices(TranslateBack,
+          MultiplySvgMatrices(Rotation, TranslateToOrigin));
+      end;
+    end
+    else if SameText(Name, 'skewX') then
+    begin
+      if Length(Arguments) <> 1 then
+        Exit;
+      Angle := DegToRad(Arguments[0]);
+      if Abs(Cos(Angle)) < 0.000001 then
+        Exit;
+      Value := Tan(Angle);
+      if IsNan(Value) or IsInfinite(Value) then
+        Exit;
+      Operation.C := Value;
+    end
+    else if SameText(Name, 'skewY') then
+    begin
+      if Length(Arguments) <> 1 then
+        Exit;
+      Angle := DegToRad(Arguments[0]);
+      if Abs(Cos(Angle)) < 0.000001 then
+        Exit;
+      Value := Tan(Angle);
+      if IsNan(Value) or IsInfinite(Value) then
+        Exit;
+      Operation.B := Value;
+    end
+    else
+      Exit;
+    Matrix := MultiplySvgMatrices(Matrix, Operation);
+    Index := CloseIndex + 1;
+  end;
+  Result := True;
+end;
+
+function TryCombineSvgTransform(const Node: IXMLNode;
+  const ParentMatrix: TSvgAffineMatrix;
+  out CombinedMatrix: TSvgAffineMatrix): Boolean;
+var
+  LocalMatrix: TSvgAffineMatrix;
+  TransformText: string;
+begin
+  CombinedMatrix := ParentMatrix;
+  if not TryGetAttribute(Node, 'transform', TransformText) or
+    (Trim(TransformText) = '') then
+    Exit(True);
+  Result := TryParseSvgTransform(TransformText, LocalMatrix);
+  if Result then
+    CombinedMatrix := MultiplySvgMatrices(ParentMatrix, LocalMatrix);
+end;
+
+function TryParseSvgPathPoints(const PathText: string;
+  out Points: TArray<TPointF>; out Closed: Boolean): Boolean;
+var
+  Command: Char;
+  CurrentPoint: TPointF;
+  Index: Integer;
+  IsRelative: Boolean;
+  NewPoint: TPointF;
+  ParsedPoints: TList<TPointF>;
+  Value: Single;
+begin
+  // Documentは単一点列なので、曲線と複数サブパスを推測で平坦化しない。
+  Result := False;
+  Points := nil;
+  Closed := False;
+  Command := #0;
+  CurrentPoint := PointF(0, 0);
+  Index := 1;
+  ParsedPoints := TList<TPointF>.Create;
+  try
+    while True do
+    begin
+      SkipSvgPathSeparators(PathText, Index);
+      if Index > Length(PathText) then
+        Break;
+      if CharInSet(PathText[Index], ['A'..'Z', 'a'..'z']) then
+      begin
+        if not IsSvgPathCommand(PathText[Index]) then
+          Exit;
+        Command := PathText[Index];
+        Inc(Index);
+      end
+      else if Command = #0 then
+        Exit;
+      IsRelative := CharInSet(Command, ['m', 'l', 'h', 'v']);
+      case UpCase(Command) of
+        'M', 'L':
+          begin
+            if (UpCase(Command) = 'M') and (ParsedPoints.Count > 0) then
+              Exit;
+            if not TryReadSvgPathNumber(PathText, Index, NewPoint.X) or
+              not TryReadSvgPathNumber(PathText, Index, NewPoint.Y) then
+              Exit;
+            if IsRelative then
+            begin
+              NewPoint.X := NewPoint.X + CurrentPoint.X;
+              NewPoint.Y := NewPoint.Y + CurrentPoint.Y;
+            end;
+            CurrentPoint := NewPoint;
+            ParsedPoints.Add(CurrentPoint);
+            if UpCase(Command) = 'M' then
+              if Command = 'm' then
+                Command := 'l'
+              else
+                Command := 'L';
+          end;
+        'H':
+          begin
+            if ParsedPoints.Count = 0 then
+              Exit;
+            if not TryReadSvgPathNumber(PathText, Index, Value) then
+              Exit;
+            if IsRelative then
+              CurrentPoint.X := CurrentPoint.X + Value
+            else
+              CurrentPoint.X := Value;
+            ParsedPoints.Add(CurrentPoint);
+          end;
+        'V':
+          begin
+            if ParsedPoints.Count = 0 then
+              Exit;
+            if not TryReadSvgPathNumber(PathText, Index, Value) then
+              Exit;
+            if IsRelative then
+              CurrentPoint.Y := CurrentPoint.Y + Value
+            else
+              CurrentPoint.Y := Value;
+            ParsedPoints.Add(CurrentPoint);
+          end;
+        'Z':
+          begin
+            if ParsedPoints.Count < 2 then
+              Exit;
+            Closed := True;
+            Command := #0;
+            SkipSvgPathSeparators(PathText, Index);
+            if Index <= Length(PathText) then
+              Exit;
+          end;
+      else
+        Exit;
+      end;
+    end;
+    if ParsedPoints.Count < 2 then
+      Exit;
+    if Closed and (ParsedPoints.Count > 2) and
+      SameValue(ParsedPoints[0].X, ParsedPoints[ParsedPoints.Count - 1].X) and
+      SameValue(ParsedPoints[0].Y, ParsedPoints[ParsedPoints.Count - 1].Y) then
+      ParsedPoints.Delete(ParsedPoints.Count - 1);
+    Points := ParsedPoints.ToArray;
+    Result := True;
+  finally
+    ParsedPoints.Free;
+  end;
+end;
+
+function TryParsePath(const Node: IXMLNode;
+  InheritedStyles: TSvgInheritedStyles; Index: Integer; Closed: Boolean;
   out Data: TVectArtPathData): Boolean;
 var
   ColorInteger: Integer;
   DisplayValue: string;
+  FillOpacity: Single;
   I: Integer;
   LockedText: string;
+  Opacity: Single;
   OpacityText: string;
   Parts: TStringList;
   PointsText: string;
+  StrokeOpacity: Single;
   StrokeStyleInteger: Integer;
   ValueText: string;
   VisibilityValue: string;
 begin
   Result := False;
-  if not TryGetAttribute(Node, 'points', PointsText) then
-    Exit;
-  PointsText := StringReplace(Trim(PointsText), ',', ' ', [rfReplaceAll]);
-  Parts := TStringList.Create;
-  try
-    Parts.StrictDelimiter := True;
-    Parts.Delimiter := ' ';
-    Parts.DelimitedText := PointsText;
-    for I := Parts.Count - 1 downto 0 do
-      if Trim(Parts[I]) = '' then
-        Parts.Delete(I);
-    if (Parts.Count < 4) or Odd(Parts.Count) then
+  if SameText(LocalNodeName(Node), 'path') then
+  begin
+    if not TryGetAttribute(Node, 'd', PointsText) or
+      not TryParseSvgPathPoints(PointsText, Data.Points, Closed) then
       Exit;
-    SetLength(Data.Points, Parts.Count div 2);
-    for I := 0 to High(Data.Points) do
-      if not TryParseSvgNumber(Parts[I * 2], Data.Points[I].X) or
-        not TryParseSvgNumber(Parts[I * 2 + 1], Data.Points[I].Y) then
+  end
+  else
+  begin
+    if not TryGetAttribute(Node, 'points', PointsText) then
+      Exit;
+    PointsText := StringReplace(Trim(PointsText), ',', ' ', [rfReplaceAll]);
+    PointsText := StringReplace(PointsText, #9, ' ', [rfReplaceAll]);
+    PointsText := StringReplace(PointsText, #10, ' ', [rfReplaceAll]);
+    PointsText := StringReplace(PointsText, #13, ' ', [rfReplaceAll]);
+    Parts := TStringList.Create;
+    try
+      Parts.StrictDelimiter := True;
+      Parts.Delimiter := ' ';
+      Parts.DelimitedText := PointsText;
+      for I := Parts.Count - 1 downto 0 do
+        if Trim(Parts[I]) = '' then
+          Parts.Delete(I);
+      if (Parts.Count < 4) or Odd(Parts.Count) then
         Exit;
-  finally
-    Parts.Free;
+      SetLength(Data.Points, Parts.Count div 2);
+      for I := 0 to High(Data.Points) do
+        if not TryParseSvgNumber(Parts[I * 2], Data.Points[I].X) or
+          not TryParseSvgNumber(Parts[I * 2 + 1], Data.Points[I].Y) then
+          Exit;
+    finally
+      Parts.Free;
+    end;
   end;
   Data.Closed := Closed;
-  ValueText := 'none';
-  TryGetPresentationValue(Node, 'fill', ValueText);
+  if Closed then
+    ValueText := 'black'
+  else
+    ValueText := 'none';
+  TryGetPresentationValueOrInherited(Node, InheritedStyles, 'fill',
+    ValueText);
   Data.Filled := Closed and not SameText(Trim(ValueText), 'none');
   Data.FillColor := clWhite;
   if Data.Filled and not TryParseSvgColor(ValueText, Data.FillColor) then
@@ -1035,7 +1488,8 @@ begin
     ColorToRGB(Data.FillColor))) then
     Data.FillColor := TColor(ColorInteger);
   ValueText := 'none';
-  TryGetPresentationValue(Node, 'stroke', ValueText);
+  TryGetPresentationValueOrInherited(Node, InheritedStyles, 'stroke',
+    ValueText);
   Data.StrokeWidth := 0.0;
   Data.StrokeColor := clBlack;
   if not SameText(Trim(ValueText), 'none') then
@@ -1043,7 +1497,8 @@ begin
     if not TryParseSvgColor(ValueText, Data.StrokeColor) then
       Exit;
     Data.StrokeWidth := 1.0;
-    if TryGetPresentationValue(Node, 'stroke-width', ValueText) and
+    if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+      'stroke-width', ValueText) and
       (not TryParseSvgNumber(ValueText, Data.StrokeWidth) or
       (Data.StrokeWidth < 0)) then
       Exit;
@@ -1058,15 +1513,31 @@ begin
     InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
       Ord(High(TVectArtStrokeStyle))) then
     Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
-  else if TryGetPresentationValue(Node, 'stroke-dasharray', ValueText) and
+  else if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'stroke-dasharray', ValueText) and
     (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
     Data.StrokeStyle := vssDashed;
-  Data.Opacity := 1.0;
+  if not Data.Filled and (Data.StrokeWidth <= 0) then
+    Exit(False);
+  Opacity := 1.0;
   if TryGetPresentationValue(Node, 'opacity', OpacityText) and
-    not TryParseSvgNumber(OpacityText, Data.Opacity) then
+    not TryParseSvgNumber(OpacityText, Opacity) then
     Exit;
-  Data.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
-  Data.Name := RectangleName(Node, Index);
+  FillOpacity := 1.0;
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'fill-opacity', OpacityText) and
+    not TryParseSvgNumber(OpacityText, FillOpacity) then
+    Exit;
+  StrokeOpacity := 1.0;
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'stroke-opacity', OpacityText) and
+    not TryParseSvgNumber(OpacityText, StrokeOpacity) then
+    Exit;
+  if Data.Filled then
+    Data.Opacity := EnsureRange(Opacity * FillOpacity, 0.0, 1.0)
+  else
+    Data.Opacity := EnsureRange(Opacity * StrokeOpacity, 0.0, 1.0);
+  Data.Name := LayerName(Node, 'Path', Index);
   Data.Visible := True;
   if TryGetPresentationValue(Node, 'display', DisplayValue) then
     Data.Visible := not SameText(Trim(DisplayValue), 'none');
@@ -1129,6 +1600,210 @@ begin
   end;
 end;
 
+function TransformSvgRectangle(const Matrix: TSvgAffineMatrix;
+  var Data: TVectArtRectangleData; out Corners: TVectArtQuad): Boolean;
+const
+  ORTHOGONAL_TOLERANCE = 0.0001;
+var
+  Angle: Single;
+  Center: TPointF;
+  DotProduct: Single;
+  EdgeDown: TPointF;
+  EdgeHeight: Single;
+  EdgeRight: TPointF;
+  EdgeWidth: Single;
+  I: Integer;
+  OriginalCorners: TVectArtQuad;
+begin
+  OriginalCorners := RectangleCorners(Data.Bounds, Data.RotationDegrees);
+  for I := Low(Corners) to High(Corners) do
+    Corners[I] := SvgTransformPoint(Matrix, OriginalCorners[I]);
+  EdgeRight := Corners[1] - Corners[0];
+  EdgeDown := Corners[3] - Corners[0];
+  EdgeWidth := Hypot(EdgeRight.X, EdgeRight.Y);
+  EdgeHeight := Hypot(EdgeDown.X, EdgeDown.Y);
+  DotProduct := EdgeRight.X * EdgeDown.X + EdgeRight.Y * EdgeDown.Y;
+  Result := (EdgeWidth <= ORTHOGONAL_TOLERANCE) or
+    (EdgeHeight <= ORTHOGONAL_TOLERANCE) or
+    (Abs(DotProduct) <= EdgeWidth * EdgeHeight * ORTHOGONAL_TOLERANCE);
+  if not Result then
+    Exit;
+  Center := PointF((Corners[0].X + Corners[2].X) * 0.5,
+    (Corners[0].Y + Corners[2].Y) * 0.5);
+  if EdgeWidth > ORTHOGONAL_TOLERANCE then
+    Angle := RadToDeg(ArcTan2(EdgeRight.Y, EdgeRight.X))
+  else if EdgeHeight > ORTHOGONAL_TOLERANCE then
+    Angle := RadToDeg(ArcTan2(EdgeDown.Y, EdgeDown.X)) - 90.0
+  else
+    Angle := 0.0;
+  Data.Bounds := RectF(Center.X - EdgeWidth * 0.5,
+    Center.Y - EdgeHeight * 0.5, Center.X + EdgeWidth * 0.5,
+    Center.Y + EdgeHeight * 0.5);
+  Data.RotationDegrees := NormalizeAngleDegrees(Angle);
+  Data.StrokeWidth := Data.StrokeWidth * SvgStrokeScale(Matrix);
+end;
+
+function PathDataFromTransformedRectangle(
+  const RectangleData: TVectArtRectangleData;
+  const Corners: TVectArtQuad; StrokeScale: Single): TVectArtPathData;
+var
+  I: Integer;
+begin
+  Result.Closed := True;
+  Result.FillColor := RectangleData.FillColor;
+  Result.Filled := True;
+  Result.Locked := RectangleData.Locked;
+  Result.Name := RectangleData.Name;
+  Result.Opacity := RectangleData.Opacity;
+  SetLength(Result.Points, Length(Corners));
+  for I := Low(Corners) to High(Corners) do
+    Result.Points[I] := Corners[I];
+  Result.StrokeColor := RectangleData.StrokeColor;
+  Result.StrokeStyle := RectangleData.StrokeStyle;
+  Result.StrokeWidth := RectangleData.StrokeWidth * StrokeScale;
+  Result.Visible := RectangleData.Visible;
+end;
+
+procedure CollectSvgLayers(const Parent: IXMLNode;
+  const ParentMatrix: TSvgAffineMatrix; ParentOpacity: Single;
+  ParentVisible: Boolean; InheritedStyles: TSvgInheritedStyles;
+  Rectangles: TList<TVectArtRectangleData>;
+  Lines: TList<TVectArtLineData>; Paths: TList<TVectArtPathData>;
+  Images: TList<TVectArtImageData>; LayerOrder: TList<Integer>);
+var
+  Child: IXMLNode;
+  ChildMatrix: TSvgAffineMatrix;
+  Corners: TVectArtQuad;
+  ChildOpacity: Single;
+  ChildStyles: TSvgInheritedStyles;
+  ChildVisible: Boolean;
+  Data: TVectArtRectangleData;
+  DisplayText: string;
+  I: Integer;
+  ImageData: TVectArtImageData;
+  J: Integer;
+  LineData: TVectArtLineData;
+  NodeName: string;
+  OpacityText: string;
+  PathData: TVectArtPathData;
+  VisibilityText: string;
+begin
+  for I := 0 to Parent.ChildNodes.Count - 1 do
+  begin
+    Child := Parent.ChildNodes[I];
+    if Child.NodeType <> ntElement then
+      Continue;
+    NodeName := LocalNodeName(Child);
+    if SameText(NodeName, 'g') then
+    begin
+      if not TryCombineSvgTransform(Child, ParentMatrix, ChildMatrix) then
+        Continue;
+      ChildOpacity := 1.0;
+      if TryGetPresentationValue(Child, 'opacity', OpacityText) and
+        not TryParseSvgNumber(OpacityText, ChildOpacity) then
+        Continue;
+      ChildOpacity := ParentOpacity * EnsureRange(ChildOpacity, 0.0, 1.0);
+      ChildVisible := ParentVisible;
+      if TryGetPresentationValue(Child, 'display', DisplayText) then
+        ChildVisible := ChildVisible and
+          not SameText(Trim(DisplayText), 'none');
+      if TryGetPresentationValue(Child, 'visibility', VisibilityText) then
+        ChildVisible := ChildVisible and
+          not SameText(Trim(VisibilityText), 'hidden') and
+          not SameText(Trim(VisibilityText), 'collapse');
+      ChildStyles := CreateInheritedStyles(InheritedStyles, Child);
+      try
+        CollectSvgLayers(Child, ChildMatrix, ChildOpacity, ChildVisible,
+          ChildStyles, Rectangles, Lines, Paths, Images, LayerOrder);
+      finally
+        ChildStyles.Free;
+      end;
+      Continue;
+    end;
+    if SameText(NodeName, 'rect') and
+      TryParseRectangle(Child, InheritedStyles, Rectangles.Count + 1,
+        Data) then
+    begin
+      if not TryCombineSvgTransform(Child, ParentMatrix, ChildMatrix) then
+        Continue;
+      Data.Opacity := Data.Opacity * ParentOpacity;
+      Data.Visible := Data.Visible and ParentVisible;
+      if TransformSvgRectangle(ChildMatrix, Data, Corners) then
+      begin
+        Rectangles.Add(Data);
+        LayerOrder.Add(Rectangles.Count);
+      end
+      else
+      begin
+        PathData := PathDataFromTransformedRectangle(Data, Corners,
+          SvgStrokeScale(ChildMatrix));
+        Paths.Add(PathData);
+        LayerOrder.Add(-(1000000 + Paths.Count));
+      end;
+    end
+    else if SameText(NodeName, 'line') and
+      TryParseLine(Child, InheritedStyles, Lines.Count + 1, LineData) then
+    begin
+      if not TryCombineSvgTransform(Child, ParentMatrix, ChildMatrix) then
+        Continue;
+      LineData.StartPoint := SvgTransformPoint(ChildMatrix,
+        LineData.StartPoint);
+      LineData.EndPoint := SvgTransformPoint(ChildMatrix,
+        LineData.EndPoint);
+      LineData.StrokeWidth := LineData.StrokeWidth *
+        SvgStrokeScale(ChildMatrix);
+      LineData.Opacity := LineData.Opacity * ParentOpacity;
+      LineData.Visible := LineData.Visible and ParentVisible;
+      Lines.Add(LineData);
+      LayerOrder.Add(-Lines.Count);
+    end
+    else if (SameText(NodeName, 'polyline') or
+      SameText(NodeName, 'polygon')) and
+      TryParsePath(Child, InheritedStyles, Paths.Count + 1,
+        SameText(NodeName, 'polygon'), PathData) then
+    begin
+      if not TryCombineSvgTransform(Child, ParentMatrix, ChildMatrix) then
+        Continue;
+      for J := 0 to High(PathData.Points) do
+        PathData.Points[J] := SvgTransformPoint(ChildMatrix,
+          PathData.Points[J]);
+      PathData.StrokeWidth := PathData.StrokeWidth *
+        SvgStrokeScale(ChildMatrix);
+      PathData.Opacity := PathData.Opacity * ParentOpacity;
+      PathData.Visible := PathData.Visible and ParentVisible;
+      Paths.Add(PathData);
+      LayerOrder.Add(-(1000000 + Paths.Count));
+    end
+    else if SameText(NodeName, 'path') and
+      TryParsePath(Child, InheritedStyles, Paths.Count + 1, False,
+        PathData) then
+    begin
+      if not TryCombineSvgTransform(Child, ParentMatrix, ChildMatrix) then
+        Continue;
+      for J := 0 to High(PathData.Points) do
+        PathData.Points[J] := SvgTransformPoint(ChildMatrix,
+          PathData.Points[J]);
+      PathData.StrokeWidth := PathData.StrokeWidth *
+        SvgStrokeScale(ChildMatrix);
+      PathData.Opacity := PathData.Opacity * ParentOpacity;
+      PathData.Visible := PathData.Visible and ParentVisible;
+      Paths.Add(PathData);
+      LayerOrder.Add(-(1000000 + Paths.Count));
+    end
+    else if SameText(NodeName, 'image') and
+      TryParseImage(Child, Images.Count + 1, ImageData) then
+    begin
+      for J := Low(ImageData.Points) to High(ImageData.Points) do
+        ImageData.Points[J] := SvgTransformPoint(ParentMatrix,
+          ImageData.Points[J]);
+      ImageData.Opacity := ImageData.Opacity * ParentOpacity;
+      ImageData.Visible := ImageData.Visible and ParentVisible;
+      Images.Add(ImageData);
+      LayerOrder.Add(-(2000000 + Images.Count));
+    end;
+  end;
+end;
+
 function TryLoadVectArtDocumentFromSvg(const SvgText: string;
   Document: TVectArtDocument; out ErrorMessage: string): Boolean;
 var
@@ -1138,22 +1813,18 @@ var
   Canvas: TVectArtCanvasLayer;
   CanvasHeight: Integer;
   CanvasWidth: Integer;
-  Child: IXMLNode;
-  Data: TVectArtRectangleData;
   Discarded: TVectArtRectangleData;
   DiscardedImage: TVectArtImageData;
   DiscardedLine: TVectArtLineData;
   DiscardedPath: TVectArtPathData;
   I: Integer;
-  ImageData: TVectArtImageData;
   Images: TList<TVectArtImageData>;
   LayerOrder: TList<Integer>;
-  LineData: TVectArtLineData;
   Lines: TList<TVectArtLineData>;
-  PathData: TVectArtPathData;
   Paths: TList<TVectArtPathData>;
   RectangleData: TList<TVectArtRectangleData>;
   Root: IXMLNode;
+  RootStyles: TSvgInheritedStyles;
   SelectedIndex: Integer;
   StyleBackground: string;
   SvgDocument: IXMLDocument;
@@ -1200,37 +1871,12 @@ begin
       if TryGetAttribute(Root, 'vad:selected-index', BackgroundText) then
         TryStrToInt(BackgroundText, SelectedIndex);
 
-      for I := 0 to Root.ChildNodes.Count - 1 do
-      begin
-        Child := Root.ChildNodes[I];
-        if Child.NodeType <> ntElement then
-          Continue;
-        if SameText(LocalNodeName(Child), 'rect') and
-          TryParseRectangle(Child, RectangleData.Count + 1, Data) then
-        begin
-          RectangleData.Add(Data);
-          LayerOrder.Add(RectangleData.Count);
-        end
-        else if SameText(LocalNodeName(Child), 'line') and
-          TryParseLine(Child, Lines.Count + 1, LineData) then
-        begin
-          Lines.Add(LineData);
-          LayerOrder.Add(-Lines.Count);
-        end
-        else if (SameText(LocalNodeName(Child), 'polyline') or
-          SameText(LocalNodeName(Child), 'polygon')) and
-          TryParsePath(Child, Paths.Count + 1,
-            SameText(LocalNodeName(Child), 'polygon'), PathData) then
-        begin
-          Paths.Add(PathData);
-          LayerOrder.Add(-(1000000 + Paths.Count));
-        end
-        else if SameText(LocalNodeName(Child), 'image') and
-          TryParseImage(Child, Images.Count + 1, ImageData) then
-        begin
-          Images.Add(ImageData);
-          LayerOrder.Add(-(2000000 + Images.Count));
-        end;
+      RootStyles := CreateInheritedStyles(nil, Root);
+      try
+        CollectSvgLayers(Root, SvgIdentityMatrix, 1.0, True, RootStyles,
+          RectangleData, Lines, Paths, Images, LayerOrder);
+      finally
+        RootStyles.Free;
       end;
 
       Canvas := Document.CanvasLayer;
@@ -1299,15 +1945,24 @@ function TrySaveVectArtDocumentToSvgFile(Document: TVectArtDocument;
   const FileName: string; out ErrorMessage: string): Boolean;
 var
   Encoding: TUTF8Encoding;
+  FullFileName: string;
   SvgText: string;
+  TempFileName: string;
 begin
   Result := TryCreateVectArtSvg(Document, SvgText, ErrorMessage);
   if not Result then
     Exit;
+  FullFileName := ExpandFileName(FileName);
+  TempFileName := TPath.Combine(ExtractFilePath(FullFileName),
+    ExtractFileName(FullFileName) + '.' + TPath.GetRandomFileName + '.tmp');
   Encoding := TUTF8Encoding.Create(False);
   try
     try
-      TFile.WriteAllText(FileName, SvgText, Encoding);
+      TFile.WriteAllText(TempFileName, SvgText, Encoding);
+      if not MoveFileEx(PChar(TempFileName), PChar(FullFileName),
+        MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then
+        RaiseLastOSError;
+      TempFileName := '';
       Result := True;
     except
       on E: Exception do
@@ -1318,6 +1973,12 @@ begin
     end;
   finally
     Encoding.Free;
+    if (TempFileName <> '') and TFile.Exists(TempFileName) then
+      try
+        TFile.Delete(TempFileName);
+      except
+        // 元ファイルの保存結果を、一時ファイルの後始末失敗で上書きしない。
+      end;
   end;
 end;
 

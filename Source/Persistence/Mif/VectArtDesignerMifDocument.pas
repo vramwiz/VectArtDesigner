@@ -1,4 +1,4 @@
-// Rectangle DocumentとIBM WebArt Designer互換MIFの相互変換を担当する。
+﻿// DocumentとIBM WebArt Designer互換MIFの相互変換、および書出し互換性の判定を担当する。
 // MIF保存では独自情報を出力せず、読み込み元の互換用ベクター情報を可能な範囲で再利用する。
 unit VectArtDesignerMifDocument;
 
@@ -6,6 +6,26 @@ interface
 
 uses
   System.SysUtils, VectArtDesignerDocument, VectArtDesignerMifContainer;
+
+type
+  TMifExportCompatibility = (mecExact, mecNeedsConfirmation, mecUnsupported);
+  TMifExportIssueKind = (meikConversion, meikUnsupported, meikUnchecked);
+
+  TMifExportIssue = record
+    Kind: TMifExportIssueKind; // 変換、非対応、未判定の区分。
+    LayerIndex: Integer;      // Document内の対象レイヤー位置。
+    LayerName: string;        // 確認画面へ表示するレイヤー名。
+    MessageText: string;      // 実際に行う変換または保存できない内容。
+  end;
+
+  TMifExportReport = record
+    Compatibility: TMifExportCompatibility; // MIF生成全体の判定結果。
+    Issues: TArray<TMifExportIssue>;         // 生成処理が検出した注意事項。
+    procedure AddIssue(AKind: TMifExportIssueKind; ALayerIndex: Integer;
+      const ALayerName, AMessageText: string);
+    procedure Clear;
+    function ToDisplayText: string;
+  end;
 
 // MIF内のVectArtDesigner編集情報をDocumentへ適用する。ContainerとDocumentを所有しない。
 function TryLoadVectArtDocumentFromMif(Container: TVectArtMifContainer;
@@ -17,6 +37,10 @@ function TryCreateVectArtMifFromDocument(Document: TVectArtDocument;
 function TryCreateVectArtMifFromDocument(Document: TVectArtDocument;
   SourceContainer: TVectArtMifContainer; out Container: TVectArtMifContainer;
   out ErrorMessage: string): Boolean; overload;
+// MIF生成と同じ処理で互換性を判定し、生成物と注意事項を同時に返す。
+function TryCreateVectArtMifFromDocument(Document: TVectArtDocument;
+  SourceContainer: TVectArtMifContainer; out Container: TVectArtMifContainer;
+  out Report: TMifExportReport; out ErrorMessage: string): Boolean; overload;
 
 implementation
 
@@ -43,7 +67,58 @@ const
   PNG_SIGNATURE: array[0..7] of Byte =
     ($89, $50, $4E, $47, $0D, $0A, $1A, $0A);
 
+{ TMifExportReport }
+
+procedure TMifExportReport.AddIssue(AKind: TMifExportIssueKind;
+  ALayerIndex: Integer; const ALayerName, AMessageText: string);
+var
+  IssueIndex: Integer;
+begin
+  IssueIndex := Length(Issues);
+  SetLength(Issues, IssueIndex + 1);
+  Issues[IssueIndex].Kind := AKind;
+  Issues[IssueIndex].LayerIndex := ALayerIndex;
+  Issues[IssueIndex].LayerName := ALayerName;
+  Issues[IssueIndex].MessageText := AMessageText;
+  if AKind = meikUnsupported then
+    Compatibility := mecUnsupported
+  else if Compatibility = mecExact then
+    Compatibility := mecNeedsConfirmation;
+end;
+
+procedure TMifExportReport.Clear;
+begin
+  Compatibility := mecExact;
+  Issues := nil;
+end;
+
+function TMifExportReport.ToDisplayText: string;
+const
+  ISSUE_PREFIXES: array[TMifExportIssueKind] of string =
+    ('変換', '非対応', '未判定');
+var
+  I: Integer;
+  LayerText: string;
+begin
+  if Length(Issues) = 0 then
+    Exit('MIFへ変換なしで書き出せます。');
+  Result := '';
+  for I := 0 to High(Issues) do
+  begin
+    if Issues[I].LayerName <> '' then
+      LayerText := Format('「%s」', [Issues[I].LayerName])
+    else
+      LayerText := Format('レイヤー%d', [Issues[I].LayerIndex]);
+    if Result <> '' then
+      Result := Result + sLineBreak;
+    Result := Result + Format('・[%s] %s: %s',
+      [ISSUE_PREFIXES[Issues[I].Kind], LayerText, Issues[I].MessageText]);
+  end;
+end;
+
 type
+  TMifPathExportShape = (mpesUnsupported, mpesLine, mpesPath);
+
   TRectangleMifSource = record
     OriginalLeft: Integer;       // ベクターペイロードが使用する基準矩形の左端
     OriginalTop: Integer;        // ベクターペイロードが使用する基準矩形の上端
@@ -146,6 +221,66 @@ begin
       SetLength(ChunkType, 4);
       Move(Png[Offset + 4], ChunkType[1], 4);
       if ChunkType <> RemovedChunkType then
+        Output.WriteBuffer(Png[Offset], TotalLength);
+      Inc(Offset, TotalLength);
+    end;
+    if Offset <> Length(Png) then
+      Exit(Copy(Png));
+    SetLength(Result, Output.Size);
+    if Output.Size > 0 then
+    begin
+      Output.Position := 0;
+      Output.ReadBuffer(Result[0], Output.Size);
+    end;
+  finally
+    Output.Free;
+  end;
+end;
+
+function RemovePngMetadataKey(const Png: TBytes;
+  const RemovedChunkType: AnsiString; const RemovedKey: string): TBytes;
+var
+  ChunkLength: UInt32;
+  ChunkType: AnsiString;
+  DataOffset: Integer;
+  Key: string;
+  NullOffset: Integer;
+  Offset: Integer;
+  Output: TMemoryStream;
+  RemoveChunk: Boolean;
+  TotalLength: Integer;
+begin
+  if not IsPng(Png) then
+    Exit(Copy(Png));
+  Output := TMemoryStream.Create;
+  try
+    Output.WriteBuffer(Png[0], SizeOf(PNG_SIGNATURE));
+    Offset := SizeOf(PNG_SIGNATURE);
+    while Offset + 12 <= Length(Png) do
+    begin
+      ChunkLength := ReadUInt32BE(Png, Offset);
+      if (ChunkLength > UInt32(High(Integer))) or
+        (Int64(Offset) + ChunkLength + 12 > Length(Png)) then
+        Exit(Copy(Png));
+      TotalLength := Integer(ChunkLength) + 12;
+      SetLength(ChunkType, 4);
+      Move(Png[Offset + 4], ChunkType[1], 4);
+      RemoveChunk := False;
+      if ChunkType = RemovedChunkType then
+      begin
+        DataOffset := Offset + 8;
+        NullOffset := DataOffset;
+        while (NullOffset < DataOffset + Integer(ChunkLength)) and
+          (Png[NullOffset] <> 0) do
+          Inc(NullOffset);
+        if NullOffset < DataOffset + Integer(ChunkLength) then
+        begin
+          Key := TEncoding.ASCII.GetString(Png, DataOffset,
+            NullOffset - DataOffset);
+          RemoveChunk := Key = RemovedKey;
+        end;
+      end;
+      if not RemoveChunk then
         Output.WriteBuffer(Png[Offset], TotalLength);
       Inc(Offset, TotalLength);
     end;
@@ -669,17 +804,22 @@ begin
   AddPhysicalDimensions(Result);
 end;
 
+function MifImageCoordinate(Value: Single): Integer;
+begin
+  Result := Round(Value);
+end;
+
 procedure AddImagePlacementMetadata(var Png: TBytes;
   const Bounds: TRectF; Alpha: Integer; Hidden: Boolean); overload;
 begin
-  AddWadaInteger(Png, 'image position1 x', Round(Bounds.Left));
-  AddWadaInteger(Png, 'image position1 y', Round(Bounds.Top));
-  AddWadaInteger(Png, 'image position2 x', Round(Bounds.Right));
-  AddWadaInteger(Png, 'image position2 y', Round(Bounds.Top));
-  AddWadaInteger(Png, 'image position3 x', Round(Bounds.Right));
-  AddWadaInteger(Png, 'image position3 y', Round(Bounds.Bottom));
-  AddWadaInteger(Png, 'image position4 x', Round(Bounds.Left));
-  AddWadaInteger(Png, 'image position4 y', Round(Bounds.Bottom));
+  AddWadaInteger(Png, 'image position1 x', MifImageCoordinate(Bounds.Left));
+  AddWadaInteger(Png, 'image position1 y', MifImageCoordinate(Bounds.Top));
+  AddWadaInteger(Png, 'image position2 x', MifImageCoordinate(Bounds.Right));
+  AddWadaInteger(Png, 'image position2 y', MifImageCoordinate(Bounds.Top));
+  AddWadaInteger(Png, 'image position3 x', MifImageCoordinate(Bounds.Right));
+  AddWadaInteger(Png, 'image position3 y', MifImageCoordinate(Bounds.Bottom));
+  AddWadaInteger(Png, 'image position4 x', MifImageCoordinate(Bounds.Left));
+  AddWadaInteger(Png, 'image position4 y', MifImageCoordinate(Bounds.Bottom));
   AddWadaInteger(Png, 'image alpha', EnsureRange(Alpha, 0, 255));
   AddWadaInteger(Png, 'image hidden', Ord(Hidden));
 end;
@@ -692,9 +832,9 @@ begin
   for I := 0 to High(Points) do
   begin
     UpdateWadaInteger(Png, Format('image position%d x', [I + 1]),
-      Round(Points[I].X));
+      MifImageCoordinate(Points[I].X));
     UpdateWadaInteger(Png, Format('image position%d y', [I + 1]),
-      Round(Points[I].Y));
+      MifImageCoordinate(Points[I].Y));
   end;
   UpdateWadaInteger(Png, 'image alpha', EnsureRange(Alpha, 0, 255));
   UpdateWadaInteger(Png, 'image hidden', Ord(Hidden));
@@ -708,9 +848,9 @@ begin
   for I := 0 to High(Quad) do
   begin
     AddWadaInteger(Png, Format('image position%d x', [I + 1]),
-      Round(Quad[I].X));
+      MifImageCoordinate(Quad[I].X));
     AddWadaInteger(Png, Format('image position%d y', [I + 1]),
-      Round(Quad[I].Y));
+      MifImageCoordinate(Quad[I].Y));
   end;
   AddWadaInteger(Png, 'image alpha', EnsureRange(Alpha, 0, 255));
   AddWadaInteger(Png, 'image hidden', Ord(Hidden));
@@ -731,6 +871,11 @@ begin
   AddWadaInteger(Result, 'texture angle', 0);
   AddWadaInteger(Result, 'texture level', 0);
   AddWadaString(Result, 'texture pathname', '@');
+end;
+
+function MifRectangleStrokeWidth(Value: Single): Double;
+begin
+  Result := Max(Value, 1.0);
 end;
 
 procedure AddRectangleVectorMetadata(var Png: TBytes;
@@ -776,7 +921,7 @@ begin
   AddWadaInteger(Png, 'vector start marker size', 4);
   AddWadaInteger(Png, 'vector end marker size', 4);
   AddWadaDouble(Png, 'vector stroke width',
-    Max(Rectangle.StrokeWidth, 1.0));
+    MifRectangleStrokeWidth(Rectangle.StrokeWidth));
   ScaleX := Max(Width - 1, 0) / (OriginalRight - OriginalLeft);
   ScaleY := Max(Height - 1, 0) / (OriginalBottom - OriginalTop);
   PlacementBounds := TRectF.Create(Rectangle.Bounds.Left,
@@ -811,6 +956,76 @@ begin
   AddWadaString(Png, 'vector effect object type', 'none');
 end;
 
+function MifAlpha(Opacity: Single): Integer;
+begin
+  Result := EnsureRange(Round(Opacity * 255), 0, 255);
+end;
+
+function MifRectangleDimension(Value: Single): Integer;
+begin
+  Result := Max(Round(Abs(Value)), 1);
+end;
+
+procedure AnalyzeRectangleExport(Rectangle: TVectArtRectangleLayer;
+  LayerIndex, RectangleOrdinal: Integer; var Report: TMifExportReport);
+var
+  ExpectedName: string;
+  Height: Integer;
+  I: Integer;
+  PlacementBounds: TRectF;
+  PlacementQuad: TVectArtQuad;
+  RoundedPlacement: Boolean;
+  StoredOpacity: Single;
+  Width: Integer;
+begin
+  ExpectedName := Format('Rectangle %d', [RectangleOrdinal]);
+  if Rectangle.Name <> ExpectedName then
+    Report.AddIssue(meikConversion, LayerIndex, Rectangle.Name,
+      Format('レイヤー名はMIFへ保持されず、再読込時に「%s」になります。',
+      [ExpectedName]));
+  if Rectangle.Locked then
+    Report.AddIssue(meikConversion, LayerIndex, Rectangle.Name,
+      '編集ロックはMIFへ保持されません。');
+  Width := MifRectangleDimension(Rectangle.Bounds.Width);
+  Height := MifRectangleDimension(Rectangle.Bounds.Height);
+  if (Rectangle.Bounds.Width < 0) or (Rectangle.Bounds.Height < 0) or
+    not SameValue(Abs(Rectangle.Bounds.Width), Width, 0.000001) or
+    not SameValue(Abs(Rectangle.Bounds.Height), Height, 0.000001) then
+    Report.AddIssue(meikConversion, LayerIndex, Rectangle.Name,
+      Format('幅と高さはMIF画像寸法の整数値%d×%dへ丸められます。',
+      [Width, Height]));
+  PlacementBounds := TRectF.Create(Rectangle.Bounds.Left,
+    Rectangle.Bounds.Top, Rectangle.Bounds.Left + Width - 1,
+    Rectangle.Bounds.Top + Height - 1);
+  PlacementQuad := RectangleCorners(PlacementBounds,
+    Rectangle.RotationDegrees);
+  RoundedPlacement := False;
+  for I := 0 to High(PlacementQuad) do
+    if not SameValue(PlacementQuad[I].X,
+      MifImageCoordinate(PlacementQuad[I].X), 0.000001) or
+      not SameValue(PlacementQuad[I].Y,
+      MifImageCoordinate(PlacementQuad[I].Y), 0.000001) then
+    begin
+      RoundedPlacement := True;
+      Break;
+    end;
+  if RoundedPlacement then
+    Report.AddIssue(meikConversion, LayerIndex, Rectangle.Name,
+      '回転後の配置頂点はMIFの整数座標へ丸められます。');
+  StoredOpacity := MifAlpha(Rectangle.Opacity) / 255.0;
+  if not SameValue(Rectangle.Opacity, StoredOpacity, 0.000001) then
+    Report.AddIssue(meikConversion, LayerIndex, Rectangle.Name,
+      Format('不透明度はMIFの8bit値%dへ丸められます。',
+      [MifAlpha(Rectangle.Opacity)]));
+  if (Rectangle.StrokeWidth > 0) and not SameValue(Rectangle.StrokeWidth,
+    MifRectangleStrokeWidth(Rectangle.StrokeWidth), 0.000001) then
+    Report.AddIssue(meikConversion, LayerIndex, Rectangle.Name,
+      '1未満の線幅はMIFでは1へ変換されます。')
+  else if Rectangle.StrokeWidth < 0 then
+    Report.AddIssue(meikConversion, LayerIndex, Rectangle.Name,
+      '負の線幅はMIFでは線なしとして扱われます。');
+end;
+
 function CreateRectangleVectorPng(const Source: TRectangleMifSource): TBytes;
 begin
   if Source.Valid then
@@ -829,8 +1044,8 @@ var
   PlacementQuad: TVectArtQuad;
   Width: Integer;
 begin
-  Width := Max(Round(Abs(Rectangle.Bounds.Width)), 1);
-  Height := Max(Round(Abs(Rectangle.Bounds.Height)), 1);
+  Width := MifRectangleDimension(Rectangle.Bounds.Width);
+  Height := MifRectangleDimension(Rectangle.Bounds.Height);
   Result := CreateRectangleRasterPng(Rectangle, Width, Height);
   AddText(Result, 'object type', 'image');
   AddWadaString(Result, 'object subtype', 'vector');
@@ -841,7 +1056,7 @@ begin
   PlacementQuad := RectangleCorners(PlacementBounds,
     Rectangle.RotationDegrees);
   AddImagePlacementMetadata(Result, PlacementQuad,
-    Round(Rectangle.Opacity * 255), not Rectangle.Visible);
+    MifAlpha(Rectangle.Opacity), not Rectangle.Visible);
   AddRectangleVectorMetadata(Result, Rectangle, Width, Height, Source);
 end;
 
@@ -899,6 +1114,85 @@ begin
   AddText(Result, 'object type', 'vector');
 end;
 
+function MifPathExportShape(PathLayer: TVectArtPathLayer):
+  TMifPathExportShape;
+begin
+  if Length(PathLayer.Points) < 2 then
+    Result := mpesUnsupported
+  else if Length(PathLayer.Points) = 2 then
+    Result := mpesLine
+  else
+    Result := mpesPath;
+end;
+
+function MifPathFilled(PathLayer: TVectArtPathLayer): Boolean;
+begin
+  Result := PathLayer.Closed and PathLayer.Filled;
+end;
+
+function MifPathStrokeWidth(Value: Single): Double;
+begin
+  Result := Max(Value, 0.0);
+end;
+
+function MifLineStrokeWidth(Value: Single): Double; forward;
+
+procedure AnalyzePathExport(PathLayer: TVectArtPathLayer; LayerIndex,
+  PathOrdinal, ConvertedLineOrdinal: Integer; var Report: TMifExportReport);
+var
+  ExpectedName: string;
+  ExportShape: TMifPathExportShape;
+  StoredOpacity: Single;
+begin
+  ExportShape := MifPathExportShape(PathLayer);
+  if ExportShape = mpesUnsupported then
+  begin
+    Report.AddIssue(meikUnsupported, LayerIndex, PathLayer.Name,
+      '頂点が2個未満のPathはMIFへ書き出せません。');
+    Exit;
+  end;
+  if ExportShape = mpesLine then
+  begin
+    Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
+      Format('2頂点のPathはMIF再読込時に「Line %d」へ変換されます。',
+      [ConvertedLineOrdinal]));
+    if PathLayer.Closed then
+      Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
+        '2頂点Pathの閉じた状態はLineへの変換時に失われます。');
+    if PathLayer.Filled then
+      Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
+        '2頂点Pathの塗りはLineへの変換時に失われます。');
+  end
+  else
+  begin
+    ExpectedName := Format('Path %d', [PathOrdinal]);
+    if PathLayer.Name <> ExpectedName then
+      Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
+        Format('レイヤー名はMIFへ保持されず、再読込時に「%s」になります。',
+        [ExpectedName]));
+  end;
+  if PathLayer.Locked then
+    Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
+      '編集ロックはMIFへ保持されません。');
+  StoredOpacity := MifAlpha(PathLayer.Opacity) / 255.0;
+  if not SameValue(PathLayer.Opacity, StoredOpacity, 0.000001) then
+    Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
+      Format('不透明度はMIFの8bit値%dへ丸められます。',
+      [MifAlpha(PathLayer.Opacity)]));
+  if (ExportShape = mpesPath) and
+    (PathLayer.Filled <> MifPathFilled(PathLayer)) then
+    Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
+      '開いたPathの塗りはMIFへ保持されず、塗りなしになります。');
+  if ((ExportShape = mpesLine) and
+    not SameValue(PathLayer.StrokeWidth,
+    MifLineStrokeWidth(PathLayer.StrokeWidth), 0.000001)) or
+    ((ExportShape = mpesPath) and
+    not SameValue(PathLayer.StrokeWidth,
+    MifPathStrokeWidth(PathLayer.StrokeWidth), 0.000001)) then
+    Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
+      '線幅は変換先のMIF表現で使用できる最小値へ変換されます。');
+end;
+
 function CreatePathImagePng(PathLayer: TVectArtPathLayer): TBytes;
 var
   Bounds: TRectF;
@@ -908,7 +1202,7 @@ begin
   AddText(Result, 'object type', 'image');
   AddWadaString(Result, 'object subtype', 'vector');
   AddImagePlacementMetadata(Result, Bounds,
-    Round(PathLayer.Opacity * 255), not PathLayer.Visible);
+    MifAlpha(PathLayer.Opacity), not PathLayer.Visible);
   AddWadaInteger(Result, 'vector closed', Ord(PathLayer.Closed));
   AddWadaInteger(Result, 'vector quality', 1);
   AddWadaInteger(Result, 'vector element type', 6);
@@ -919,7 +1213,8 @@ begin
   AddWadaInteger(Result, 'vector end stroke marker', 0);
   AddWadaInteger(Result, 'vector start marker size', 4);
   AddWadaInteger(Result, 'vector end marker size', 4);
-  AddWadaDouble(Result, 'vector stroke width', PathLayer.StrokeWidth);
+  AddWadaDouble(Result, 'vector stroke width',
+    MifPathStrokeWidth(PathLayer.StrokeWidth));
   AddWadaDouble(Result, 'vector matrix a', 1.0);
   AddWadaDouble(Result, 'vector matrix b', 0.0);
   AddWadaDouble(Result, 'vector matrix c', 0.0);
@@ -946,7 +1241,7 @@ begin
   AddWadaInteger(Result, 'vector enable stroke texture',
     Ord(PathLayer.StrokeWidth > 0));
   AddWadaInteger(Result, 'vector enable fill texture',
-    Ord(PathLayer.Filled and PathLayer.Closed));
+    Ord(MifPathFilled(PathLayer)));
   AddWadaString(Result, 'vector effect object type', 'none');
 end;
 
@@ -984,6 +1279,69 @@ begin
   end;
 end;
 
+function MifLineMarkerSize(Value: Single): Integer;
+begin
+  Result := EnsureRange(Round(Value), 1, 20);
+end;
+
+function MifLineStrokeWidth(Value: Single): Double;
+begin
+  Result := Max(Value, 0.1);
+end;
+
+function CreateMifLineFromPath(PathLayer: TVectArtPathLayer):
+  TVectArtLineLayer;
+begin
+  Result := TVectArtLineLayer.Create(PathLayer.Name, PathLayer.Points[0],
+    PathLayer.Points[1]);
+  Result.AntiAlias := True;
+  if VectArtStrokeUsesRoundCaps(PathLayer.StrokeStyle) then
+    Result.LineCap := vlcRound
+  else
+    Result.LineCap := vlcButt;
+  Result.Locked := PathLayer.Locked;
+  Result.Opacity := PathLayer.Opacity;
+  Result.StrokeColor := PathLayer.StrokeColor;
+  Result.StrokeStyle := PathLayer.StrokeStyle;
+  Result.StrokeWidth := MifLineStrokeWidth(PathLayer.StrokeWidth);
+  Result.Visible := PathLayer.Visible;
+end;
+
+procedure AnalyzeLineExport(Line: TVectArtLineLayer; LayerIndex,
+  LineOrdinal: Integer; var Report: TMifExportReport);
+var
+  ExpectedName: string;
+  StoredOpacity: Single;
+begin
+  ExpectedName := Format('Line %d', [LineOrdinal]);
+  if Line.Name <> ExpectedName then
+    Report.AddIssue(meikConversion, LayerIndex, Line.Name,
+      Format('レイヤー名はMIFへ保持されず、再読込時に「%s」になります。',
+      [ExpectedName]));
+  if Line.Locked then
+    Report.AddIssue(meikConversion, LayerIndex, Line.Name,
+      '編集ロックはMIFへ保持されません。');
+  StoredOpacity := MifAlpha(Line.Opacity) / 255.0;
+  if not SameValue(Line.Opacity, StoredOpacity, 0.000001) then
+    Report.AddIssue(meikConversion, LayerIndex, Line.Name,
+      Format('不透明度はMIFの8bit値%dへ丸められます。',
+      [MifAlpha(Line.Opacity)]));
+  if not SameValue(Line.StartMarkerSize,
+    MifLineMarkerSize(Line.StartMarkerSize), 0.000001) then
+    Report.AddIssue(meikConversion, LayerIndex, Line.Name,
+      Format('始点マーカーサイズはMIFの整数値%dへ変換されます。',
+      [MifLineMarkerSize(Line.StartMarkerSize)]));
+  if not SameValue(Line.EndMarkerSize,
+    MifLineMarkerSize(Line.EndMarkerSize), 0.000001) then
+    Report.AddIssue(meikConversion, LayerIndex, Line.Name,
+      Format('終点マーカーサイズはMIFの整数値%dへ変換されます。',
+      [MifLineMarkerSize(Line.EndMarkerSize)]));
+  if not SameValue(Line.StrokeWidth,
+    MifLineStrokeWidth(Line.StrokeWidth), 0.000001) then
+    Report.AddIssue(meikConversion, LayerIndex, Line.Name,
+      '0.1未満の線幅はMIFでは0.1へ変換されます。');
+end;
+
 function CreateLineImagePng(Line: TVectArtLineLayer): TBytes;
 const
   ORIGINAL_LEFT = 848;
@@ -1005,7 +1363,7 @@ begin
   AddText(Result, 'object type', 'image');
   AddWadaString(Result, 'object subtype', 'vector');
   AddImagePlacementMetadata(Result, PlacementBounds,
-    Round(Line.Opacity * 255), not Line.Visible);
+    MifAlpha(Line.Opacity), not Line.Visible);
   AddWadaInteger(Result, 'vector closed', 0);
   AddWadaInteger(Result, 'vector quality', Ord(Line.AntiAlias));
   AddWadaInteger(Result, 'vector element type', 6);
@@ -1017,10 +1375,11 @@ begin
   AddWadaInteger(Result, 'vector end stroke marker',
     LineMarkerToMif(Line.EndMarker));
   AddWadaInteger(Result, 'vector start marker size',
-    EnsureRange(Round(Line.StartMarkerSize), 1, 20));
+    MifLineMarkerSize(Line.StartMarkerSize));
   AddWadaInteger(Result, 'vector end marker size',
-    EnsureRange(Round(Line.EndMarkerSize), 1, 20));
-  AddWadaDouble(Result, 'vector stroke width', Line.StrokeWidth);
+    MifLineMarkerSize(Line.EndMarkerSize));
+  AddWadaDouble(Result, 'vector stroke width',
+    MifLineStrokeWidth(Line.StrokeWidth));
   MatrixA := (Line.EndPoint.X - Line.StartPoint.X) /
     (ORIGINAL_RIGHT - ORIGINAL_LEFT);
   MatrixB := (Line.EndPoint.Y - Line.StartPoint.Y) /
@@ -1354,6 +1713,92 @@ begin
   end;
 end;
 
+function IsDecodablePng(const Png: TBytes): Boolean;
+var
+  PngImage: TPngImage;
+  Stream: TBytesStream;
+begin
+  Result := False;
+  if not IsPng(Png) then
+    Exit;
+  PngImage := TPngImage.Create;
+  Stream := TBytesStream.Create(Png);
+  try
+    try
+      PngImage.LoadFromStream(Stream);
+      Result := (PngImage.Width > 0) and (PngImage.Height > 0);
+    except
+      Result := False;
+    end;
+  finally
+    Stream.Free;
+    PngImage.Free;
+  end;
+end;
+
+function TryPrepareImagePngForMif(ImageLayer: TVectArtImageLayer;
+  LayerIndex, ImageOrdinal: Integer; var Report: TMifExportReport;
+  out Png: TBytes): Boolean;
+var
+  ExpectedName: string;
+  ExpectedObjectType: string;
+  I: Integer;
+  ObjectSubtype: string;
+  StoredOpacity: Single;
+begin
+  Result := False;
+  Png := nil;
+  if not IsDecodablePng(ImageLayer.PngData) or
+    (FindPngMetadataInsertOffset(ImageLayer.PngData) < 0) then
+  begin
+    Report.AddIssue(meikUnsupported, LayerIndex, ImageLayer.Name,
+      'PNG本体が破損しているか、MIFへ格納できるPNG構造ではありません。');
+    Exit;
+  end;
+  if ImageLayer.SourceKind = visLogo then
+  begin
+    ExpectedName := Format('Logo %d', [ImageOrdinal]);
+    ExpectedObjectType := 'logo';
+  end
+  else
+  begin
+    ExpectedName := Format('Image %d', [ImageOrdinal]);
+    ExpectedObjectType := 'image';
+  end;
+  if ImageLayer.Name <> ExpectedName then
+    Report.AddIssue(meikConversion, LayerIndex, ImageLayer.Name,
+      Format('レイヤー名はMIFへ保持されず、再読込時に「%s」になります。',
+      [ExpectedName]));
+  if ImageLayer.Locked then
+    Report.AddIssue(meikConversion, LayerIndex, ImageLayer.Name,
+      '編集ロックはMIFへ保持されません。');
+  StoredOpacity := MifAlpha(ImageLayer.Opacity) / 255.0;
+  if not SameValue(ImageLayer.Opacity, StoredOpacity, 0.000001) then
+    Report.AddIssue(meikConversion, LayerIndex, ImageLayer.Name,
+      Format('不透明度はMIFの8bit値%dへ丸められます。',
+      [MifAlpha(ImageLayer.Opacity)]));
+  for I := 0 to High(ImageLayer.Points) do
+    if not SameValue(ImageLayer.Points[I].X,
+      MifImageCoordinate(ImageLayer.Points[I].X), 0.000001) or
+      not SameValue(ImageLayer.Points[I].Y,
+      MifImageCoordinate(ImageLayer.Points[I].Y), 0.000001) then
+    begin
+      Report.AddIssue(meikConversion, LayerIndex, ImageLayer.Name,
+        '画像の四隅はMIFの整数座標へ丸められます。');
+      Break;
+    end;
+  Png := Copy(ImageLayer.PngData);
+  Png := RemovePngMetadataKey(Png, 'tEXt', 'object type');
+  AddText(Png, 'object type', ExpectedObjectType);
+  ObjectSubtype := '';
+  if TryReadPngString(Png, 'waDA', 'object subtype', ObjectSubtype) and
+    SameText(ObjectSubtype, 'vector') then
+    Png := RemovePngMetadataKey(Png, 'waDA', 'object subtype');
+  UpdateImagePlacementMetadata(Png, ImageLayer.Points,
+    MifAlpha(ImageLayer.Opacity), not ImageLayer.Visible);
+  Result := True;
+end;
+
 function TryImportWebArtDocument(Container: TVectArtMifContainer;
   Document: TVectArtDocument; out ErrorMessage: string): Boolean;
 var
@@ -1575,7 +2020,7 @@ begin
           else
             PathData.StrokeStyle := vssSolid;
           if StrokeEnabled <> 0 then
-            PathData.StrokeWidth := Max(StrokeWidth, 0.0)
+            PathData.StrokeWidth := MifPathStrokeWidth(StrokeWidth)
           else
             PathData.StrokeWidth := 0.0;
           PathData.Visible := Hidden = 0;
@@ -1638,7 +2083,7 @@ begin
           LineData.StrokeStyle := TVectArtStrokeStyle(StrokeStyle)
         else
           LineData.StrokeStyle := vssSolid;
-        LineData.StrokeWidth := Max(StrokeWidth, 0.1);
+        LineData.StrokeWidth := MifLineStrokeWidth(StrokeWidth);
         LineData.Visible := Hidden = 0;
         LineData.Locked := False;
         Lines.Add(LineData);
@@ -1753,16 +2198,31 @@ function TryCreateVectArtMifFromDocument(Document: TVectArtDocument;
   SourceContainer: TVectArtMifContainer; out Container: TVectArtMifContainer;
   out ErrorMessage: string): Boolean;
 var
+  Report: TMifExportReport;
+begin
+  Result := TryCreateVectArtMifFromDocument(Document, SourceContainer,
+    Container, Report, ErrorMessage);
+end;
+
+function TryCreateVectArtMifFromDocument(Document: TVectArtDocument;
+  SourceContainer: TVectArtMifContainer; out Container: TVectArtMifContainer;
+  out Report: TMifExportReport; out ErrorMessage: string): Boolean;
+var
   Candidate: TVectArtMifContainer;
   Canvas: TVectArtCanvasLayer;
+  ConvertedLine: TVectArtLineLayer;
   Header: TBytes;
   I: Integer;
-  ImageLayer: TVectArtImageLayer;
+  ImageIndex: Integer;
   ImagePng: TBytes;
   Layer: TVectArtLayer;
   Line: TVectArtLineLayer;
+  LineIndex: Integer;
   ContentChunkCount: Integer;
+  PathExportShape: TMifPathExportShape;
+  PathIndex: Integer;
   PathLayer: TVectArtPathLayer;
+  PreparedImagePngs: TArray<TBytes>;
   Rectangle: TVectArtRectangleLayer;
   RectangleIndex: Integer;
   RectangleSource: TRectangleMifSource;
@@ -1770,6 +2230,7 @@ var
 begin
   Result := False;
   Container := nil;
+  Report.Clear;
   ErrorMessage := '';
   Candidate := nil;
   RectangleSources := TList<TRectangleMifSource>.Create;
@@ -1780,6 +2241,23 @@ begin
       Canvas := Document.CanvasLayer;
       if Canvas = nil then
         raise EInvalidOp.Create('Document canvas is missing');
+      if Canvas.Transparent then
+        Report.AddIssue(meikConversion, 0, Canvas.Name,
+          '透明キャンバスはMIF再読込時に不透明になります。');
+      SetLength(PreparedImagePngs, Document.LayerCount);
+      ImageIndex := 0;
+      for I := 1 to Document.LayerCount - 1 do
+        if Document[I] is TVectArtImageLayer then
+        begin
+          Inc(ImageIndex);
+          TryPrepareImagePngForMif(TVectArtImageLayer(Document[I]), I,
+            ImageIndex, Report, PreparedImagePngs[I]);
+        end;
+      if Report.Compatibility = mecUnsupported then
+      begin
+        ErrorMessage := 'MIFへ書き出せない項目があります。';
+        Exit;
+      end;
       CollectRectangleSources(SourceContainer, RectangleSources);
       Candidate := TVectArtMifContainer.Create;
       ContentChunkCount := 0;
@@ -1790,7 +2268,8 @@ begin
         else if (Document[I] is TVectArtRectangleLayer) or
           (Document[I] is TVectArtLineLayer) or
           ((Document[I] is TVectArtPathLayer) and
-          (Length(TVectArtPathLayer(Document[I]).Points) >= 2)) then
+          (MifPathExportShape(TVectArtPathLayer(Document[I])) <>
+          mpesUnsupported)) then
           Inc(ContentChunkCount, 4);
       end;
       SetLength(Header, 4);
@@ -1799,16 +2278,15 @@ begin
       Candidate.AddChunk('MHDR', Header);
       Candidate.AddChunk('IPNG', CreateCompositePng(Document));
       Candidate.AddChunk('IPNG', CreateTexturePng(Canvas.BackgroundColor));
+      LineIndex := 0;
+      PathIndex := 0;
       RectangleIndex := 0;
       for I := 1 to Document.LayerCount - 1 do
       begin
         Layer := Document[I];
         if Layer is TVectArtImageLayer then
         begin
-          ImageLayer := TVectArtImageLayer(Layer);
-          ImagePng := Copy(ImageLayer.PngData);
-          UpdateImagePlacementMetadata(ImagePng, ImageLayer.Points,
-            Round(ImageLayer.Opacity * 255), not ImageLayer.Visible);
+          ImagePng := Copy(PreparedImagePngs[I]);
           Candidate.AddChunk('IPNG', ImagePng);
           Candidate.AddChunk('IPNG', CreateTexturePng(clWhite));
           Continue;
@@ -1816,26 +2294,56 @@ begin
         if Layer is TVectArtLineLayer then
         begin
           Line := TVectArtLineLayer(Layer);
+          AnalyzeLineExport(Line, I, LineIndex + 1, Report);
           Candidate.AddChunk('IPNG', CreateLineImagePng(Line));
           Candidate.AddChunk('IPNG', CreateTexturePng(clWhite));
           Candidate.AddChunk('IPNG', CreateLineVectorPng);
           Candidate.AddChunk('IPNG', CreateTexturePng(Line.StrokeColor));
+          Inc(LineIndex);
           Continue;
         end;
         if Layer is TVectArtPathLayer then
         begin
           PathLayer := TVectArtPathLayer(Layer);
-          if Length(PathLayer.Points) < 2 then
+          PathExportShape := MifPathExportShape(PathLayer);
+          AnalyzePathExport(PathLayer, I, PathIndex + 1, LineIndex + 1,
+            Report);
+          if PathExportShape = mpesUnsupported then
             Continue;
-          Candidate.AddChunk('IPNG', CreatePathImagePng(PathLayer));
-          Candidate.AddChunk('IPNG', CreateTexturePng(PathLayer.FillColor));
-          Candidate.AddChunk('IPNG', CreatePathVectorPng(PathLayer));
-          Candidate.AddChunk('IPNG', CreateTexturePng(PathLayer.StrokeColor));
+          if PathExportShape = mpesLine then
+          begin
+            ConvertedLine := CreateMifLineFromPath(PathLayer);
+            try
+              Candidate.AddChunk('IPNG', CreateLineImagePng(ConvertedLine));
+              Candidate.AddChunk('IPNG', CreateTexturePng(clWhite));
+              Candidate.AddChunk('IPNG', CreateLineVectorPng);
+              Candidate.AddChunk('IPNG',
+                CreateTexturePng(ConvertedLine.StrokeColor));
+            finally
+              ConvertedLine.Free;
+            end;
+            Inc(LineIndex)
+          end
+          else
+          begin
+            Candidate.AddChunk('IPNG', CreatePathImagePng(PathLayer));
+            Candidate.AddChunk('IPNG',
+              CreateTexturePng(PathLayer.FillColor));
+            Candidate.AddChunk('IPNG', CreatePathVectorPng(PathLayer));
+            Candidate.AddChunk('IPNG',
+              CreateTexturePng(PathLayer.StrokeColor));
+            Inc(PathIndex);
+          end;
           Continue;
         end;
         if not (Layer is TVectArtRectangleLayer) then
+        begin
+          Report.AddIssue(meikUnsupported, I, Layer.Name,
+            'このレイヤー種類はMIF Writerが対応していません。');
           Continue;
+        end;
         Rectangle := TVectArtRectangleLayer(Layer);
+        AnalyzeRectangleExport(Rectangle, I, RectangleIndex + 1, Report);
         RectangleSource := Default(TRectangleMifSource);
         if RectangleIndex < RectangleSources.Count then
           RectangleSource := RectangleSources[RectangleIndex];
@@ -1847,6 +2355,11 @@ begin
         Inc(RectangleIndex);
       end;
       Candidate.AddChunk('MEND', nil);
+      if Report.Compatibility = mecUnsupported then
+      begin
+        ErrorMessage := 'MIFへ書き出せない項目があります。';
+        Exit;
+      end;
       Container := Candidate;
       Candidate := nil;
       Result := True;
