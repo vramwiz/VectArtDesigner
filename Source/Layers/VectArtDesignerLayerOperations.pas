@@ -1,4 +1,4 @@
-// レイヤー操作バーから実行する追加・複製・複数削除・複数積層移動を提供する。
+﻿// レイヤー操作バーから実行する追加・複製・複数削除・複数積層移動を提供する。
 unit VectArtDesignerLayerOperations;
 
 interface
@@ -74,13 +74,13 @@ begin
   if FEditorState <> nil then
   begin
     Data.StrokeColor := FEditorState.RectangleStrokeColor;
-    Data.MifStrokeStyle := FEditorState.RectangleMifStrokeStyle;
+    Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
     Data.StrokeWidth := FEditorState.RectangleStrokeWidth;
   end
   else
   begin
     Data.StrokeColor := clBlack;
-    Data.MifStrokeStyle := vssSolid;
+    Data.StrokeStyle := vssSolid;
     Data.StrokeWidth := 0.0;
   end;
   Data.Visible := True;

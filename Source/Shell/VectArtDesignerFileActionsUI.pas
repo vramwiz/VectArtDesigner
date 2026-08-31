@@ -71,9 +71,9 @@ begin
   FOpenDialog.Title := 'デザインファイルを開く';
 
   FSaveDialog := TSaveDialog.Create(Self);
-  FSaveDialog.DefaultExt := 'svg';
-  FSaveDialog.Filter := 'SVGファイル (*.svg)|*.svg|' +
-    'MIFファイル (*.mif)|*.mif|すべてのファイル (*.*)|*.*';
+  FSaveDialog.DefaultExt := 'mif';
+  FSaveDialog.Filter := 'MIFファイル (*.mif)|*.mif|' +
+    'SVGファイル (*.svg)|*.svg|すべてのファイル (*.*)|*.*';
   FSaveDialog.Options := FSaveDialog.Options +
     [ofOverwritePrompt, ofPathMustExist];
   FSaveDialog.Title := 'デザインファイルを保存';
@@ -104,7 +104,7 @@ procedure TVectArtFileActionsUI.ExecuteSaveAs;
 begin
   FMenu.Close;
   FSaveDialog.FileName := FCurrentFileName;
-  if SameText(ExtractFileExt(FCurrentFileName), '.mif') then
+  if SameText(ExtractFileExt(FCurrentFileName), '.svg') then
     FSaveDialog.FilterIndex := 2
   else
     FSaveDialog.FilterIndex := 1;
@@ -137,9 +137,9 @@ end;
 procedure TVectArtFileActionsUI.SaveTypeChange(Sender: TObject);
 begin
   if FSaveDialog.FilterIndex = 2 then
-    FSaveDialog.DefaultExt := 'mif'
+    FSaveDialog.DefaultExt := 'svg'
   else
-    FSaveDialog.DefaultExt := 'svg';
+    FSaveDialog.DefaultExt := 'mif';
 end;
 
 procedure TVectArtFileActionsUI.SetCanSave(const Value: Boolean);

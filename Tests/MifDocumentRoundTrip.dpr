@@ -142,6 +142,7 @@ begin
 end;
 
 var
+  AnalysisReport: TMifExportReport;
   Container: TVectArtMifContainer;
   Data: TVectArtRectangleData;
   ErrorMessage: string;
@@ -196,12 +197,12 @@ begin
     Data.Visible := True;
     ExactDocument.InsertRectangle(1, Data);
     LineData := Default(TVectArtLineData);
-    LineData.MifAntiAlias := True;
+    LineData.AntiAlias := True;
     LineData.EndPoint := TPointF.Create(300, 200);
-    LineData.MifEndMarkerSize := 4.0;
+    LineData.EndMarkerSize := 4.0;
     LineData.Name := 'Line 1';
     LineData.Opacity := 1.0;
-    LineData.MifStartMarkerSize := 4.0;
+    LineData.StartMarkerSize := 4.0;
     LineData.StartPoint := TPointF.Create(100, 100);
     LineData.StrokeColor := clBlack;
     LineData.StrokeWidth := 1.0;
@@ -211,12 +212,24 @@ begin
     PathData.Name := 'Path 1';
     PathData.Points := [PointF(100, 200), PointF(200, 250),
       PointF(300, 200)];
+    PathData.EndMarker := vlmCircle;
+    PathData.EndMarkerSize := 8.0;
     PathData.FillColor := clWhite;
+    PathData.LineCap := vlcSquare;
+    PathData.LineJoin := vljBevel;
+    PathData.AntiAlias := False;
     PathData.Opacity := 1.0;
     PathData.StrokeColor := clBlack;
     PathData.StrokeWidth := 1.0;
+    PathData.StartMarker := vlmDiamond;
+    PathData.StartMarkerSize := 5.0;
     PathData.Visible := True;
     ExactDocument.InsertPath(3, PathData);
+    Require(TryAnalyzeVectArtMifExport(ExactDocument, AnalysisReport,
+      ErrorMessage), ErrorMessage);
+    Require((AnalysisReport.Compatibility = mecExact) and
+      (Length(AnalysisReport.Issues) = 0),
+      'Exact edit-time MIF analysis differs');
     Require(TryCreateVectArtMifFromDocument(ExactDocument, nil,
       ExactContainer, ExportReport, ErrorMessage), ErrorMessage);
     Require(ExportReport.Compatibility = mecExact,
@@ -232,6 +245,11 @@ begin
     PathData.StrokeWidth := 1.0;
     PathData.Visible := True;
     UnsupportedDocument.InsertPath(1, PathData);
+    Require(TryAnalyzeVectArtMifExport(UnsupportedDocument, AnalysisReport,
+      ErrorMessage), ErrorMessage);
+    Require((AnalysisReport.Compatibility = mecUnsupported) and
+      HasExportIssue(AnalysisReport, 1, meikUnsupported, '頂点'),
+      'Unsupported edit-time MIF analysis differs');
     Require(not TryCreateVectArtMifFromDocument(UnsupportedDocument, nil,
       UnsupportedContainer, ExportReport, ErrorMessage),
       'One-point Path unexpectedly generated a MIF');
@@ -243,6 +261,10 @@ begin
 
     PathData.Points := [PointF(100, 100), PointF(300, 200)];
     PathData.Name := 'Two-point path';
+    PathData.EndMarker := vlmCircle;
+    PathData.EndMarkerSize := 8.0;
+    PathData.StartMarker := vlmDiamond;
+    PathData.StartMarkerSize := 5.0;
     TwoPointDocument.InsertPath(1, PathData);
     Require(TryCreateVectArtMifFromDocument(TwoPointDocument, nil,
       TwoPointContainer, ExportReport, ErrorMessage), ErrorMessage);
@@ -260,6 +282,11 @@ begin
       SameValue(TargetLine.EndPoint.X, 300.0, 0.000001) and
       SameValue(TargetLine.EndPoint.Y, 200.0, 0.000001),
       'Two-point Path endpoints changed during Line conversion');
+    Require((TargetLine.EndMarker = PathData.EndMarker) and
+      (TargetLine.StartMarker = PathData.StartMarker) and
+      SameValue(TargetLine.EndMarkerSize, PathData.EndMarkerSize) and
+      SameValue(TargetLine.StartMarkerSize, PathData.StartMarkerSize),
+      'Two-point Path markers changed during Line conversion');
 
     SourceDocument.SetCanvasSize(640, 360);
     SourceDocument.CanvasLayer.BackgroundColor := TColor($00302010);
@@ -269,7 +296,7 @@ begin
     Data.Opacity := 0.625;
     Data.RotationDegrees := 15.0;
     Data.StrokeColor := TColor($000040C0);
-    Data.MifStrokeStyle := vssLongDash;
+    Data.StrokeStyle := vssLongDash;
     Data.StrokeWidth := 4.0;
     Data.Visible := True;
     Data.Locked := True;
@@ -278,35 +305,54 @@ begin
     LineData.EndPoint := TPointF.Create(500, 210);
     LineData.Locked := False;
     LineData.LineCap := vlcRound;
-    LineData.MifAntiAlias := False;
-    LineData.MifEndMarker := vlmSlash;
-    LineData.MifEndMarkerSize := 100.0;
-    LineData.MifStartMarker := vlmConcaveArrow;
-    LineData.MifStartMarkerSize := 6.0;
+    LineData.AntiAlias := False;
+    LineData.EndMarker := vlmSlash;
+    LineData.EndMarkerSize := 100.0;
+    LineData.StartMarker := vlmConcaveArrow;
+    LineData.StartMarkerSize := 6.0;
     LineData.LineJoin := vljBevel;
     LineData.Name := 'MIF line';
     LineData.Opacity := 0.8;
     LineData.StrokeColor := TColor($00CC4400);
-    LineData.MifStrokeStyle := vssDashDot;
+    LineData.StrokeStyle := vssDashDot;
     LineData.StrokeWidth := 7.0;
     LineData.Visible := True;
     SourceDocument.InsertLine(2, LineData);
-    PathData.Name := 'MIF polygon';
+    PathData.Name := 'MIF open path';
     PathData.Points := [PointF(300, 40), PointF(520, 70),
       PointF(470, 170), PointF(330, 150)];
-    PathData.Closed := True;
-    PathData.Filled := True;
+    PathData.Closed := False;
+    PathData.Filled := False;
     PathData.FillColor := TColor($0080C040);
+    PathData.LineCap := vlcSquare;
+    PathData.LineJoin := vljBevel;
+    PathData.AntiAlias := False;
+    PathData.EndMarker := vlmSlash;
+    PathData.EndMarkerSize := 9.0;
     PathData.StrokeColor := TColor($004020D0);
-    PathData.MifStrokeStyle := vssShortDash;
+    PathData.StrokeStyle := vssShortDash;
     PathData.StrokeWidth := 3.0;
+    PathData.StartMarker := vlmConcaveArrow;
+    PathData.StartMarkerSize := 6.0;
     PathData.Opacity := 0.7;
     PathData.Visible := True;
     PathData.Locked := False;
     SourceDocument.InsertPath(3, PathData);
 
+    Require(TryAnalyzeVectArtMifExport(SourceDocument, AnalysisReport,
+      ErrorMessage), ErrorMessage);
     Require(TryCreateVectArtMifFromDocument(SourceDocument, nil, Container,
       ExportReport, ErrorMessage), ErrorMessage);
+    Require((AnalysisReport.Compatibility = ExportReport.Compatibility) and
+      (Length(AnalysisReport.Issues) = Length(ExportReport.Issues)),
+      'Edit-time and save-time MIF reports differ');
+    for I := 0 to High(AnalysisReport.Issues) do
+      Require((AnalysisReport.Issues[I].Kind = ExportReport.Issues[I].Kind) and
+        (AnalysisReport.Issues[I].LayerIndex =
+         ExportReport.Issues[I].LayerIndex) and
+        (AnalysisReport.Issues[I].MessageText =
+         ExportReport.Issues[I].MessageText),
+        'Edit-time and save-time MIF issue details differ');
     Require(ExportReport.Compatibility = mecNeedsConfirmation,
       'MIF export compatibility warning was not reported');
     Require(Length(ExportReport.Issues) >= 4,
@@ -375,7 +421,7 @@ begin
       ColorToRGB(Data.StrokeColor), 'Stroke color differs');
     Require(SameValue(TargetRectangle.StrokeWidth, Data.StrokeWidth,
       0.000001), 'Stroke width differs');
-    Require(TargetRectangle.MifStrokeStyle = Data.MifStrokeStyle,
+    Require(TargetRectangle.StrokeStyle = Data.StrokeStyle,
       'Stroke style differs');
     TargetLine := TVectArtLineLayer(TargetDocument[2]);
     Require(SameValue(TargetLine.StartPoint.X, LineData.StartPoint.X, 0.01)
@@ -387,27 +433,26 @@ begin
       ColorToRGB(LineData.StrokeColor), 'Line color differs');
     Require(SameValue(TargetLine.StrokeWidth, LineData.StrokeWidth,
       0.000001), 'Line width differs');
-    Require(TargetLine.MifStrokeStyle = LineData.MifStrokeStyle,
+    Require(TargetLine.StrokeStyle = LineData.StrokeStyle,
       'Line style differs');
     Require(TargetLine.LineCap = LineData.LineCap,
       'Line cap differs');
     Require(TargetLine.LineJoin = LineData.LineJoin,
       'Line join differs');
-    Require(TargetLine.MifAntiAlias = LineData.MifAntiAlias,
+    Require(TargetLine.AntiAlias = LineData.AntiAlias,
       'Line anti-alias differs');
-    Require(TargetLine.MifEndMarker = LineData.MifEndMarker,
+    Require(TargetLine.EndMarker = LineData.EndMarker,
       'Line end marker differs');
-    Require(TargetLine.MifStartMarker = LineData.MifStartMarker,
+    Require(TargetLine.StartMarker = LineData.StartMarker,
       'Line start marker differs');
-    Require(TargetDocument.EditingMode = vemMifCompatible,
-      'MIF load did not select MIF-compatible editing mode');
-    Require(SameValue(TargetLine.MifEndMarkerSize, 20.0),
+    Require(SameValue(TargetLine.EndMarkerSize, 20.0),
       'Line end marker size was not converted as reported');
-    Require(SameValue(TargetLine.MifStartMarkerSize, LineData.MifStartMarkerSize),
+    Require(SameValue(TargetLine.StartMarkerSize, LineData.StartMarkerSize),
       'Line start marker size differs');
     TargetPath := TVectArtPathLayer(TargetDocument[3]);
     Require((Length(TargetPath.Points) = Length(PathData.Points)) and
-      TargetPath.Closed and TargetPath.Filled, 'Path properties differ');
+      not TargetPath.Closed and not TargetPath.Filled,
+      'Path properties differ');
     Require(SameValue(TargetPath.Points[2].X, PathData.Points[2].X,
       0.000001) and SameValue(TargetPath.Points[2].Y,
       PathData.Points[2].Y, 0.000001), 'Path points differ');
@@ -417,8 +462,18 @@ begin
       ColorToRGB(PathData.StrokeColor), 'Path stroke color differs');
     Require(SameValue(TargetPath.StrokeWidth, PathData.StrokeWidth,
       0.000001), 'Path stroke width differs');
-    Require(TargetPath.MifStrokeStyle = PathData.MifStrokeStyle,
+    Require(TargetPath.StrokeStyle = PathData.StrokeStyle,
       'Path stroke style differs');
+    Require((TargetPath.LineCap = PathData.LineCap) and
+      (TargetPath.LineJoin = PathData.LineJoin),
+      'Path line cap or join differs');
+    Require(TargetPath.AntiAlias = PathData.AntiAlias,
+      'Path anti-alias differs');
+    Require((TargetPath.EndMarker = PathData.EndMarker) and
+      (TargetPath.StartMarker = PathData.StartMarker) and
+      SameValue(TargetPath.EndMarkerSize, PathData.EndMarkerSize) and
+      SameValue(TargetPath.StartMarkerSize, PathData.StartMarkerSize),
+      'Path markers differ');
     Writeln('MIF document round-trip: PASS');
   finally
     Memory.Free;

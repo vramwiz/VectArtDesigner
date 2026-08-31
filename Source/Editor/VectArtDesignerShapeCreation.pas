@@ -1,4 +1,4 @@
-// 図形作成ツールの入力状態、プレビュー、新規レイヤー確定を管理する。
+﻿// 図形作成ツールの入力状態、プレビュー、新規レイヤー確定を管理する。
 unit VectArtDesignerShapeCreation;
 
 interface
@@ -78,16 +78,16 @@ begin
     (FCurrentPoint.Y - FCanvasBounds.Top) / FZoom);
   Data.Locked := False;
   Data.LineCap := FEditorState.LineCap;
-  Data.MifAntiAlias := FEditorState.LineMifAntiAlias;
-  Data.MifEndMarker := FEditorState.LineMifEndMarker;
-  Data.MifEndMarkerSize := FEditorState.LineMifEndMarkerSize;
-  Data.MifStartMarker := FEditorState.LineMifStartMarker;
-  Data.MifStartMarkerSize := FEditorState.LineMifStartMarkerSize;
+  Data.AntiAlias := FEditorState.LineAntiAlias;
+  Data.EndMarker := FEditorState.LineEndMarker;
+  Data.EndMarkerSize := FEditorState.LineEndMarkerSize;
+  Data.StartMarker := FEditorState.LineStartMarker;
+  Data.StartMarkerSize := FEditorState.LineStartMarkerSize;
   Data.LineJoin := FEditorState.LineJoin;
   Data.Name := NextLineName;
   Data.Opacity := FEditorState.RectangleOpacity;
   Data.StrokeColor := FEditorState.LineStrokeColor;
-  Data.MifStrokeStyle := FEditorState.LineMifStrokeStyle;
+  Data.StrokeStyle := FEditorState.LineStrokeStyle;
   Data.StrokeWidth := FEditorState.LineStrokeWidth;
   Data.Visible := True;
   BeforeSelection := FDocument.GetSelectedLayerIndices;
@@ -119,11 +119,18 @@ begin
   Data.Closed := Closed;
   Data.Filled := Closed;
   Data.FillColor := FEditorState.RectangleFillColor;
+  Data.LineCap := FEditorState.PathLineCap;
+  Data.LineJoin := FEditorState.PathLineJoin;
+  Data.AntiAlias := FEditorState.PathAntiAlias;
+  Data.EndMarker := FEditorState.PathEndMarker;
+  Data.EndMarkerSize := FEditorState.PathEndMarkerSize;
   Data.Locked := False;
   Data.Name := NextPathName;
   Data.Opacity := FEditorState.RectangleOpacity;
+  Data.StartMarker := FEditorState.PathStartMarker;
+  Data.StartMarkerSize := FEditorState.PathStartMarkerSize;
   Data.StrokeColor := FEditorState.RectangleStrokeColor;
-  Data.MifStrokeStyle := FEditorState.RectangleMifStrokeStyle;
+  Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
   Data.StrokeWidth := Max(FEditorState.RectangleStrokeWidth, 1.0);
   Data.Visible := True;
   BeforeSelection := FDocument.GetSelectedLayerIndices;
@@ -185,7 +192,7 @@ begin
   Data.Opacity := FEditorState.RectangleOpacity;
   Data.RotationDegrees := 0.0;
   Data.StrokeColor := FEditorState.RectangleStrokeColor;
-  Data.MifStrokeStyle := FEditorState.RectangleMifStrokeStyle;
+  Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
   Data.StrokeWidth := FEditorState.RectangleStrokeWidth;
   Data.Visible := True;
   BeforeSelection := FDocument.GetSelectedLayerIndices;

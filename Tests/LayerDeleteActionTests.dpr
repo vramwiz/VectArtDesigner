@@ -41,7 +41,7 @@ begin
   Result.Opacity := 1.0;
   Result.RotationDegrees := 0.0;
   Result.StrokeColor := clBlack;
-  Result.MifStrokeStyle := vssSolid;
+  Result.StrokeStyle := vssSolid;
   Result.StrokeWidth := 0.0;
   Result.Visible := True;
 end;

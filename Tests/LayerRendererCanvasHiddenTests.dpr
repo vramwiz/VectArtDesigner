@@ -28,23 +28,26 @@ begin
   Result.EndPoint := TPointF.Create(100, 100);
   Result.Locked := False;
   Result.LineCap := vlcButt;
-  Result.MifAntiAlias := True;
-  Result.MifEndMarker := vlmNone;
-  Result.MifEndMarkerSize := 4.0;
-  Result.MifStartMarker := vlmNone;
-  Result.MifStartMarkerSize := 4.0;
+  Result.AntiAlias := True;
+  Result.EndMarker := vlmNone;
+  Result.EndMarkerSize := 4.0;
+  Result.StartMarker := vlmNone;
+  Result.StartMarkerSize := 4.0;
   Result.LineJoin := vljMiter;
   Result.Name := Name;
   Result.Opacity := 1.0;
   Result.StrokeColor := clRed;
-  Result.MifStrokeStyle := vssSolid;
+  Result.StrokeStyle := vssSolid;
   Result.StrokeWidth := Width;
   Result.Visible := True;
 end;
 
 function PathData: TVectArtPathData;
 begin
+  Result := Default(TVectArtPathData);
   Result.Closed := False;
+  Result.EndMarker := vlmNone;
+  Result.EndMarkerSize := 4.0;
   Result.FillColor := clWhite;
   Result.Filled := False;
   Result.Locked := False;
@@ -56,8 +59,10 @@ begin
   Result.Points[2] := TPointF.Create(70, 80);
   Result.Points[3] := TPointF.Create(100, 20);
   Result.StrokeColor := clBlue;
-  Result.MifStrokeStyle := vssSolid;
+  Result.StrokeStyle := vssSolid;
   Result.StrokeWidth := 5.0;
+  Result.StartMarker := vlmNone;
+  Result.StartMarkerSize := 4.0;
   Result.Visible := True;
 end;
 
@@ -72,9 +77,13 @@ var
   LineStart: TPoint;
   LineThumbnailRect: TRect;
   PathItemRect: TRect;
+  PathLayer: TVectArtPathLayer;
   PathThumbnailRect: TRect;
   BlueInside: Integer;
   BlueOutside: Integer;
+  ClosedMarkerPixels: Integer;
+  ClosedNoMarkerPixels: Integer;
+  MarkerBlueInside: Integer;
   RedInside: Integer;
   RedOutside: Integer;
   Renderer: TVectArtLayerRenderer;
@@ -100,7 +109,7 @@ begin
     Data.Opacity := 1.0;
     Data.RotationDegrees := 0.0;
     Data.StrokeColor := clBlack;
-    Data.MifStrokeStyle := vssSolid;
+    Data.StrokeStyle := vssSolid;
     Data.StrokeWidth := 0.0;
     Data.Visible := True;
     Document.InsertRectangle(Document.LayerCount, Data);
@@ -164,6 +173,33 @@ begin
             Inc(BlueOutside);
     Require((BlueInside > 0) and (BlueOutside = 0),
       'Continuous-line thumbnail was not drawn inside its background');
+    PathLayer := TVectArtPathLayer(Document[4]);
+    Document.SetPathEndMarker(4, vlmCircle);
+    Document.SetPathEndMarkerSize(4, 9.0);
+    Renderer.DrawLayers(Bitmap.Canvas, Bounds);
+    MarkerBlueInside := 0;
+    for Y := PathThumbnailRect.Top to PathThumbnailRect.Bottom - 1 do
+      for X := PathThumbnailRect.Left to PathThumbnailRect.Right - 1 do
+        if ColorToRGB(Bitmap.Canvas.Pixels[X, Y]) = ColorToRGB(clBlue) then
+          Inc(MarkerBlueInside);
+    Require(MarkerBlueInside > BlueInside,
+      'Open Path marker was not drawn in the thumbnail');
+    PathLayer.Closed := True;
+    Renderer.DrawLayers(Bitmap.Canvas, Bounds);
+    ClosedMarkerPixels := 0;
+    for Y := PathThumbnailRect.Top to PathThumbnailRect.Bottom - 1 do
+      for X := PathThumbnailRect.Left to PathThumbnailRect.Right - 1 do
+        if ColorToRGB(Bitmap.Canvas.Pixels[X, Y]) = ColorToRGB(clBlue) then
+          Inc(ClosedMarkerPixels);
+    Document.SetPathEndMarker(4, vlmNone);
+    Renderer.DrawLayers(Bitmap.Canvas, Bounds);
+    ClosedNoMarkerPixels := 0;
+    for Y := PathThumbnailRect.Top to PathThumbnailRect.Bottom - 1 do
+      for X := PathThumbnailRect.Left to PathThumbnailRect.Right - 1 do
+        if ColorToRGB(Bitmap.Canvas.Pixels[X, Y]) = ColorToRGB(clBlue) then
+          Inc(ClosedNoMarkerPixels);
+    Require(ClosedMarkerPixels = ClosedNoMarkerPixels,
+      'Closed Path marker was drawn in the thumbnail');
     Writeln('Layer renderer canvas-hidden tests: PASS');
   finally
     Bitmap.Free;

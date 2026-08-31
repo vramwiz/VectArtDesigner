@@ -67,6 +67,9 @@ type
     FToolPaletteMenuItem: TPanel;
     FMifContainer: TVectArtMifContainer;
     FMifHasEditableDocument: Boolean;
+    FMifAnalysisDetail: string;
+    FMifAnalysisRevision: Int64;
+    FMifAnalysisStatus: string;
     FMifReader: IVectArtMifContainerReader;
     FMifWriter: IVectArtMifContainerWriter;
     procedure AttachFrame(AFrame: TFrame; AHost: TWinControl);
@@ -84,6 +87,7 @@ type
     procedure InitializeShortcuts;
     function IsEditingSurfaceFocused: Boolean;
     function IsTextInputFocused: Boolean;
+    function MifConstraintStatusText: string;
     procedure LoadLayoutSettings;
     procedure SaveLayoutSettings;
     procedure SelectAllLayers;
@@ -185,6 +189,7 @@ begin
   InitializeSkiaRuntime;
 
   FDocument := TVectArtDocument.Create;
+  FMifAnalysisRevision := -1;
   FDocument.OnChanged := DocumentChanged;
   FEditorState := TVectArtEditorState.Create;
   FEditorState.OnChanged := EditorStateChanged;
@@ -282,13 +287,14 @@ var
   ErrorMessage: string;
   Extension: string;
   ImportMessage: string;
+  SvgImportReport: TSvgImportReport;
 begin
   ErrorMessage := '';
   Extension := LowerCase(ExtractFileExt(FileName));
   if Extension = '.svg' then
   begin
     if not TryLoadVectArtDocumentFromSvgFile(FileName, FDocument,
-      ErrorMessage) then
+      SvgImportReport, ErrorMessage) then
     begin
       lblStatus.Caption := 'SVG open error: ' + ErrorMessage;
       Exit;
@@ -302,7 +308,18 @@ begin
     FFileActionsUI.CanSave := True;
     FEditActionsUI.OnSaveRequest := FileSaveShortcut;
     Caption := 'VectArtDesigner - ' + ExtractFileName(FileName);
-    lblStatus.Caption := 'SVG document loaded: ' + ExtractFileName(FileName);
+    if SvgImportReport.HasIssues then
+    begin
+      Application.MessageBox(PChar(
+        'MIF編集モデルへ変換または無視したSVG要素があります。' +
+        sLineBreak + sLineBreak + SvgImportReport.ToDisplayText),
+        'SVG読込結果', MB_OK or MB_ICONWARNING);
+      lblStatus.Caption := Format('SVG document loaded with %d notice(s): %s',
+        [Length(SvgImportReport.Issues), ExtractFileName(FileName)]);
+    end
+    else
+      lblStatus.Caption := 'SVG document loaded: ' +
+        ExtractFileName(FileName);
     Exit;
   end;
   if Extension <> '.mif' then
@@ -460,6 +477,8 @@ end;
 
 procedure TMainForm.DocumentChanged(Sender: TObject);
 begin
+  if FEditActionsUI <> nil then
+    FEditActionsUI.RefreshState;
   if FEditorFrame <> nil then
     FEditorFrame.CanvasControl.Invalidate;
   if (FDocument <> nil) and FDocument.IsInteractiveUpdate then
@@ -505,9 +524,47 @@ begin
   end;
 end;
 
+function TMainForm.MifConstraintStatusText: string;
+var
+  ErrorMessage: string;
+  Report: TMifExportReport;
+begin
+  Result := '';
+  if FDocument = nil then
+    Exit;
+  if FMifAnalysisRevision <> FDocument.Revision then
+  begin
+    FMifAnalysisRevision := FDocument.Revision;
+    FMifAnalysisDetail := '';
+    if not TryAnalyzeVectArtMifExport(FDocument, Report, ErrorMessage) then
+    begin
+      FMifAnalysisStatus := 'MIF: analysis error';
+      FMifAnalysisDetail := ErrorMessage;
+    end
+    else
+    begin
+      FMifAnalysisDetail := Report.ToDisplayText;
+      case Report.Compatibility of
+        mecExact:
+          FMifAnalysisStatus := 'MIF: exact';
+        mecNeedsConfirmation:
+          FMifAnalysisStatus := Format('MIF: %d conversion notice(s)',
+            [Length(Report.Issues)]);
+        mecUnsupported:
+          FMifAnalysisStatus := Format('MIF: unsupported (%d issue(s))',
+            [Length(Report.Issues)]);
+      end;
+    end;
+  end;
+  lblStatus.ShowHint := FMifAnalysisDetail <> '';
+  lblStatus.Hint := FMifAnalysisDetail;
+  Result := FMifAnalysisStatus;
+end;
+
 procedure TMainForm.EditorStateChanged(Sender: TObject);
 var
   CanvasSize: string;
+  ConstraintStatus: string;
 begin
   if FEditorFrame <> nil then
     FEditorFrame.CanvasControl.Invalidate;
@@ -520,6 +577,7 @@ begin
       FDocument.CanvasLayer.Height])
   else
     CanvasSize := '-';
+  ConstraintStatus := MifConstraintStatusText;
   if (FEditorState <> nil) and
     (FEditorState.CurrentTool = vetRectangle) then
     lblStatus.Caption := 'Ready   Tool: Rectangle   Canvas: ' + CanvasSize
@@ -532,6 +590,8 @@ begin
       'double-click/right-click to finish   Canvas: ' + CanvasSize
   else
     lblStatus.Caption := 'Ready   Tool: Select   Canvas: ' + CanvasSize;
+  if ConstraintStatus <> '' then
+    lblStatus.Caption := lblStatus.Caption + '   ' + ConstraintStatus;
 end;
 
 procedure TMainForm.FormKeyDown(Sender: TObject; var Key: Word;

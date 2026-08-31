@@ -1,4 +1,4 @@
-// 中央編集領域のキャンバス表示を担当する。
+﻿// 中央編集領域のキャンバス表示を担当する。
 // 論理サイズと画面上の拡大率を分離し、描画にはDirect2Dを優先して使用する。
 unit VectArtDesignerCanvas;
 
@@ -115,7 +115,7 @@ type
   end;
 
 function BuildStyledPreviewSegments(const StartPoint, EndPoint: TPoint;
-  Width: Single; Style: TVectArtMifStrokeStyle): TArray<TPreviewLineSegment>;
+  Width: Single; Style: TVectArtStrokeStyle): TArray<TPreviewLineSegment>;
 var
   CurrentDistance: Single;
   DashIndex: Integer;
@@ -170,9 +170,9 @@ end;
 
 procedure DrawStyledPreviewLine(Target: TCanvas; const StartPoint,
   EndPoint: TPoint; Color: TColor; Width: Single;
-  Style: TVectArtMifStrokeStyle; LineCap: TVectArtLineCap;
-  MifAntiAlias: Boolean; MifStartMarker, MifEndMarker: TVectArtMifLineMarker;
-  MifStartMarkerSize, MifEndMarkerSize: Single); overload;
+  Style: TVectArtStrokeStyle; LineCap: TVectArtLineCap;
+  AntiAlias: Boolean; StartMarker, EndMarker: TVectArtLineMarker;
+  StartMarkerSize, EndMarkerSize: Single); overload;
 var
   DX: Single;
   DY: Single;
@@ -227,11 +227,11 @@ begin
   for I := 0 to 1 do
   begin
     if I = 0 then
-      Geometry := BuildMifLineMarkerGeometry(Ord(MifStartMarker), StartPoint,
-        EndPoint, Width, MifStartMarkerSize)
+      Geometry := BuildLineMarkerGeometry(Ord(StartMarker), StartPoint,
+        EndPoint, Width, StartMarkerSize)
     else
-      Geometry := BuildMifLineMarkerGeometry(Ord(MifEndMarker), EndPoint,
-        StartPoint, Width, MifEndMarkerSize);
+      Geometry := BuildLineMarkerGeometry(Ord(EndMarker), EndPoint,
+        StartPoint, Width, EndMarkerSize);
     SetLength(MarkerPoints, Length(Geometry.PrimaryPoints));
     for Radius := 0 to High(MarkerPoints) do
       MarkerPoints[Radius] := Point(Round(Geometry.PrimaryPoints[Radius].X),
@@ -254,9 +254,9 @@ end;
 
 procedure DrawStyledPreviewLine(Target: TDirect2DCanvas;
   const StartPoint, EndPoint: TPoint; Color: TColor; Width: Single;
-  Style: TVectArtMifStrokeStyle; LineCap: TVectArtLineCap;
-  MifAntiAlias: Boolean; MifStartMarker, MifEndMarker: TVectArtMifLineMarker;
-  MifStartMarkerSize, MifEndMarkerSize: Single); overload;
+  Style: TVectArtStrokeStyle; LineCap: TVectArtLineCap;
+  AntiAlias: Boolean; StartMarker, EndMarker: TVectArtLineMarker;
+  StartMarkerSize, EndMarkerSize: Single); overload;
 var
   DX: Single;
   DY: Single;
@@ -270,7 +270,7 @@ var
   MarkerPoints: TArray<TPoint>;
   Segments: TArray<TPreviewLineSegment>;
 begin
-  if MifAntiAlias then
+  if AntiAlias then
     Target.RenderTarget.SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE)
   else
     Target.RenderTarget.SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
@@ -315,11 +315,11 @@ begin
   for I := 0 to 1 do
   begin
     if I = 0 then
-      Geometry := BuildMifLineMarkerGeometry(Ord(MifStartMarker), StartPoint,
-        EndPoint, Width, MifStartMarkerSize)
+      Geometry := BuildLineMarkerGeometry(Ord(StartMarker), StartPoint,
+        EndPoint, Width, StartMarkerSize)
     else
-      Geometry := BuildMifLineMarkerGeometry(Ord(MifEndMarker), EndPoint,
-        StartPoint, Width, MifEndMarkerSize);
+      Geometry := BuildLineMarkerGeometry(Ord(EndMarker), EndPoint,
+        StartPoint, Width, EndMarkerSize);
     SetLength(MarkerPoints, Length(Geometry.PrimaryPoints));
     for Radius := 0 to High(MarkerPoints) do
       MarkerPoints[Radius] := Point(Round(Geometry.PrimaryPoints[Radius].X),
@@ -823,6 +823,7 @@ begin
           else if Layer is TVectArtPathLayer then
           begin
             PathLayer := TVectArtPathLayer(Layer);
+            // 選択枠は頂点編集とリサイズの基準なので、装飾マーカーでは広げない。
             RotatedBounds := PointsBounds(PathLayer.Points);
             SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
               SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
@@ -974,10 +975,10 @@ begin
         DrawStyledPreviewLine(Direct2DCanvas, LineStart, LineEnd,
           FEditorState.LineStrokeColor,
           FEditorState.LineStrokeWidth * FZoom,
-          FEditorState.LineMifStrokeStyle, FEditorState.LineCap,
-          FEditorState.LineMifAntiAlias, FEditorState.LineMifStartMarker,
-          FEditorState.LineMifEndMarker, FEditorState.LineMifStartMarkerSize,
-          FEditorState.LineMifEndMarkerSize);
+          FEditorState.LineStrokeStyle, FEditorState.LineCap,
+          FEditorState.LineAntiAlias, FEditorState.LineStartMarker,
+          FEditorState.LineEndMarker, FEditorState.LineStartMarkerSize,
+          FEditorState.LineEndMarkerSize);
       if FShapeCreation.PreviewPath(PathPreview) then
       begin
         Direct2DCanvas.Pen.Color := COLOR_SELECTION;
@@ -1115,6 +1116,7 @@ begin
       else if Layer is TVectArtPathLayer then
       begin
         PathLayer := TVectArtPathLayer(Layer);
+        // 選択枠は頂点編集とリサイズの基準なので、装飾マーカーでは広げない。
         RotatedBounds := PointsBounds(PathLayer.Points);
         SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
           SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
@@ -1262,10 +1264,10 @@ begin
   if FShapeCreation.PreviewLine(LineStart, LineEnd) then
     DrawStyledPreviewLine(Canvas, LineStart, LineEnd,
       FEditorState.LineStrokeColor, FEditorState.LineStrokeWidth * FZoom,
-      FEditorState.LineMifStrokeStyle, FEditorState.LineCap,
-      FEditorState.LineMifAntiAlias, FEditorState.LineMifStartMarker,
-      FEditorState.LineMifEndMarker, FEditorState.LineMifStartMarkerSize,
-      FEditorState.LineMifEndMarkerSize);
+      FEditorState.LineStrokeStyle, FEditorState.LineCap,
+      FEditorState.LineAntiAlias, FEditorState.LineStartMarker,
+      FEditorState.LineEndMarker, FEditorState.LineStartMarkerSize,
+      FEditorState.LineEndMarkerSize);
   if FShapeCreation.PreviewPath(PathPreview) then
   begin
     Canvas.Pen.Color := COLOR_SELECTION;

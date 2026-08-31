@@ -1,4 +1,4 @@
-program MifWebArtRectangleImport;
+﻿program MifWebArtRectangleImport;
 
 {$APPTYPE CONSOLE}
 
@@ -98,10 +98,10 @@ begin
       Require(SameValue(Rectangle.StrokeWidth, 1.0, 0.000001),
         'MIF stroke width differs');
       if InputFileName.Contains(#$8907#$96D1#$306A#$70B9#$7DDA) then
-        Require(Rectangle.MifStrokeStyle = vssDashed,
+        Require(Rectangle.StrokeStyle = vssDashed,
           'MIF dashed stroke style differs')
       else
-        Require(Rectangle.MifStrokeStyle = vssSolid,
+        Require(Rectangle.StrokeStyle = vssSolid,
           'MIF solid stroke style differs');
     end;
     Require(TryCreateVectArtMifFromDocument(Document, Container,

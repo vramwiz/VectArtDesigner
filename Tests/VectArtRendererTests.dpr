@@ -30,16 +30,22 @@ begin
 end;
 
 var
+  AntiAliasChecksum: UInt64;
+  ClosedMarkerChecksum: UInt64;
   Data: TVectArtRectangleData;
   ButtCapAlpha: Byte;
   DefaultThinAlpha: Byte;
   LineData: TVectArtLineData;
+  PathData: TVectArtPathData;
   Destination: TVectArtRenderBuffer;
   Document: TVectArtDocument;
   I: NativeInt;
   Pixel: PVectArtRgbaPixel;
   Rendered: TVectArtRenderBuffer;
   RoundCapAlpha: Byte;
+  CrispEdgesChecksum: UInt64;
+  MarkerChecksum: UInt64;
+  NoMarkerChecksum: UInt64;
   EnhancedThinAlpha: Byte;
 begin
   TTextRendererSkiaRuntime.Acquire(BundledSkiaRuntimeFileName);
@@ -60,7 +66,7 @@ begin
     Data.Opacity := 0.5;
     Data.RotationDegrees := 0.0;
     Data.StrokeColor := clBlack;
-    Data.MifStrokeStyle := vssSolid;
+    Data.StrokeStyle := vssSolid;
     Data.StrokeWidth := 0.0;
     Data.Visible := True;
     Document.InsertRectangle(Document.LayerCount, Data);
@@ -113,16 +119,16 @@ begin
     LineData.EndPoint := TPointF.Create(7, 7);
     LineData.Locked := False;
     LineData.LineCap := vlcButt;
-    LineData.MifAntiAlias := True;
-    LineData.MifEndMarker := vlmNone;
-    LineData.MifEndMarkerSize := 4.0;
-    LineData.MifStartMarker := vlmNone;
-    LineData.MifStartMarkerSize := 4.0;
+    LineData.AntiAlias := True;
+    LineData.EndMarker := vlmNone;
+    LineData.EndMarkerSize := 4.0;
+    LineData.StartMarker := vlmNone;
+    LineData.StartMarkerSize := 4.0;
     LineData.LineJoin := vljMiter;
     LineData.Name := 'Line 1';
     LineData.Opacity := 1.0;
     LineData.StrokeColor := clRed;
-    LineData.MifStrokeStyle := vssSolid;
+    LineData.StrokeStyle := vssSolid;
     LineData.StrokeWidth := 2.0;
     LineData.Visible := True;
     Document.InsertLine(Document.LayerCount, LineData);
@@ -149,6 +155,90 @@ begin
     RoundCapAlpha := PixelAt(Rendered, 1, 4)^.A;
     Require(RoundCapAlpha > ButtCapAlpha,
       'Round line cap did not extend beyond a butt cap');
+    Document.SetLayerVisible(2, False);
+    PathData := Default(TVectArtPathData);
+    PathData.LineCap := vlcButt;
+    PathData.LineJoin := vljMiter;
+    PathData.AntiAlias := True;
+    PathData.Name := 'Path 1';
+    PathData.Opacity := 1.0;
+    PathData.Points := [PointF(3, 4), PointF(6, 4), PointF(6, 6)];
+    PathData.StrokeColor := clRed;
+    PathData.StrokeWidth := 4.0;
+    PathData.Visible := True;
+    Document.InsertPath(Document.LayerCount, PathData);
+    RenderVectArtDocument(Document, Rendered, 8, 8);
+    ButtCapAlpha := PixelAt(Rendered, 1, 4)^.A;
+    Document.SetPathLineCap(3, vlcRound);
+    Document.SetPathLineJoin(3, vljRound);
+    RenderVectArtDocument(Document, Rendered, 8, 8);
+    RoundCapAlpha := PixelAt(Rendered, 1, 4)^.A;
+    Require(RoundCapAlpha > ButtCapAlpha,
+      'Round Path cap did not extend beyond a butt cap');
+    AntiAliasChecksum := 0;
+    Pixel := Rendered.Data;
+    for I := 0 to Rendered.PixelCount - 1 do
+    begin
+      Inc(AntiAliasChecksum, UInt64(Pixel^.A) * UInt64(I + 1));
+      Inc(Pixel);
+    end;
+    Document.SetPathAntiAlias(3, False);
+    RenderVectArtDocument(Document, Rendered, 8, 8);
+    CrispEdgesChecksum := 0;
+    Pixel := Rendered.Data;
+    for I := 0 to Rendered.PixelCount - 1 do
+    begin
+      Inc(CrispEdgesChecksum, UInt64(Pixel^.A) * UInt64(I + 1));
+      Inc(Pixel);
+    end;
+    Require(CrispEdgesChecksum <> AntiAliasChecksum,
+      'Path anti-alias setting did not change rendered edges');
+    Document.SetCanvasSize(32, 32);
+    Document.SetPathPoints(3, [PointF(5, 16), PointF(16, 16),
+      PointF(24, 16)]);
+    Document.SetPathStroke(3, clRed, 2.0, vssSolid);
+    Document.SetPathEndMarkerSize(3, 5.0);
+    Document.SetPathEndMarker(3, vlmCircle);
+    RenderVectArtDocument(Document, Rendered, 32, 32);
+    MarkerChecksum := 0;
+    Pixel := Rendered.Data;
+    for I := 0 to Rendered.PixelCount - 1 do
+    begin
+      Inc(MarkerChecksum, UInt64(Pixel^.A) * UInt64(I + 1));
+      Inc(Pixel);
+    end;
+    Document.SetPathEndMarker(3, vlmNone);
+    RenderVectArtDocument(Document, Rendered, 32, 32);
+    NoMarkerChecksum := 0;
+    Pixel := Rendered.Data;
+    for I := 0 to Rendered.PixelCount - 1 do
+    begin
+      Inc(NoMarkerChecksum, UInt64(Pixel^.A) * UInt64(I + 1));
+      Inc(Pixel);
+    end;
+    Require(MarkerChecksum <> NoMarkerChecksum,
+      'Open Path end marker was not rendered');
+    TVectArtPathLayer(Document[3]).Closed := True;
+    Document.SetPathEndMarker(3, vlmStar);
+    RenderVectArtDocument(Document, Rendered, 32, 32);
+    ClosedMarkerChecksum := 0;
+    Pixel := Rendered.Data;
+    for I := 0 to Rendered.PixelCount - 1 do
+    begin
+      Inc(ClosedMarkerChecksum, UInt64(Pixel^.A) * UInt64(I + 1));
+      Inc(Pixel);
+    end;
+    Document.SetPathEndMarker(3, vlmNone);
+    RenderVectArtDocument(Document, Rendered, 32, 32);
+    NoMarkerChecksum := 0;
+    Pixel := Rendered.Data;
+    for I := 0 to Rendered.PixelCount - 1 do
+    begin
+      Inc(NoMarkerChecksum, UInt64(Pixel^.A) * UInt64(I + 1));
+      Inc(Pixel);
+    end;
+    Require(ClosedMarkerChecksum = NoMarkerChecksum,
+      'Closed Path unexpectedly rendered an end marker');
     Writeln('VectArt shared renderer: PASS');
   finally
     Destination.Free;

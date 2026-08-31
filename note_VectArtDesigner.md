@@ -1,214 +1,85 @@
-# VectArtDesigner 固有作業ノート
+# VectArtDesigner 実装ノート
 
-単独配置編集アプリ`VectArtDesigner`固有の現在状況、設定、MIF互換処理、ビルド方法を扱う。
-3プロジェクト共通の設計と規約は [note.md](note.md)、完了済み作業は [HISTORY.md](HISTORY.md) を参照する。
+## 現在の位置付け
 
-## プロジェクト
+`VectArtDesigner`はMIFを主保存形式とする単体アプリである。SVGも読み書きするが、編集モデルとUIは
+MIFで表現できる範囲へ限定する。編集モード切替はなく、常に同じMIF仕様で編集する。
 
-- 製品名とDelphiプロジェクト名は`VectArtDesigner`とする。
-- 作業フォルダーは`D:\DelphiProg\test\VectArtDesigner`とする。このフォルダーは今後3プロジェクトのルートとなる。
-- `VectArtDesigner.dpr`と`VectArtDesigner.dproj`はルートへ置いたままとする。
-- `WRT2646\Client`のVCLプロジェクト設定を基にしたWin64プロジェクトを使用している。
+## プロジェクト構成
 
-## 現在の段階
+- 実行プロジェクト: `VectArtDesigner.dpr` / `VectArtDesigner.dproj`
+- コアモデル: `Source/Core`
+- 編集操作: `Source/Editor`
+- 描画: `Source/Rendering`
+- MIF永続化: `Source/Persistence/Mif`
+- SVG永続化: `Source/Persistence/Svg`
+- シェルとメニュー: `Source/Shell`
+- レイヤーUI: `Source/Layers`
+- オブジェクト設定: `Source/ObjectProperties`
+- AviUtl2プラグインプロジェクトと専用ライブラリは2026-08-31の方針変更で削除した。
 
-- 中央編集、レイヤー、編集ツール、オブジェクト設定の4つのFrameを共通Contextへ接続済み。
-- Rectangleの作成、選択、複数選択、移動、拡大縮小、レイヤー操作、Undo／Redoを実装済み。
-- MIF外側コンテナーのReader／Writerを実装し、調査用MIF全12ファイルで完全一致の無変更保存を確認済み。
-- Fileメニュー、標準ファイルダイアログ、ツールバー、キーボードからMIFを開く／保存するGUIを接続済み。
-- Rectangle Documentから合成プレビュー、背景texture、imageオブジェクトを持つMIFを新規生成できる。
-- 合成PNGの標準`tEXt`へ編集用Document JSONを保持し、自身が保存したMIFは再び編集状態へ読み込める。
-- 元アプリ由来で編集用JSONを持たないMIFも、WebArt Designerの`element type=4`をRectangleとして
-  キャンバス寸法、包含座標、塗りtexture、透明度、表示状態とともにDocumentへ読み込める。
-- Rectangleは未回転Boundsと中心回りの回転角を保持し、回転MIFの4頂点と変換行列を読み書きできる。
-- 編集画面では回転後の四辺に選択枠を表示し、各頂点の外側にある4つの回転マーカーから
-  図形中心を基準に回転できる。ホバー中は円弧矢印カーソルを表示し、操作はUndo／Redo対象とする。
-- キャンバスまたはレイヤー一覧にフォーカスがある場合、Deleteキーで選択オブジェクトを削除する。
-- ファイルを開くダイアログではMIF／SVGを同じ対応ファイル一覧へ表示し、拡張子ごとのReaderへ振り分ける。
-- Rectangleは塗り色と独立した線色、線幅、元アプリと同順の9線種を保持し、線幅0を線なしとして扱う。
-  線設定はオブジェクト設定、作成時既定値、Undo／Redo、Skia描画、JSON／SVG／MIFへ接続済み。
-- 縮小した編集ビューでは線幅を画面上1px以上へ補正する。Document、MIF、SVG、AviUtl2出力は
-  補正せず、`VectArtDesignerCanvas.pas`の`ENABLE_THIN_STROKE_PREVIEW`で補正全体を無効化できる。
-- 直線レイヤーを追加し、作成、選択、移動、両端点編集、削除、線設定、Skia描画、JSON／SVG／MIFの
-  基本往復へ対応した。MIFでは`vector element type=6`を使用する。
-- 複数頂点を持つPathレイヤーを追加し、元アプリ製の連続直線と多角形MIFからvector PNGの
-  頂点コマンド列を復元できる。Skia描画、本体選択、移動、削除、Undo／Redoまで接続済み。
-  MIFでは同じ頂点コマンドPNGを新規生成し、SVGの`polyline`／`polygon`と内部JSONでも往復できる。
-  選択時の各頂点ドラッグ、クリック入力による開いたPath／閉じたPathの作成、外接範囲、塗り、線、
-  不透明度のプロパティ編集にも対応し、各操作をUndo／Redo対象にしている。
-- MIFの調査結果と確度は [mif_analysis.md](mif_analysis.md) を参照する。
-- 元アプリ製MIFの通常`image`と`logo`をPNG本体と配置4頂点を保持する画像レイヤーとして読み込める。
-  回転と左右／上下反転を4頂点からSkia描画へ反映し、複数画像の順序を維持する。MIF再保存では元の
-  PNGメタデータを再利用する。`logo`は現段階では見た目を優先した画像扱いで、文字としては未編集とする。
-- 画像はキャンバス上の本体クリックで選択し、4頂点に追従する選択枠から移動、辺／四隅リサイズ、
-  回転を操作できる。反転状態と回転方向を維持したまま4頂点を更新し、Undo／RedoとMIF配置メタデータの
-  再保存へ接続している。画像レイヤーの削除と積層順変更も既存操作バーから実行できる。
-- 単一画像はオブジェクト設定から基準頂点X／Y、回転軸に沿った幅／高さ、不透明度を数値編集できる。
-  回転と反転方向を維持して4頂点を再計算し、Undo／Redo対象とする。内部JSONではPNGをBase64と4頂点で、
-  SVGでは埋め込みPNGの標準`image`要素と`matrix`変換で保存・再読込できる。
-- 複数画像は共通の外接枠からまとめて移動・縦横拡大縮小でき、各画像の回転・反転を4頂点の相対関係として
-  維持する。操作は1回のUndo／Redoへまとめる。同種の複数画像はPNG本体と属性を保持して24pxずらして
-  複製できる。SVGの外部参照画像は自己完結性とオフライン動作を優先して読み込まず、埋め込みPNGだけを扱う。
-- 独自`ShortcutAction`をプロジェクト内へ取り込み、ファイル、履歴、削除、全選択、複製、選択解除を
-  一元管理する。レイヤー一覧はCtrlクリックで追加／解除、Shiftクリックでアンカーからの範囲選択、
-  Ctrl+Shiftクリックで範囲追加を行い、キャンバスではCtrlクリックで選択を追加／解除できる。
-- 選択変更はDocumentの描画リビジョンを進めずUIだけへ通知し、画像レイヤーのサムネイルPNGは
-  デコード結果をキャッシュする。画像選択だけで2Kキャンバスの再合成やPNG再デコードを行わない。
-- Lineのレイヤーサムネイルは中心線を基準に配置し、実線幅を対数的な1～10pxの表示幅へ変換する。
-  表示線幅ぶん端点を内側へ寄せ、背景範囲で安全クリップし、実際の線幅は詳細文字列へ表示する。
-- 上部コンテキストツールバーはLineツールまたはLineだけの選択時に「詳細」を表示する。詳細パネル上部の
-  線幅と線種は、未選択時は
-  黒・1px・実線を初期値とする次のLine設定、選択時は単一／複数Lineの現在値または混在状態を表示し、
-  一括変更を1回のUndo／Redoへまとめる。作成中プレビュー、MIF保存・再読込まで同じ値を使用する。
-- 線幅は共通`HorizontalTrackBar`と数値欄を横並びにする。トラックバーは1～100pxを1px単位で
-  扱い、クリック位置への移動、ドラッグ追従、ホイール1px変更に対応する。ドラッグ中は即時表示し、
-  マウスを離した時点で1回のUndoとして確定する。数値欄では100pxを超える値も直接指定できる。
-- Lineツールバーは対象表示とダーク表示の「詳細」ボタンだけを基本UIとする。詳細パネルは横幅を抑え、
-  線幅、その下に線種を縦に並べ、続けて線端、接合、アンチエイリアス、矢印の装飾を配置する。
-- Lineツールバーの選択状態、編集、Undo同期と独自コントロール描画を分離し、線端・接合・AAの
-  ダークアイコンは`VectArtDesignerLineStyleControls`へ集約する。
-- 線の先端形状はリストではなく、平型・角型・丸型を示す3個のアイコンボタンで選択する。
-  最初の詳細設定として線端形状（Butt／Square／Round）を実装し、作成初期値、単一／複数Line編集、
-  作成中プレビュー、Undo／Redo、JSON、SVGの`stroke-linecap`、MIFの`vector stroke cap`へ接続する。
-- 接合形式もマイター／ベベル／ラウンドの3個のアイコンボタンで選択する。直線だけでは接合部は
-  描画されないが、将来の連続線でも値を失わないようDocument、Undo／Redo、JSON、SVGの
-  `stroke-linejoin`、MIFの`vector stroke join`へ接続する。
-- 線端・接合形式のアイコンは端の四角・丸・接合部を維持し、線の胴体を細く描いて判別しやすくする。
-- 詳細パネルのAAボタンでアンチエイリアスを切り替える。新規作成、複数Line、Undo／Redo、作成中の
-  Direct2Dプレビュー、共有Renderer、JSON、SVGの`shape-rendering`、MIFの`vector quality`へ接続する。
-- 始点／終点形状はアイコン式コンボで、なし、開いた矢印、塗りつぶし矢印、幅広矢印、丸、菱形、
-  くぼみ矢印、小矢印、斜線、星形の10項目から独立して選択する。作成中プレビュー、共有Renderer、
-  Undo／Redo、JSON、SVG marker、MIFの`vector start/end stroke marker`へ接続する。
-- 開いた矢印と斜線は、先端形状自身の輪郭線幅を元のLineの線幅へ追従させる。
-- 「詳細」パネルは内部のボタン、コンボ、トラックバー間でフォーカスが移る間は表示を維持し、
-  上部ツール、キャンバス、別ツール、別ウィンドウへフォーカスが移ると自動的に閉じる。
-- 始点／終点の矢印サイズはそれぞれ専用トラックバーで1～100を1刻みで編集する。矢印なしでは
-  対応トラックを無効化し、クリック、ドラッグ、ホイール操作、複数Line編集、Undo／Redo、新規作成、
-  作成中プレビュー、共有Renderer、JSON、SVGへ接続する。MIFでは実サンプルと同じ個別メタデータへ
-  保存し、互換範囲の1～20へWriterだけで丸める。
+## 実装済みモデル
 
-## 単独アプリの外枠
+- Canvas: サイズ、背景色、透明背景
+- Rectangle: 座標、回転、塗り、枠線色、線幅、線種、表示、ロック、不透明度
+- Line: 始点／終点、線色、線幅、線種、cap、join、アンチエイリアス、始点／終点マーカーとサイズ
+- Path: 頂点列、開閉、塗り、輪郭色、線幅、線種、cap、join、アンチエイリアス、
+  開いたPathの始点／終点マーカーとサイズ
+- Image: PNG、4頂点配置、image／logo区分、表示、ロック、不透明度
+- 内部データの線種、品質、マーカー関連は通常名を使用する。`Mif`名はコンテナーと形式変換処理に限定する。
 
-- `TMainForm`はDocumentの生成、共通Frameの接続、単独アプリ用メニューとライフサイクルを担当する。
-- Windowsの非クライアント領域へDWMのダークタイトルバー属性を適用する。
-- 起動時にSkiaランタイムを取得し、終了時に解放する。
-- 論理キャンバスは当面1920×1080固定とし、編集領域へ全体が収まる倍率で中央表示する。
-- 100%未満で表示しても論理座標と出力サイズは1920×1080を維持する。
-- FileメニューにOpen、Save、Save Asを置き、`Ctrl+O`、`Ctrl+S`、`Ctrl+Shift+S`へ接続する。
-- 新規DocumentでもSave Asを使用でき、保存先確定後はSaveで同じファイルへ上書きする。
-- 自身のMIFはDocumentへ展開し、元アプリ由来のMIFは編集データがないことをステータスへ表示する。
-- Debug版でMIFを開くと、対象ファイルの隣に`<MIF名>.open.log`を生成する。外側チャンク、PNG寸法、
-  CRC、`tEXt`、`waDA`、Document変換結果を記録し、Release版ではログを生成しない。
+## 編集UI
 
-## 単独アプリの設定保存
+- `編集`メニューはUndo、Redo、キャンバス設定を提供する。モード項目は持たない。
+- Rectangle、Line、Pathの生成既定値は`TVectArtEditorState`で共有する。
+- Document変更はUndo／Redoコマンドを通して適用する。
+- 複数選択時は共通値だけを表示し、ロックされたレイヤーを含む場合は変更を禁止する。
+- 縮小表示時だけ線幅を画面上1px以上へ補正し、DocumentおよびMIF／SVG出力値は変更しない。
+- 開いたPathは始点／終点マーカーと各サイズを編集できる。閉じたPathではマーカーを描画せず、
+  Object Propertiesの対応項目を無効化する。
+- Lineと開いたPathのマーカーはレイヤー一覧のGDI／Direct2Dサムネイルにも表示し、マーカー部分の
+  クリックで対象レイヤーを選択できる。Path選択枠は頂点範囲を編集基準として維持する。
 
-- 設定ルートは`TPath.GetDocumentsPath`から取得した`VectArtDesigner`フォルダーとする。
-- メインフォーム位置とツール配置は`Documents\VectArtDesigner\MainForm.ini`へ保存する。
-- `MainForm.ini`には形式バージョン、通常時座標・サイズ、最大化状態、各ツールの表示状態、ドック側、
-  順序、ドック／フローティング状態、フローティング座標・サイズを記録する。
-- 保存座標を現在のモニター作業領域へ補正し、画面外へ取り残されたフォームを起動時に戻す。
-- 将来追加する各ツール固有設定は`Documents\VectArtDesigner\<ToolId>\Settings.ini`へ分離する。
-- INIのセクション名には表示文字列ではなく、変更しない内部IDを使用する。
+## MIFとSVG
 
-## MIF固有方針
+- MIF読込では既知のRectangle、Line、Path、ImageをDocumentへ変換する。
+- MIF保存では元コンテナーを可能な範囲で再利用し、変換や非対応内容を`TMifExportReport`で返す。
+- MIF生成を伴わない`TryAnalyzeVectArtMifExport`を編集状態の判定に使い、ステータスバーへ
+  完全互換、変換あり、非対応を表示する。詳細はステータスのヒントへ表示する。
+- SVGはMIF編集モデルへ変換できる要素と属性だけをDocumentへ取り込む。
+- 詳細な対応範囲と変換・無視・エラー方針は[SVG互換表](svg_compatibility.md)を参照する。
+- SVG読込で変換または無視した描画要素と装飾は`TSvgImportReport`へ記録し、アプリ上で通知する。
+- SVGルートの`viewBox`と`preserveAspectRatio`はキャンバス座標へ変換する。角丸、個別不透明度、
+  fill-rule、線の補助属性、filter／clip／mask／合成指定などMIFへ保持できない属性も読込レポートへ記録する。
+- SVG保存はDocumentの値を標準SVG属性へ出力し、線種・マーカーなど必要な補助情報は既存のVAD名前空間で保持する。
+- MIFとSVGのどちらから開いても同じDocument型と同じ編集UIを使用する。
 
-- SVGへの読み書きを単独アプリの主経路とし、デザインと編集機能はMIF互換性に縛られず自由に設計する。
-- MIF読込は既存データをVectArtDesignerへ移行するための機能として維持する。
-- 編集体系は`TVectArtEditingMode`列挙値で保持する。新規DocumentとSVG読込は`vemStandard`、MIF読込は
-  `vemMifCompatible`とし、モード切替はファイル形式の切替やデータ破棄とは分離する。
-- 現在のMIF調査に基づく線種、線マーカー、マーカーサイズ、品質設定は、内部型、Documentデータ、
-  EditorState、Undo／Redo、UI、描画、永続化処理の名称へ`Mif`を明示する。共通の座標、色、線幅、cap、joinは
-  共通データとして維持する。既存JSONキーとSVG属性名はファイル互換性のため変更しない。
-- MIF互換部分を制作している間の新規装飾はMIF用データと処理へ追加する。MIF互換部分の完成後に標準モード用の
-  装飾データと描画処理を追加し、1つのオブジェクトが共通形状と各モードの表現を保持する構成へ進める。
-- 装飾GUIはMIF互換モード用と標準モード用を分け、`TVectArtEditingMode`に応じてモード固有のパネルと項目を
-  表示／非表示にする。座標、表示、ロックなどの共通項目は共有し、装飾項目だけをモード別に構成する。
-- 操作体系も編集モードの一部として切り替える。標準モードは現在一般的なグラフィックエディターの操作を採用し、
-  MIF互換モードではIBM WebArt Designerの操作と挙動を採用する。モード判定を個々のUIイベントへ直接散在させず、
-  モード別の操作処理または編集プロファイルに集約し、同じDocumentへ適用する。
-- 現在の`VectArtDesignerLineToolbar`と`VectArtDesignerObjectPropertiesControl`にはMIF互換装飾だけを追加する。
-  標準モードの装飾GUIと操作処理は別Control／別ユニットとして実装し、既存の大きなUIユニットをさらに肥大化させない。
-- MIF書出しは可能な範囲で行う補助的なおまけ機能とする。編集内容をMIFへそのまま記録できない場合は、
-  書出し可能な機能やデータへ制限を設け、MIF互換性のためにDocumentや編集機能を制限しない。
-- MIFコンテナー生成時に互換性レポートも同時に作り、完全対応、変換あり、非対応を判定する。注意確認後は
-  再変換せず、判定時に生成した同じコンテナーをファイルへ書き込む。
-- 互換性判定はRectangle、Line、Path、Imageの順に段階的に追加する。
-- Rectangle、Line、Path、ImageはMIF生成と同時に互換性を判定する。レイヤー名、編集ロック、不透明度、座標や寸法、
-  線幅、マーカーサイズ、Pathの頂点数と塗りなど、MIF保存で変換または消失する内容を生成結果と同じ値から
-  報告する。2頂点PathはLineへの変換、2頂点未満は非対応として扱う。
-- ImageはPNG本体をMIF生成前に検証し、Image／Logo種別と配置メタデータを準備した同じPNGをContainerへ
-  格納する。四隅座標の整数化を報告し、破損PNGやMIFへ格納できないPNG構造は非対応として保存を中止する。
-- 調査用`.mif`ファイルはGit同期対象とし、バイナリーファイルとして扱う。
-- MIFコンテナーではMIMGシグネチャ、MHDR、IPNG、MENDを境界検査付きで読み書きする。
-- Reader単体では診断と安全な読込のため未解釈チャンクを保持するが、Documentへ読み込んだ後の保存では
-  未対応オブジェクト、未知メタデータ、元のチャンク順序が失われてもよい。
-- アプリのMIF保存は元コンテナーの部分更新ではなく、現在のDocumentから新しいMIFを生成する。
-- MIF保存は同じフォルダーの一時ファイルへ出力し、成功後に対象ファイルを置き換える。
-- 新規MIFはRectangleをPNG化した`image`オブジェクトとして保存し、配置、透明度、表示状態を
-  `waDAimage`メタデータへ記録する。
-- Rectangle保存は`image`、塗りtexture、vector IPNG、線textureの4ブロックを生成し、
-  subtype、element type、変換行列、元座標、texture有効状態を別アプリ製MIFに合わせる。
-- 選択枠は画面上で各辺から基本8px離し、さらに`線幅 × ズーム ÷ 2`を加える。
-  回転図形もローカル2軸へ同量を加えて、縦横比によらず各辺との間隔を揃える。
-- 単一選択中の本体クリックで、標準の回転追従枠と旧アプリ型の外接枠を交互に切り替える。
-  外接枠変形も当面はRectangleと回転角を維持し、台形・平行四辺形を生むアフィン変形は次段階とする。
-- 旧アプリで回転後に外接枠から拡大縮小すると、結果は長方形ではなく台形になることを実機確認した。
-  この互換挙動には四隅座標または一般アフィン変換を編集状態として保持する必要があるため、現在は保留する。
-  VectArtDesignerでは当面、外接枠変形後も長方形と回転角を維持する。
-- PNGの`pHYs`、`tEXt`、`waDA`は別アプリと同様に`IDAT`より前へ配置する。
-- VectArtDesigner固有の編集情報は、元アプリが無視できるPNGの`tEXt`チャンクへJSONで記録する。
-- MIFのtexture互換は配置／グラフプラグインの共通シリアライズへ持ち込まない。
-- Document、編集UI、SVGはMIFの装飾値上限に制限されない。MIF固有の数値制限や未対応表現への縮退は
-  Writerの互換変換層だけで行い、保存によって編集中のDocument値を変更しない。
-- 元アプリ製`線.mif`は始点マーカー1、終点マーカー9、マーカーサイズ11を持つ。添付された元UIの
-  一覧順に従い、MIF値0～9をなし、開いた矢印、塗りつぶし矢印、幅広矢印、丸、菱形、くぼみ矢印、
-  小矢印、斜線、星形として取り込み・保存する。
-- 直線の選択表示は選択枠を描かず、始点と終点の外側へ6px空けた四角ハンドル2個だけを描く。
-  ハンドル位置は画面座標基準とし、ズーム率にかかわらず見た目の間隔を一定にする。
-- レイヤー一覧のサムネイルはRectangle、Line、Path、Imageを描画する。Pathは点列全体の縦横比を保って
-  サムネイル内へ収め、開いた連続直線、閉じた線、塗りつぶしをGDI／Direct2Dの両方で表示する。
-- SVGはRectangle、Line、Path、Imageの読み書きに対応する。Rectangle、Line、Pathの標準stroke属性は
-  共通の生成処理を使い、外部SVGではstyle属性をプレゼンテーション属性より優先してLineへ取り込む。
-- 外部SVGのpolyline／polygonはカンマ、空白、タブ、改行を含むpointsを読み取り、標準のfill既定値と
-  fill-opacity／stroke-opacityをDocumentの単一Opacityへ反映する。塗りと線で不透明度が異なるpolygonは、
-  Documentで両方を別管理できないため塗りの不透明度を優先する。
-- SVG ImageはPNGのdata URIだけを受け付け、デコード後に画像として開けることを確認してからDocumentへ
-  取り込む。x／y／width／heightとmatrixを同時に適用して四隅座標へ変換し、不正PNGは他の有効レイヤーを
-  巻き込まず読み飛ばす。SVG保存時に不正PNGが残っている場合は保存を中止する。
-- SVG保存は保存先と同じフォルダーへUTF-8 BOMなしの一時ファイルを書き、完了後にwrite-through指定で
-  既存ファイルと置換する。書き込みまたは置換に失敗した場合は既存ファイルを維持し、一時ファイルを削除する。
-- 外部SVGの`path d`は単一サブパスのM／L／H／V／Zを絶対・相対指定ともPathへ取り込む。Mに続く
-  暗黙Lineと符号区切りの数値に対応し、曲線コマンドや複数サブパスは推測で変換せず対象外として読み飛ばす。
-- transformを持たない外部SVGの`g`は再帰的に展開し、子要素の描画順、opacityの乗算、display／visibilityを
-  Documentへ反映する。Documentにグループ合成状態がないため子レイヤーへ平坦化し、transform付きグループは
-  共通アフィン行列へ平坦化する。
-- SVGグループのmatrix／translate／scale／rotateは記述順と親子順を保って合成し、Line、Path、Imageの
-  座標へ適用する。Line／Pathの線幅は変換2軸の拡大率の平均を使い、非均等拡大ではDocumentの単一線幅へ
-  近似する。未対応transformを持つグループは誤配置せず読み飛ばす。
-- SVG Rectangleへ移動・回転・拡大縮小を適用して辺の直交性が維持される場合は、Rectangleの中心、幅、高さ、
-  回転角へ復元する。せん断で平行四辺形になる場合は、塗り、線、名前、状態を引き継いだ4頂点の閉じたPathへ
-  変換して形状を維持する。
-- SVGルートとグループのfill、stroke、stroke-width、stroke-dasharray、stroke-linecap、stroke-linejoin、
-  fill-opacity、stroke-opacity、shape-renderingは子要素へ継承する。入れ子では内側のグループを優先し、子要素
-  自身のstyleまたはプレゼンテーション属性を最優先する。
-- skewX／skewYは共通アフィン行列へ合成し、他のtransformと同じ経路で各レイヤーへ適用する。せん断された
-  RectangleはPathへ変換し、90度など正接を有限座標で表せない変換は対象グループだけを読み飛ばす。
+## 現在の検証対象
 
-## VectArtDesignerビルド
+- Document選択・Revision
+- Rectangle、Line、Path、Imageの操作
+- Object PropertiesとLine Toolbar
+- 共通レンダラー
+- Document JSON往復
+- SVG往復と外部SVG取込
+- MIFコンテナー往復、Document往復、WebArtサンプル取込
+
+## ビルド
 
 Debug:
 
-```powershell
+```bat
 cmd /c "call ""C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"" && msbuild ""D:\DelphiProg\test\VectArtDesigner\VectArtDesigner.dproj"" /t:Build /p:Config=Debug /p:Platform=Win64"
 ```
 
 Release:
 
-```powershell
+```bat
 cmd /c "call ""C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"" && msbuild ""D:\DelphiProg\test\VectArtDesigner\VectArtDesigner.dproj"" /t:Build /p:Config=Release /p:Platform=Win64"
 ```
 
 ## 次の作業
 
-1. Line詳細設定の次のMIF互換装飾項目を選定し、MIF用データと処理として同じ縦断方式で実装する。
-2. MIF互換部分の完了後、標準モード用の装飾データ、描画、UIを順に追加する。
+1. MIF互換性詳細を常時開く専用UIが必要か、実際の編集操作で確認する。
+2. 単体アプリ化後も残る外部ホスト用APIとコメントを整理する。
+3. 実際の外部SVGで新たな無通知変換が見つかった場合は互換表とレポートを拡張する。

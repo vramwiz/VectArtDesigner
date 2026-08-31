@@ -1,5 +1,5 @@
-// 編集ツールなど、複数の編集UIが共有する一時状態を管理する。
-// 現在の線装飾初期値はMIF互換用とし、標準モード用の状態とは名前で区別する。
+﻿// 編集ツールなど、複数の編集UIが共有する一時状態を管理する。
+// 線装飾初期値はMIFとSVGの共通編集モデルとして保持する。
 unit VectArtDesignerEditorState;
 
 interface
@@ -12,69 +12,95 @@ type
 
   TVectArtEditorState = class
   private
-    FLineMifAntiAlias: Boolean;
-    FLineMifEndMarker: TVectArtMifLineMarker;
-    FLineMifEndMarkerSize: Single;
-    FLineMifStartMarker: TVectArtMifLineMarker;
-    FLineMifStartMarkerSize: Single;
+    FLineAntiAlias: Boolean;
+    FLineEndMarker: TVectArtLineMarker;
+    FLineEndMarkerSize: Single;
+    FLineStartMarker: TVectArtLineMarker;
+    FLineStartMarkerSize: Single;
     FCurrentTool: TVectArtEditorTool;
     FLineCap: TVectArtLineCap;
     FLineJoin: TVectArtLineJoin;
     FLineStrokeColor: TColor;
-    FLineMifStrokeStyle: TVectArtMifStrokeStyle;
+    FLineStrokeStyle: TVectArtStrokeStyle;
     FLineStrokeWidth: Single;
     FOnChanged: TNotifyEvent;
+    FPathLineCap: TVectArtLineCap;
+    FPathLineJoin: TVectArtLineJoin;
+    FPathAntiAlias: Boolean;
+    FPathEndMarker: TVectArtLineMarker;
+    FPathEndMarkerSize: Single;
+    FPathStartMarker: TVectArtLineMarker;
+    FPathStartMarkerSize: Single;
     FRectangleFillColor: TColor;
     FRectangleOpacity: Single;
     FRectangleStrokeColor: TColor;
-    FRectangleMifStrokeStyle: TVectArtMifStrokeStyle;
+    FRectangleStrokeStyle: TVectArtStrokeStyle;
     FRectangleStrokeWidth: Single;
     procedure SetCurrentTool(const Value: TVectArtEditorTool);
     procedure SetLineCap(const Value: TVectArtLineCap);
-    procedure SetLineMifAntiAlias(const Value: Boolean);
-    procedure SetLineMifEndMarker(const Value: TVectArtMifLineMarker);
-    procedure SetLineMifEndMarkerSize(const Value: Single);
-    procedure SetLineMifStartMarker(const Value: TVectArtMifLineMarker);
-    procedure SetLineMifStartMarkerSize(const Value: Single);
+    procedure SetLineAntiAlias(const Value: Boolean);
+    procedure SetLineEndMarker(const Value: TVectArtLineMarker);
+    procedure SetLineEndMarkerSize(const Value: Single);
+    procedure SetLineStartMarker(const Value: TVectArtLineMarker);
+    procedure SetLineStartMarkerSize(const Value: Single);
     procedure SetLineJoin(const Value: TVectArtLineJoin);
     procedure SetLineStrokeColor(const Value: TColor);
-    procedure SetLineMifStrokeStyle(const Value: TVectArtMifStrokeStyle);
+    procedure SetLineStrokeStyle(const Value: TVectArtStrokeStyle);
     procedure SetLineStrokeWidth(const Value: Single);
+    procedure SetPathLineCap(const Value: TVectArtLineCap);
+    procedure SetPathLineJoin(const Value: TVectArtLineJoin);
+    procedure SetPathAntiAlias(const Value: Boolean);
+    procedure SetPathEndMarker(const Value: TVectArtLineMarker);
+    procedure SetPathEndMarkerSize(const Value: Single);
+    procedure SetPathStartMarker(const Value: TVectArtLineMarker);
+    procedure SetPathStartMarkerSize(const Value: Single);
     procedure SetRectangleFillColor(const Value: TColor);
     procedure SetRectangleOpacity(const Value: Single);
     procedure SetRectangleStrokeColor(const Value: TColor);
-    procedure SetRectangleMifStrokeStyle(const Value: TVectArtMifStrokeStyle);
+    procedure SetRectangleStrokeStyle(const Value: TVectArtStrokeStyle);
     procedure SetRectangleStrokeWidth(const Value: Single);
   public
     constructor Create;
     property CurrentTool: TVectArtEditorTool read FCurrentTool
       write SetCurrentTool;
     property LineCap: TVectArtLineCap read FLineCap write SetLineCap;
-    property LineMifAntiAlias: Boolean read FLineMifAntiAlias write SetLineMifAntiAlias;
-    property LineMifEndMarker: TVectArtMifLineMarker read FLineMifEndMarker
-      write SetLineMifEndMarker;
-    property LineMifEndMarkerSize: Single read FLineMifEndMarkerSize
-      write SetLineMifEndMarkerSize;
-    property LineMifStartMarker: TVectArtMifLineMarker read FLineMifStartMarker
-      write SetLineMifStartMarker;
-    property LineMifStartMarkerSize: Single read FLineMifStartMarkerSize
-      write SetLineMifStartMarkerSize;
+    property LineAntiAlias: Boolean read FLineAntiAlias write SetLineAntiAlias;
+    property LineEndMarker: TVectArtLineMarker read FLineEndMarker
+      write SetLineEndMarker;
+    property LineEndMarkerSize: Single read FLineEndMarkerSize
+      write SetLineEndMarkerSize;
+    property LineStartMarker: TVectArtLineMarker read FLineStartMarker
+      write SetLineStartMarker;
+    property LineStartMarkerSize: Single read FLineStartMarkerSize
+      write SetLineStartMarkerSize;
     property LineJoin: TVectArtLineJoin read FLineJoin write SetLineJoin;
     property LineStrokeColor: TColor read FLineStrokeColor
       write SetLineStrokeColor;
-    property LineMifStrokeStyle: TVectArtMifStrokeStyle read FLineMifStrokeStyle
-      write SetLineMifStrokeStyle;
+    property LineStrokeStyle: TVectArtStrokeStyle read FLineStrokeStyle
+      write SetLineStrokeStyle;
     property LineStrokeWidth: Single read FLineStrokeWidth
       write SetLineStrokeWidth;
     property OnChanged: TNotifyEvent read FOnChanged write FOnChanged;
+    property PathLineCap: TVectArtLineCap read FPathLineCap write SetPathLineCap;
+    property PathLineJoin: TVectArtLineJoin read FPathLineJoin write SetPathLineJoin;
+    property PathAntiAlias: Boolean read FPathAntiAlias
+      write SetPathAntiAlias;
+    property PathEndMarker: TVectArtLineMarker read FPathEndMarker
+      write SetPathEndMarker;
+    property PathEndMarkerSize: Single read FPathEndMarkerSize
+      write SetPathEndMarkerSize;
+    property PathStartMarker: TVectArtLineMarker read FPathStartMarker
+      write SetPathStartMarker;
+    property PathStartMarkerSize: Single read FPathStartMarkerSize
+      write SetPathStartMarkerSize;
     property RectangleFillColor: TColor read FRectangleFillColor
       write SetRectangleFillColor;
     property RectangleOpacity: Single read FRectangleOpacity
       write SetRectangleOpacity;
     property RectangleStrokeColor: TColor read FRectangleStrokeColor
       write SetRectangleStrokeColor;
-    property RectangleMifStrokeStyle: TVectArtMifStrokeStyle
-      read FRectangleMifStrokeStyle write SetRectangleMifStrokeStyle;
+    property RectangleStrokeStyle: TVectArtStrokeStyle
+      read FRectangleStrokeStyle write SetRectangleStrokeStyle;
     property RectangleStrokeWidth: Single read FRectangleStrokeWidth
       write SetRectangleStrokeWidth;
   end;
@@ -91,21 +117,99 @@ constructor TVectArtEditorState.Create;
 begin
   inherited Create;
   FCurrentTool := vetSelect;
-  FLineMifAntiAlias := True;
-  FLineMifEndMarker := vlmNone;
-  FLineMifEndMarkerSize := 4.0;
-  FLineMifStartMarker := vlmNone;
-  FLineMifStartMarkerSize := 4.0;
+  FLineAntiAlias := True;
+  FLineEndMarker := vlmNone;
+  FLineEndMarkerSize := 4.0;
+  FLineStartMarker := vlmNone;
+  FLineStartMarkerSize := 4.0;
   FLineCap := vlcButt;
   FLineJoin := vljMiter;
   FLineStrokeColor := clBlack;
-  FLineMifStrokeStyle := vssSolid;
+  FLineStrokeStyle := vssSolid;
   FLineStrokeWidth := 1.0;
+  FPathLineCap := vlcButt;
+  FPathLineJoin := vljMiter;
+  FPathAntiAlias := True;
+  FPathEndMarker := vlmNone;
+  FPathEndMarkerSize := 4.0;
+  FPathStartMarker := vlmNone;
+  FPathStartMarkerSize := 4.0;
   FRectangleFillColor := DEFAULT_RECTANGLE_COLOR;
   FRectangleOpacity := 1.0;
   FRectangleStrokeColor := clBlack;
-  FRectangleMifStrokeStyle := vssSolid;
+  FRectangleStrokeStyle := vssSolid;
   FRectangleStrokeWidth := 0.0;
+end;
+
+procedure TVectArtEditorState.SetPathLineCap(const Value: TVectArtLineCap);
+begin
+  if FPathLineCap = Value then
+    Exit;
+  FPathLineCap := Value;
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
+end;
+
+procedure TVectArtEditorState.SetPathLineJoin(const Value: TVectArtLineJoin);
+begin
+  if FPathLineJoin = Value then
+    Exit;
+  FPathLineJoin := Value;
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
+end;
+
+procedure TVectArtEditorState.SetPathAntiAlias(const Value: Boolean);
+begin
+  if FPathAntiAlias = Value then
+    Exit;
+  FPathAntiAlias := Value;
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
+end;
+
+procedure TVectArtEditorState.SetPathEndMarker(
+  const Value: TVectArtLineMarker);
+begin
+  if FPathEndMarker = Value then
+    Exit;
+  FPathEndMarker := Value;
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
+end;
+
+procedure TVectArtEditorState.SetPathEndMarkerSize(const Value: Single);
+var
+  NewValue: Single;
+begin
+  NewValue := Max(Value, 1.0);
+  if SameValue(FPathEndMarkerSize, NewValue) then
+    Exit;
+  FPathEndMarkerSize := NewValue;
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
+end;
+
+procedure TVectArtEditorState.SetPathStartMarker(
+  const Value: TVectArtLineMarker);
+begin
+  if FPathStartMarker = Value then
+    Exit;
+  FPathStartMarker := Value;
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
+end;
+
+procedure TVectArtEditorState.SetPathStartMarkerSize(const Value: Single);
+var
+  NewValue: Single;
+begin
+  NewValue := Max(Value, 1.0);
+  if SameValue(FPathStartMarkerSize, NewValue) then
+    Exit;
+  FPathStartMarkerSize := NewValue;
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
 end;
 
 procedure TVectArtEditorState.SetLineCap(const Value: TVectArtLineCap);
@@ -117,52 +221,52 @@ begin
     FOnChanged(Self);
 end;
 
-procedure TVectArtEditorState.SetLineMifAntiAlias(const Value: Boolean);
+procedure TVectArtEditorState.SetLineAntiAlias(const Value: Boolean);
 begin
-  if FLineMifAntiAlias = Value then
+  if FLineAntiAlias = Value then
     Exit;
-  FLineMifAntiAlias := Value;
+  FLineAntiAlias := Value;
   if Assigned(FOnChanged) then
     FOnChanged(Self);
 end;
 
-procedure TVectArtEditorState.SetLineMifEndMarker(
-  const Value: TVectArtMifLineMarker);
+procedure TVectArtEditorState.SetLineEndMarker(
+  const Value: TVectArtLineMarker);
 begin
-  if FLineMifEndMarker = Value then
+  if FLineEndMarker = Value then
     Exit;
-  FLineMifEndMarker := Value;
+  FLineEndMarker := Value;
   if Assigned(FOnChanged) then
     FOnChanged(Self);
 end;
 
-procedure TVectArtEditorState.SetLineMifEndMarkerSize(const Value: Single);
+procedure TVectArtEditorState.SetLineEndMarkerSize(const Value: Single);
 var
   NewValue: Single;
 begin
   NewValue := Max(Value, 1.0);
-  if SameValue(FLineMifEndMarkerSize, NewValue) then Exit;
-  FLineMifEndMarkerSize := NewValue;
+  if SameValue(FLineEndMarkerSize, NewValue) then Exit;
+  FLineEndMarkerSize := NewValue;
   if Assigned(FOnChanged) then FOnChanged(Self);
 end;
 
-procedure TVectArtEditorState.SetLineMifStartMarker(
-  const Value: TVectArtMifLineMarker);
+procedure TVectArtEditorState.SetLineStartMarker(
+  const Value: TVectArtLineMarker);
 begin
-  if FLineMifStartMarker = Value then
+  if FLineStartMarker = Value then
     Exit;
-  FLineMifStartMarker := Value;
+  FLineStartMarker := Value;
   if Assigned(FOnChanged) then
     FOnChanged(Self);
 end;
 
-procedure TVectArtEditorState.SetLineMifStartMarkerSize(const Value: Single);
+procedure TVectArtEditorState.SetLineStartMarkerSize(const Value: Single);
 var
   NewValue: Single;
 begin
   NewValue := Max(Value, 1.0);
-  if SameValue(FLineMifStartMarkerSize, NewValue) then Exit;
-  FLineMifStartMarkerSize := NewValue;
+  if SameValue(FLineStartMarkerSize, NewValue) then Exit;
+  FLineStartMarkerSize := NewValue;
   if Assigned(FOnChanged) then FOnChanged(Self);
 end;
 
@@ -184,12 +288,12 @@ begin
     FOnChanged(Self);
 end;
 
-procedure TVectArtEditorState.SetLineMifStrokeStyle(
-  const Value: TVectArtMifStrokeStyle);
+procedure TVectArtEditorState.SetLineStrokeStyle(
+  const Value: TVectArtStrokeStyle);
 begin
-  if FLineMifStrokeStyle = Value then
+  if FLineStrokeStyle = Value then
     Exit;
-  FLineMifStrokeStyle := Value;
+  FLineStrokeStyle := Value;
   if Assigned(FOnChanged) then
     FOnChanged(Self);
 end;
@@ -215,12 +319,12 @@ begin
     FOnChanged(Self);
 end;
 
-procedure TVectArtEditorState.SetRectangleMifStrokeStyle(
-  const Value: TVectArtMifStrokeStyle);
+procedure TVectArtEditorState.SetRectangleStrokeStyle(
+  const Value: TVectArtStrokeStyle);
 begin
-  if FRectangleMifStrokeStyle = Value then
+  if FRectangleStrokeStyle = Value then
     Exit;
-  FRectangleMifStrokeStyle := Value;
+  FRectangleStrokeStyle := Value;
   if Assigned(FOnChanged) then
     FOnChanged(Self);
 end;

@@ -1,4 +1,4 @@
-// 編集キャンバス上の選択、移動、リサイズ、中心回り回転を管理する。
+﻿// 編集キャンバス上の選択、移動、リサイズ、中心回り回転を管理する。
 unit VectArtDesignerCanvasInteraction;
 
 interface
@@ -143,6 +143,34 @@ begin
     Projection := 0;
   Result := Hypot(PointValue.X - (StartPoint.X + Projection * DX),
     PointValue.Y - (StartPoint.Y + Projection * DY));
+end;
+
+function PointHitsMarker(const PointValue: TPointF;
+  Marker: TVectArtLineMarker; const Tip, InsidePoint: TPointF;
+  StrokeWidth, MarkerSize, Tolerance: Single): Boolean;
+var
+  Geometry: TVectArtMarkerGeometry;
+  I: Integer;
+begin
+  Result := False;
+  if Marker = vlmNone then
+    Exit;
+  Geometry := BuildLineMarkerGeometry(Ord(Marker), Tip, InsidePoint,
+    StrokeWidth, MarkerSize);
+  if Length(Geometry.PrimaryPoints) < 2 then
+    Exit;
+  if Geometry.Filled and Geometry.PrimaryClosed and
+    PointInPolygon(PointValue, Geometry.PrimaryPoints) then
+    Exit(True);
+  for I := 0 to High(Geometry.PrimaryPoints) - 1 do
+    if DistanceToSegment(PointValue, Geometry.PrimaryPoints[I],
+      Geometry.PrimaryPoints[I + 1]) <= Tolerance then
+      Exit(True);
+  if Geometry.PrimaryClosed and
+    (DistanceToSegment(PointValue,
+      Geometry.PrimaryPoints[High(Geometry.PrimaryPoints)],
+      Geometry.PrimaryPoints[0]) <= Tolerance) then
+    Result := True;
 end;
 
 constructor TVectArtCanvasInteraction.Create;
@@ -605,6 +633,7 @@ var
   SegmentLengthSquared: Single;
   TestX: Single;
   TestY: Single;
+  Tolerance: Single;
 begin
   Result := -1;
   if (FDocument = nil) or (FZoom <= 0) or
@@ -643,7 +672,14 @@ begin
       TestX := LineLayer.StartPoint.X + Projection * DX;
       TestY := LineLayer.StartPoint.Y + Projection * DY;
       Distance := Hypot(LogicalX - TestX, LogicalY - TestY);
-      if Distance <= Max(LineLayer.StrokeWidth * 0.5, 6 / FZoom) then
+      Tolerance := Max(LineLayer.StrokeWidth * 0.5, 6 / FZoom);
+      if (Distance <= Tolerance) or
+        PointHitsMarker(PointF(LogicalX, LogicalY), LineLayer.StartMarker,
+          LineLayer.StartPoint, LineLayer.EndPoint, LineLayer.StrokeWidth,
+          LineLayer.StartMarkerSize, Tolerance) or
+        PointHitsMarker(PointF(LogicalX, LogicalY), LineLayer.EndMarker,
+          LineLayer.EndPoint, LineLayer.StartPoint, LineLayer.StrokeWidth,
+          LineLayer.EndMarkerSize, Tolerance) then
         Exit(I);
       Continue;
     end;
@@ -664,6 +700,18 @@ begin
           PathLayer.Points[High(PathLayer.Points)], PathLayer.Points[0]) <=
           Max(PathLayer.StrokeWidth * 0.5, 6 / FZoom)) then
         Exit(I);
+      if not PathLayer.Closed and (Length(PathLayer.Points) >= 2) then
+      begin
+        Tolerance := Max(PathLayer.StrokeWidth * 0.5, 6 / FZoom);
+        if PointHitsMarker(PointF(LogicalX, LogicalY),
+          PathLayer.StartMarker, PathLayer.Points[0], PathLayer.Points[1],
+          PathLayer.StrokeWidth, PathLayer.StartMarkerSize, Tolerance) or
+          PointHitsMarker(PointF(LogicalX, LogicalY), PathLayer.EndMarker,
+          PathLayer.Points[High(PathLayer.Points)],
+          PathLayer.Points[High(PathLayer.Points) - 1],
+          PathLayer.StrokeWidth, PathLayer.EndMarkerSize, Tolerance) then
+          Exit(I);
+      end;
       Continue;
     end;
     if Layer is TVectArtRectangleLayer then

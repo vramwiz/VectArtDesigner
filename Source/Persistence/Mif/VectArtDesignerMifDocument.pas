@@ -27,9 +27,12 @@ type
     function ToDisplayText: string;
   end;
 
-// MIF内容をDocumentへ適用してMIF互換編集モードにする。両引数を所有しない。
+// MIF内容をDocumentへ適用する。両引数を所有しない。
 function TryLoadVectArtDocumentFromMif(Container: TVectArtMifContainer;
   Document: TVectArtDocument; out ErrorMessage: string): Boolean;
+// MIF生成を行わず、現在のDocumentで発生する変換・非対応内容を判定する。
+function TryAnalyzeVectArtMifExport(Document: TVectArtDocument;
+  out Report: TMifExportReport; out ErrorMessage: string): Boolean;
 // 現在のDocumentから新しいMIFを生成し、成功時の所有権を呼び出し側へ渡す。
 function TryCreateVectArtMifFromDocument(Document: TVectArtDocument;
   out Container: TVectArtMifContainer; out ErrorMessage: string): Boolean; overload;
@@ -607,11 +610,11 @@ begin
       (Cardinal(GetGValue(RGBColor)) shl 8) or
       Cardinal(GetBValue(RGBColor)));
     StrokePaint.StrokeWidth := Rectangle.StrokeWidth;
-    DashIntervals := VectArtStrokeDashIntervals(Rectangle.MifStrokeStyle,
+    DashIntervals := VectArtStrokeDashIntervals(Rectangle.StrokeStyle,
       Rectangle.StrokeWidth);
     if Length(DashIntervals) > 0 then
       StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0);
-    if VectArtStrokeUsesRoundCaps(Rectangle.MifStrokeStyle) then
+    if VectArtStrokeUsesRoundCaps(Rectangle.StrokeStyle) then
       StrokePaint.StrokeCap := TSkStrokeCap.Round
     else
       StrokePaint.StrokeCap := TSkStrokeCap.Butt;
@@ -640,13 +643,13 @@ var
   Surface: ISkSurface;
   Width: Integer;
 
-  procedure DrawMarker(Marker: TVectArtMifLineMarker; const Tip,
+  procedure DrawMarker(Marker: TVectArtLineMarker; const Tip,
     InsidePoint: TPointF; MarkerSize: Single);
   var
     I: Integer;
     MarkerPathBuilder: ISkPathBuilder;
   begin
-    MarkerGeometry := BuildMifLineMarkerGeometry(Ord(Marker), Tip, InsidePoint,
+    MarkerGeometry := BuildLineMarkerGeometry(Ord(Marker), Tip, InsidePoint,
       Line.StrokeWidth, MarkerSize);
     if Length(MarkerGeometry.PrimaryPoints) < 2 then Exit;
     MarkerPathBuilder := TSkPathBuilder.Create;
@@ -670,8 +673,8 @@ var
     Canvas.DrawPath(MarkerPathBuilder.Detach, Paint);
   end;
 begin
-  if (Line.MifStartMarker <> vlmNone) or (Line.MifEndMarker <> vlmNone) then
-    Padding := Max(Max(Line.MifStartMarkerSize, Line.MifEndMarkerSize) *
+  if (Line.StartMarker <> vlmNone) or (Line.EndMarker <> vlmNone) then
+    Padding := Max(Max(Line.StartMarkerSize, Line.EndMarkerSize) *
       Max(Line.StrokeWidth, 2.0) + 2, 6.0)
   else
     Padding := Max(Line.StrokeWidth * 0.5 + 2, 2.0);
@@ -691,17 +694,17 @@ begin
   Canvas := Surface.Canvas;
   Canvas.Clear(TAlphaColorRec.Null);
   Paint := TSkPaint.Create(TSkPaintStyle.Stroke);
-  Paint.AntiAlias := Line.MifAntiAlias;
+  Paint.AntiAlias := Line.AntiAlias;
   RGBColor := ColorToRGB(Line.StrokeColor);
   Paint.Color := TAlphaColor($FF000000 or
     (Cardinal(GetRValue(RGBColor)) shl 16) or
     (Cardinal(GetGValue(RGBColor)) shl 8) or Cardinal(GetBValue(RGBColor)));
   Paint.StrokeWidth := Line.StrokeWidth;
-  DashIntervals := VectArtStrokeDashIntervals(Line.MifStrokeStyle,
+  DashIntervals := VectArtStrokeDashIntervals(Line.StrokeStyle,
     Line.StrokeWidth);
   if Length(DashIntervals) > 0 then
     Paint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0);
-  if VectArtStrokeUsesRoundCaps(Line.MifStrokeStyle) then
+  if VectArtStrokeUsesRoundCaps(Line.StrokeStyle) then
     Paint.StrokeCap := TSkStrokeCap.Round
   else
     case Line.LineCap of
@@ -720,10 +723,10 @@ begin
     Line.StartPoint.Y - PlacementBounds.Top), TPointF.Create(
     Line.EndPoint.X - PlacementBounds.Left,
     Line.EndPoint.Y - PlacementBounds.Top), Paint);
-  DrawMarker(Line.MifStartMarker, Line.StartPoint, Line.EndPoint,
-    Line.MifStartMarkerSize);
-  DrawMarker(Line.MifEndMarker, Line.EndPoint, Line.StartPoint,
-    Line.MifEndMarkerSize);
+  DrawMarker(Line.StartMarker, Line.StartPoint, Line.EndPoint,
+    Line.StartMarkerSize);
+  DrawMarker(Line.EndMarker, Line.EndPoint, Line.StartPoint,
+    Line.EndMarkerSize);
   Surface.Flush;
   Result := EncodeRgba(@Pixels[0], Width, Height);
   AddPhysicalDimensions(Result);
@@ -738,6 +741,7 @@ var
   Height: Integer;
   I: Integer;
   ImageInfo: TSkImageInfo;
+  MarkerGeometry: TVectArtMarkerGeometry;
   Padding: Single;
   Path: ISkPath;
   PathBuilder: ISkPathBuilder;
@@ -746,9 +750,47 @@ var
   StrokePaint: ISkPaint;
   Surface: ISkSurface;
   Width: Integer;
+
+  procedure DrawPathMarker(Marker: TVectArtLineMarker; const Tip,
+    InsidePoint: TPointF; MarkerSize: Single);
+  var
+    PointIndex: Integer;
+    MarkerBuilder: ISkPathBuilder;
+  begin
+    MarkerGeometry := BuildLineMarkerGeometry(Ord(Marker), Tip, InsidePoint,
+      PathLayer.StrokeWidth, MarkerSize);
+    if Length(MarkerGeometry.PrimaryPoints) < 2 then
+      Exit;
+    MarkerBuilder := TSkPathBuilder.Create;
+    MarkerBuilder.MoveTo(MarkerGeometry.PrimaryPoints[0].X -
+      PlacementBounds.Left, MarkerGeometry.PrimaryPoints[0].Y -
+      PlacementBounds.Top);
+    for PointIndex := 1 to High(MarkerGeometry.PrimaryPoints) do
+      MarkerBuilder.LineTo(MarkerGeometry.PrimaryPoints[PointIndex].X -
+        PlacementBounds.Left, MarkerGeometry.PrimaryPoints[PointIndex].Y -
+        PlacementBounds.Top);
+    if MarkerGeometry.PrimaryClosed then
+      MarkerBuilder.Close;
+    StrokePaint.PathEffect := nil;
+    if MarkerGeometry.Filled then
+      StrokePaint.Style := TSkPaintStyle.Fill
+    else
+    begin
+      StrokePaint.Style := TSkPaintStyle.Stroke;
+      StrokePaint.StrokeCap := TSkStrokeCap.Round;
+      StrokePaint.StrokeWidth := Max(PathLayer.StrokeWidth, 0.1);
+    end;
+    Canvas.DrawPath(MarkerBuilder.Detach, StrokePaint);
+  end;
 begin
   PlacementBounds := PointsBounds(PathLayer.Points);
-  Padding := Max(PathLayer.StrokeWidth * 0.5 + 2, 2.0);
+  if not PathLayer.Closed and
+    ((PathLayer.StartMarker <> vlmNone) or
+     (PathLayer.EndMarker <> vlmNone)) then
+    Padding := Max(Max(PathLayer.StartMarkerSize,
+      PathLayer.EndMarkerSize) * Max(PathLayer.StrokeWidth, 2.0) + 2, 6.0)
+  else
+    Padding := Max(PathLayer.StrokeWidth * 0.5 + 2, 2.0);
   PlacementBounds.Inflate(Padding, Padding);
   Width := EnsureRange(Ceil(PlacementBounds.Width), 1, 16384);
   Height := EnsureRange(Ceil(PlacementBounds.Height), 1, 16384);
@@ -773,7 +815,7 @@ begin
   if PathLayer.Filled and PathLayer.Closed then
   begin
     FillPaint := TSkPaint.Create(TSkPaintStyle.Fill);
-    FillPaint.AntiAlias := True;
+    FillPaint.AntiAlias := PathLayer.AntiAlias;
     RGBColor := ColorToRGB(PathLayer.FillColor);
     FillPaint.Color := TAlphaColor($FF000000 or
       (Cardinal(GetRValue(RGBColor)) shl 16) or
@@ -783,21 +825,41 @@ begin
   if PathLayer.StrokeWidth > 0 then
   begin
     StrokePaint := TSkPaint.Create(TSkPaintStyle.Stroke);
-    StrokePaint.AntiAlias := True;
+    StrokePaint.AntiAlias := PathLayer.AntiAlias;
     RGBColor := ColorToRGB(PathLayer.StrokeColor);
     StrokePaint.Color := TAlphaColor($FF000000 or
       (Cardinal(GetRValue(RGBColor)) shl 16) or
       (Cardinal(GetGValue(RGBColor)) shl 8) or Cardinal(GetBValue(RGBColor)));
     StrokePaint.StrokeWidth := PathLayer.StrokeWidth;
-    DashIntervals := VectArtStrokeDashIntervals(PathLayer.MifStrokeStyle,
+    DashIntervals := VectArtStrokeDashIntervals(PathLayer.StrokeStyle,
       PathLayer.StrokeWidth);
     if Length(DashIntervals) > 0 then
       StrokePaint.PathEffect := TSkPathEffect.MakeDash(DashIntervals, 0);
-    if VectArtStrokeUsesRoundCaps(PathLayer.MifStrokeStyle) then
+    if VectArtStrokeUsesRoundCaps(PathLayer.StrokeStyle) then
       StrokePaint.StrokeCap := TSkStrokeCap.Round
     else
-      StrokePaint.StrokeCap := TSkStrokeCap.Butt;
+      case PathLayer.LineCap of
+        vlcSquare: StrokePaint.StrokeCap := TSkStrokeCap.Square;
+        vlcRound: StrokePaint.StrokeCap := TSkStrokeCap.Round;
+      else
+        StrokePaint.StrokeCap := TSkStrokeCap.Butt;
+      end;
+    case PathLayer.LineJoin of
+      vljBevel: StrokePaint.StrokeJoin := TSkStrokeJoin.Bevel;
+      vljRound: StrokePaint.StrokeJoin := TSkStrokeJoin.Round;
+    else
+      StrokePaint.StrokeJoin := TSkStrokeJoin.Miter;
+    end;
     Canvas.DrawPath(Path, StrokePaint);
+    if not PathLayer.Closed then
+    begin
+      DrawPathMarker(PathLayer.StartMarker, PathLayer.Points[0],
+        PathLayer.Points[1], PathLayer.StartMarkerSize);
+      DrawPathMarker(PathLayer.EndMarker,
+        PathLayer.Points[High(PathLayer.Points)],
+        PathLayer.Points[High(PathLayer.Points) - 1],
+        PathLayer.EndMarkerSize);
+    end;
   end;
   Surface.Flush;
   Result := EncodeRgba(@Pixels[0], Width, Height);
@@ -913,7 +975,7 @@ begin
   AddWadaInteger(Png, 'vector closed', 1);
   AddWadaInteger(Png, 'vector quality', 1);
   AddWadaInteger(Png, 'vector element type', 4);
-  AddWadaInteger(Png, 'vector stroke style', Ord(Rectangle.MifStrokeStyle));
+  AddWadaInteger(Png, 'vector stroke style', Ord(Rectangle.StrokeStyle));
   AddWadaInteger(Png, 'vector stroke cap', 0);
   AddWadaInteger(Png, 'vector stroke join', 2);
   AddWadaInteger(Png, 'vector start stroke marker', 0);
@@ -1136,6 +1198,8 @@ begin
 end;
 
 function MifLineStrokeWidth(Value: Single): Double; forward;
+function LineMarkerToMif(Value: TVectArtLineMarker): Integer; forward;
+function MifLineMarkerSize(Value: Single): Integer; forward;
 
 procedure AnalyzePathExport(PathLayer: TVectArtPathLayer; LayerIndex,
   PathOrdinal, ConvertedLineOrdinal: Integer; var Report: TMifExportReport);
@@ -1191,6 +1255,19 @@ begin
     MifPathStrokeWidth(PathLayer.StrokeWidth), 0.000001)) then
     Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
       '線幅は変換先のMIF表現で使用できる最小値へ変換されます。');
+  if not PathLayer.Closed then
+  begin
+    if not SameValue(PathLayer.StartMarkerSize,
+      MifLineMarkerSize(PathLayer.StartMarkerSize), 0.000001) then
+      Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
+        Format('始点マーカーサイズはMIFの整数値%dへ変換されます。',
+        [MifLineMarkerSize(PathLayer.StartMarkerSize)]));
+    if not SameValue(PathLayer.EndMarkerSize,
+      MifLineMarkerSize(PathLayer.EndMarkerSize), 0.000001) then
+      Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
+        Format('終点マーカーサイズはMIFの整数値%dへ変換されます。',
+        [MifLineMarkerSize(PathLayer.EndMarkerSize)]));
+  end;
 end;
 
 function CreatePathImagePng(PathLayer: TVectArtPathLayer): TBytes;
@@ -1204,15 +1281,27 @@ begin
   AddImagePlacementMetadata(Result, Bounds,
     MifAlpha(PathLayer.Opacity), not PathLayer.Visible);
   AddWadaInteger(Result, 'vector closed', Ord(PathLayer.Closed));
-  AddWadaInteger(Result, 'vector quality', 1);
+  AddWadaInteger(Result, 'vector quality', Ord(PathLayer.AntiAlias));
   AddWadaInteger(Result, 'vector element type', 6);
-  AddWadaInteger(Result, 'vector stroke style', Ord(PathLayer.MifStrokeStyle));
-  AddWadaInteger(Result, 'vector stroke cap', 0);
-  AddWadaInteger(Result, 'vector stroke join', 0);
-  AddWadaInteger(Result, 'vector start stroke marker', 0);
-  AddWadaInteger(Result, 'vector end stroke marker', 0);
-  AddWadaInteger(Result, 'vector start marker size', 4);
-  AddWadaInteger(Result, 'vector end marker size', 4);
+  AddWadaInteger(Result, 'vector stroke style', Ord(PathLayer.StrokeStyle));
+  AddWadaInteger(Result, 'vector stroke cap', Ord(PathLayer.LineCap));
+  AddWadaInteger(Result, 'vector stroke join', Ord(PathLayer.LineJoin));
+  if PathLayer.Closed then
+  begin
+    AddWadaInteger(Result, 'vector start stroke marker', 0);
+    AddWadaInteger(Result, 'vector end stroke marker', 0);
+  end
+  else
+  begin
+    AddWadaInteger(Result, 'vector start stroke marker',
+      LineMarkerToMif(PathLayer.StartMarker));
+    AddWadaInteger(Result, 'vector end stroke marker',
+      LineMarkerToMif(PathLayer.EndMarker));
+  end;
+  AddWadaInteger(Result, 'vector start marker size',
+    MifLineMarkerSize(PathLayer.StartMarkerSize));
+  AddWadaInteger(Result, 'vector end marker size',
+    MifLineMarkerSize(PathLayer.EndMarkerSize));
   AddWadaDouble(Result, 'vector stroke width',
     MifPathStrokeWidth(PathLayer.StrokeWidth));
   AddWadaDouble(Result, 'vector matrix a', 1.0);
@@ -1245,7 +1334,7 @@ begin
   AddWadaString(Result, 'vector effect object type', 'none');
 end;
 
-function LineMarkerToMif(Value: TVectArtMifLineMarker): Integer;
+function LineMarkerToMif(Value: TVectArtLineMarker): Integer;
 begin
   case Value of
     vlmOpenArrow: Result := 1;
@@ -1262,7 +1351,7 @@ begin
   end;
 end;
 
-function MifToLineMarker(Value: Integer): TVectArtMifLineMarker;
+function MifToLineMarker(Value: Integer): TVectArtLineMarker;
 begin
   case Value of
     1: Result := vlmOpenArrow;
@@ -1294,15 +1383,17 @@ function CreateMifLineFromPath(PathLayer: TVectArtPathLayer):
 begin
   Result := TVectArtLineLayer.Create(PathLayer.Name, PathLayer.Points[0],
     PathLayer.Points[1]);
-  Result.MifAntiAlias := True;
-  if VectArtStrokeUsesRoundCaps(PathLayer.MifStrokeStyle) then
-    Result.LineCap := vlcRound
-  else
-    Result.LineCap := vlcButt;
+  Result.AntiAlias := PathLayer.AntiAlias;
+  Result.EndMarker := PathLayer.EndMarker;
+  Result.EndMarkerSize := PathLayer.EndMarkerSize;
+  Result.LineCap := PathLayer.LineCap;
+  Result.LineJoin := PathLayer.LineJoin;
   Result.Locked := PathLayer.Locked;
   Result.Opacity := PathLayer.Opacity;
+  Result.StartMarker := PathLayer.StartMarker;
+  Result.StartMarkerSize := PathLayer.StartMarkerSize;
   Result.StrokeColor := PathLayer.StrokeColor;
-  Result.MifStrokeStyle := PathLayer.MifStrokeStyle;
+  Result.StrokeStyle := PathLayer.StrokeStyle;
   Result.StrokeWidth := MifLineStrokeWidth(PathLayer.StrokeWidth);
   Result.Visible := PathLayer.Visible;
 end;
@@ -1326,16 +1417,16 @@ begin
     Report.AddIssue(meikConversion, LayerIndex, Line.Name,
       Format('不透明度はMIFの8bit値%dへ丸められます。',
       [MifAlpha(Line.Opacity)]));
-  if not SameValue(Line.MifStartMarkerSize,
-    MifLineMarkerSize(Line.MifStartMarkerSize), 0.000001) then
+  if not SameValue(Line.StartMarkerSize,
+    MifLineMarkerSize(Line.StartMarkerSize), 0.000001) then
     Report.AddIssue(meikConversion, LayerIndex, Line.Name,
       Format('始点マーカーサイズはMIFの整数値%dへ変換されます。',
-      [MifLineMarkerSize(Line.MifStartMarkerSize)]));
-  if not SameValue(Line.MifEndMarkerSize,
-    MifLineMarkerSize(Line.MifEndMarkerSize), 0.000001) then
+      [MifLineMarkerSize(Line.StartMarkerSize)]));
+  if not SameValue(Line.EndMarkerSize,
+    MifLineMarkerSize(Line.EndMarkerSize), 0.000001) then
     Report.AddIssue(meikConversion, LayerIndex, Line.Name,
       Format('終点マーカーサイズはMIFの整数値%dへ変換されます。',
-      [MifLineMarkerSize(Line.MifEndMarkerSize)]));
+      [MifLineMarkerSize(Line.EndMarkerSize)]));
   if not SameValue(Line.StrokeWidth,
     MifLineStrokeWidth(Line.StrokeWidth), 0.000001) then
     Report.AddIssue(meikConversion, LayerIndex, Line.Name,
@@ -1365,19 +1456,19 @@ begin
   AddImagePlacementMetadata(Result, PlacementBounds,
     MifAlpha(Line.Opacity), not Line.Visible);
   AddWadaInteger(Result, 'vector closed', 0);
-  AddWadaInteger(Result, 'vector quality', Ord(Line.MifAntiAlias));
+  AddWadaInteger(Result, 'vector quality', Ord(Line.AntiAlias));
   AddWadaInteger(Result, 'vector element type', 6);
-  AddWadaInteger(Result, 'vector stroke style', Ord(Line.MifStrokeStyle));
+  AddWadaInteger(Result, 'vector stroke style', Ord(Line.StrokeStyle));
   AddWadaInteger(Result, 'vector stroke cap', Ord(Line.LineCap));
   AddWadaInteger(Result, 'vector stroke join', Ord(Line.LineJoin));
   AddWadaInteger(Result, 'vector start stroke marker',
-    LineMarkerToMif(Line.MifStartMarker));
+    LineMarkerToMif(Line.StartMarker));
   AddWadaInteger(Result, 'vector end stroke marker',
-    LineMarkerToMif(Line.MifEndMarker));
+    LineMarkerToMif(Line.EndMarker));
   AddWadaInteger(Result, 'vector start marker size',
-    MifLineMarkerSize(Line.MifStartMarkerSize));
+    MifLineMarkerSize(Line.StartMarkerSize));
   AddWadaInteger(Result, 'vector end marker size',
-    MifLineMarkerSize(Line.MifEndMarkerSize));
+    MifLineMarkerSize(Line.EndMarkerSize));
   AddWadaDouble(Result, 'vector stroke width',
     MifLineStrokeWidth(Line.StrokeWidth));
   MatrixA := (Line.EndPoint.X - Line.StartPoint.X) /
@@ -1815,8 +1906,8 @@ var
   DiscardedPath: TVectArtPathData;
   DiscardedImage: TVectArtImageData;
   ElementType: Int32;
-  MifEndMarker: Int32;
-  MifEndMarkerSize: Int32;
+  EndMarker: Int32;
+  EndMarkerSize: Int32;
   FillColor: Int32;
   FillEnabled: Int32;
   Hidden: Int32;
@@ -1851,10 +1942,10 @@ var
   StrokeColor: Int32;
   StrokeCap: Int32;
   StrokeJoin: Int32;
-  MifStartMarker: Int32;
-  MifStartMarkerSize: Int32;
+  StartMarker: Int32;
+  StartMarkerSize: Int32;
   StrokeEnabled: Int32;
-  MifStrokeStyle: Int32;
+  StrokeStyle: Int32;
   StrokeWidth: Double;
   Top: Int32;
   VectorPoints: TArray<TPointF>;
@@ -1943,12 +2034,12 @@ begin
       TryReadPngInteger(Container[I].Data, 'image alpha', Alpha);
       TryReadPngInteger(Container[I].Data, 'image hidden', Hidden);
       StrokeEnabled := 0;
-      MifStartMarker := 0;
-      MifStartMarkerSize := 4;
+      StartMarker := 0;
+      StartMarkerSize := 4;
       FillEnabled := 0;
-      MifEndMarker := 0;
-      MifEndMarkerSize := 4;
-      MifStrokeStyle := 0;
+      EndMarker := 0;
+      EndMarkerSize := 4;
+      StrokeStyle := 0;
       StrokeCap := 0;
       StrokeJoin := 0;
       StrokeWidth := 1.0;
@@ -1958,16 +2049,16 @@ begin
       TryReadPngInteger(Container[I].Data,
         'vector enable fill texture', FillEnabled);
       TryReadPngInteger(Container[I].Data, 'vector stroke style',
-        MifStrokeStyle);
+        StrokeStyle);
       TryReadPngInteger(Container[I].Data, 'vector stroke cap', StrokeCap);
       TryReadPngInteger(Container[I].Data, 'vector end stroke marker',
-        MifEndMarker);
+        EndMarker);
       TryReadPngInteger(Container[I].Data, 'vector start stroke marker',
-        MifStartMarker);
+        StartMarker);
       TryReadPngInteger(Container[I].Data, 'vector start marker size',
-        MifStartMarkerSize);
+        StartMarkerSize);
       TryReadPngInteger(Container[I].Data, 'vector end marker size',
-        MifEndMarkerSize);
+        EndMarkerSize);
       TryReadPngInteger(Container[I].Data, 'vector quality', VectorQuality);
       TryReadPngInteger(Container[I].Data, 'vector stroke join', StrokeJoin);
       TryReadPngDouble(Container[I].Data, 'vector stroke width',
@@ -2013,12 +2104,27 @@ begin
           PathData.Filled := PathClosed and (FillEnabled <> 0);
           PathData.FillColor := TColor(FillColor);
           PathData.Opacity := EnsureRange(Alpha / 255.0, 0.0, 1.0);
-          PathData.StrokeColor := TColor(StrokeColor);
-          if InRange(MifStrokeStyle, Ord(Low(TVectArtMifStrokeStyle)),
-            Ord(High(TVectArtMifStrokeStyle))) then
-            PathData.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyle)
+          PathData.AntiAlias := VectorQuality <> 0;
+          PathData.EndMarker := MifToLineMarker(EndMarker);
+          PathData.EndMarkerSize := Max(EndMarkerSize, 1);
+          if InRange(StrokeCap, Ord(Low(TVectArtLineCap)),
+            Ord(High(TVectArtLineCap))) then
+            PathData.LineCap := TVectArtLineCap(StrokeCap)
           else
-            PathData.MifStrokeStyle := vssSolid;
+            PathData.LineCap := vlcButt;
+          if InRange(StrokeJoin, Ord(Low(TVectArtLineJoin)),
+            Ord(High(TVectArtLineJoin))) then
+            PathData.LineJoin := TVectArtLineJoin(StrokeJoin)
+          else
+            PathData.LineJoin := vljMiter;
+          PathData.StartMarker := MifToLineMarker(StartMarker);
+          PathData.StartMarkerSize := Max(StartMarkerSize, 1);
+          PathData.StrokeColor := TColor(StrokeColor);
+          if InRange(StrokeStyle, Ord(Low(TVectArtStrokeStyle)),
+            Ord(High(TVectArtStrokeStyle))) then
+            PathData.StrokeStyle := TVectArtStrokeStyle(StrokeStyle)
+          else
+            PathData.StrokeStyle := vssSolid;
           if StrokeEnabled <> 0 then
             PathData.StrokeWidth := MifPathStrokeWidth(StrokeWidth)
           else
@@ -2062,11 +2168,11 @@ begin
           MatrixB * OriginalRight + MatrixD *
             ((OriginalTop + OriginalBottom) * 0.5) + MatrixF);
         LineData.Opacity := EnsureRange(Alpha / 255.0, 0.0, 1.0);
-        LineData.MifAntiAlias := VectorQuality <> 0;
-        LineData.MifEndMarker := MifToLineMarker(MifEndMarker);
-        LineData.MifEndMarkerSize := Max(MifEndMarkerSize, 1);
-        LineData.MifStartMarker := MifToLineMarker(MifStartMarker);
-        LineData.MifStartMarkerSize := Max(MifStartMarkerSize, 1);
+        LineData.AntiAlias := VectorQuality <> 0;
+        LineData.EndMarker := MifToLineMarker(EndMarker);
+        LineData.EndMarkerSize := Max(EndMarkerSize, 1);
+        LineData.StartMarker := MifToLineMarker(StartMarker);
+        LineData.StartMarkerSize := Max(StartMarkerSize, 1);
         if InRange(StrokeCap, Ord(Low(TVectArtLineCap)),
           Ord(High(TVectArtLineCap))) then
           LineData.LineCap := TVectArtLineCap(StrokeCap)
@@ -2078,11 +2184,11 @@ begin
         else
           LineData.LineJoin := vljMiter;
         LineData.StrokeColor := TColor(StrokeColor);
-        if InRange(MifStrokeStyle, Ord(Low(TVectArtMifStrokeStyle)),
-          Ord(High(TVectArtMifStrokeStyle))) then
-          LineData.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyle)
+        if InRange(StrokeStyle, Ord(Low(TVectArtStrokeStyle)),
+          Ord(High(TVectArtStrokeStyle))) then
+          LineData.StrokeStyle := TVectArtStrokeStyle(StrokeStyle)
         else
-          LineData.MifStrokeStyle := vssSolid;
+          LineData.StrokeStyle := vssSolid;
         LineData.StrokeWidth := MifLineStrokeWidth(StrokeWidth);
         LineData.Visible := Hidden = 0;
         LineData.Locked := False;
@@ -2109,11 +2215,11 @@ begin
       Data.RotationDegrees := RadToDeg(ArcTan2(Position2Y - Top,
         Position2X - Left));
       Data.StrokeColor := TColor(StrokeColor);
-      if InRange(MifStrokeStyle, Ord(Low(TVectArtMifStrokeStyle)),
-        Ord(High(TVectArtMifStrokeStyle))) then
-        Data.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyle)
+      if InRange(StrokeStyle, Ord(Low(TVectArtStrokeStyle)),
+        Ord(High(TVectArtStrokeStyle))) then
+        Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyle)
       else
-        Data.MifStrokeStyle := vssSolid;
+        Data.StrokeStyle := vssSolid;
       if StrokeEnabled <> 0 then
         Data.StrokeWidth := Max(StrokeWidth, 0.0)
       else
@@ -2186,12 +2292,95 @@ begin
     begin
       Result := TryDeserializeVectArtDocument(Json, Document, ErrorMessage);
       if Result then
-        Document.EditingMode := vemMifCompatible;
       Exit;
     end;
   Result := TryImportWebArtDocument(Container, Document, ErrorMessage);
   if Result then
-    Document.EditingMode := vemMifCompatible;
+end;
+
+function AnalyzeVectArtMifExport(Document: TVectArtDocument;
+  out Report: TMifExportReport; out PreparedImagePngs: TArray<TBytes>;
+  out ErrorMessage: string): Boolean;
+var
+  Canvas: TVectArtCanvasLayer;
+  I: Integer;
+  ImageIndex: Integer;
+  Layer: TVectArtLayer;
+  LineIndex: Integer;
+  PathExportShape: TMifPathExportShape;
+  PathIndex: Integer;
+  RectangleIndex: Integer;
+begin
+  Result := False;
+  Report.Clear;
+  PreparedImagePngs := nil;
+  ErrorMessage := '';
+  try
+    if Document = nil then
+      raise EArgumentNilException.Create('Document');
+    Canvas := Document.CanvasLayer;
+    if Canvas = nil then
+      raise EInvalidOp.Create('Document canvas is missing');
+    if Canvas.Transparent then
+      Report.AddIssue(meikConversion, 0, Canvas.Name,
+        '透明キャンバスはMIF再読込時に不透明になります。');
+    SetLength(PreparedImagePngs, Document.LayerCount);
+    ImageIndex := 0;
+    LineIndex := 0;
+    PathIndex := 0;
+    RectangleIndex := 0;
+    for I := 1 to Document.LayerCount - 1 do
+    begin
+      Layer := Document[I];
+      if Layer is TVectArtImageLayer then
+      begin
+        Inc(ImageIndex);
+        TryPrepareImagePngForMif(TVectArtImageLayer(Layer), I, ImageIndex,
+          Report, PreparedImagePngs[I]);
+        Continue;
+      end;
+      if Layer is TVectArtLineLayer then
+      begin
+        AnalyzeLineExport(TVectArtLineLayer(Layer), I, LineIndex + 1,
+          Report);
+        Inc(LineIndex);
+        Continue;
+      end;
+      if Layer is TVectArtPathLayer then
+      begin
+        PathExportShape := MifPathExportShape(TVectArtPathLayer(Layer));
+        AnalyzePathExport(TVectArtPathLayer(Layer), I, PathIndex + 1,
+          LineIndex + 1, Report);
+        if PathExportShape = mpesLine then
+          Inc(LineIndex)
+        else if PathExportShape = mpesPath then
+          Inc(PathIndex);
+        Continue;
+      end;
+      if Layer is TVectArtRectangleLayer then
+      begin
+        AnalyzeRectangleExport(TVectArtRectangleLayer(Layer), I,
+          RectangleIndex + 1, Report);
+        Inc(RectangleIndex);
+        Continue;
+      end;
+      Report.AddIssue(meikUnsupported, I, Layer.Name,
+        'このレイヤー種類はMIF Writerが対応していません。');
+    end;
+    Result := True;
+  except
+    on E: Exception do
+      ErrorMessage := E.Message;
+  end;
+end;
+
+function TryAnalyzeVectArtMifExport(Document: TVectArtDocument;
+  out Report: TMifExportReport; out ErrorMessage: string): Boolean;
+var
+  PreparedImagePngs: TArray<TBytes>;
+begin
+  Result := AnalyzeVectArtMifExport(Document, Report, PreparedImagePngs,
+    ErrorMessage);
 end;
 
 function TryCreateVectArtMifFromDocument(Document: TVectArtDocument;
@@ -2220,14 +2409,11 @@ var
   ConvertedLine: TVectArtLineLayer;
   Header: TBytes;
   I: Integer;
-  ImageIndex: Integer;
   ImagePng: TBytes;
   Layer: TVectArtLayer;
   Line: TVectArtLineLayer;
-  LineIndex: Integer;
   ContentChunkCount: Integer;
   PathExportShape: TMifPathExportShape;
-  PathIndex: Integer;
   PathLayer: TVectArtPathLayer;
   PreparedImagePngs: TArray<TBytes>;
   Rectangle: TVectArtRectangleLayer;
@@ -2237,29 +2423,15 @@ var
 begin
   Result := False;
   Container := nil;
-  Report.Clear;
   ErrorMessage := '';
   Candidate := nil;
   RectangleSources := TList<TRectangleMifSource>.Create;
   try
     try
-      if Document = nil then
-        raise EArgumentNilException.Create('Document');
+      if not AnalyzeVectArtMifExport(Document, Report, PreparedImagePngs,
+        ErrorMessage) then
+        Exit;
       Canvas := Document.CanvasLayer;
-      if Canvas = nil then
-        raise EInvalidOp.Create('Document canvas is missing');
-      if Canvas.Transparent then
-        Report.AddIssue(meikConversion, 0, Canvas.Name,
-          '透明キャンバスはMIF再読込時に不透明になります。');
-      SetLength(PreparedImagePngs, Document.LayerCount);
-      ImageIndex := 0;
-      for I := 1 to Document.LayerCount - 1 do
-        if Document[I] is TVectArtImageLayer then
-        begin
-          Inc(ImageIndex);
-          TryPrepareImagePngForMif(TVectArtImageLayer(Document[I]), I,
-            ImageIndex, Report, PreparedImagePngs[I]);
-        end;
       if Report.Compatibility = mecUnsupported then
       begin
         ErrorMessage := 'MIFへ書き出せない項目があります。';
@@ -2285,8 +2457,6 @@ begin
       Candidate.AddChunk('MHDR', Header);
       Candidate.AddChunk('IPNG', CreateCompositePng(Document));
       Candidate.AddChunk('IPNG', CreateTexturePng(Canvas.BackgroundColor));
-      LineIndex := 0;
-      PathIndex := 0;
       RectangleIndex := 0;
       for I := 1 to Document.LayerCount - 1 do
       begin
@@ -2301,20 +2471,16 @@ begin
         if Layer is TVectArtLineLayer then
         begin
           Line := TVectArtLineLayer(Layer);
-          AnalyzeLineExport(Line, I, LineIndex + 1, Report);
           Candidate.AddChunk('IPNG', CreateLineImagePng(Line));
           Candidate.AddChunk('IPNG', CreateTexturePng(clWhite));
           Candidate.AddChunk('IPNG', CreateLineVectorPng);
           Candidate.AddChunk('IPNG', CreateTexturePng(Line.StrokeColor));
-          Inc(LineIndex);
           Continue;
         end;
         if Layer is TVectArtPathLayer then
         begin
           PathLayer := TVectArtPathLayer(Layer);
           PathExportShape := MifPathExportShape(PathLayer);
-          AnalyzePathExport(PathLayer, I, PathIndex + 1, LineIndex + 1,
-            Report);
           if PathExportShape = mpesUnsupported then
             Continue;
           if PathExportShape = mpesLine then
@@ -2329,7 +2495,7 @@ begin
             finally
               ConvertedLine.Free;
             end;
-            Inc(LineIndex)
+            { Two-point Path is emitted with the Line chunk layout. }
           end
           else
           begin
@@ -2339,18 +2505,13 @@ begin
             Candidate.AddChunk('IPNG', CreatePathVectorPng(PathLayer));
             Candidate.AddChunk('IPNG',
               CreateTexturePng(PathLayer.StrokeColor));
-            Inc(PathIndex);
+            { Multi-point Path keeps the Path chunk layout. }
           end;
           Continue;
         end;
         if not (Layer is TVectArtRectangleLayer) then
-        begin
-          Report.AddIssue(meikUnsupported, I, Layer.Name,
-            'このレイヤー種類はMIF Writerが対応していません。');
           Continue;
-        end;
         Rectangle := TVectArtRectangleLayer(Layer);
-        AnalyzeRectangleExport(Rectangle, I, RectangleIndex + 1, Report);
         RectangleSource := Default(TRectangleMifSource);
         if RectangleIndex < RectangleSources.Count then
           RectangleSource := RectangleSources[RectangleIndex];

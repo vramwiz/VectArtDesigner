@@ -1,4 +1,4 @@
-// レイヤー一覧の行配置、サムネイル、状態アイコンをGDI／Direct2Dで描画する。
+﻿// レイヤー一覧の行配置、サムネイル、状態アイコンをGDI／Direct2Dで描画する。
 unit VectArtDesignerLayerRenderer;
 
 interface
@@ -58,7 +58,8 @@ function VectArtPathThumbnailPoints(const SourcePoints: TArray<TPointF>;
 implementation
 
 uses
-  System.Classes, System.Math, Winapi.D2D1, Winapi.Windows;
+  System.Classes, System.Math, System.UITypes, Winapi.D2D1, Winapi.Windows,
+  VectArtDesignerGeometry;
 
 const
   COLOR_LIST_BACKGROUND   = TColor($001A1A1A);
@@ -166,6 +167,104 @@ begin
     Round(GetRValue(ColorValue) * Opacity + $FF * (1 - Opacity)),
     Round(GetGValue(ColorValue) * Opacity + $FF * (1 - Opacity)),
     Round(GetBValue(ColorValue) * Opacity + $FF * (1 - Opacity)));
+end;
+
+procedure DrawThumbnailMarker(ACanvas: TCanvas;
+  Marker: TVectArtLineMarker; const Tip, InsidePoint: TPoint;
+  PreviewStrokeWidth: Integer; MarkerSize: Single; Color: TColor); overload;
+var
+  Geometry: TVectArtMarkerGeometry;
+  I: Integer;
+  MarkerPoints: TArray<TPoint>;
+  PreviewMarkerSize: Single;
+begin
+  if (ACanvas = nil) or (Marker = vlmNone) then
+    Exit;
+  PreviewMarkerSize := EnsureRange(Sqrt(Max(MarkerSize, 1.0)), 2.0, 5.0);
+  Geometry := BuildLineMarkerGeometry(Ord(Marker), PointF(Tip.X, Tip.Y),
+    PointF(InsidePoint.X, InsidePoint.Y), Min(PreviewStrokeWidth, 3),
+    PreviewMarkerSize);
+  if Length(Geometry.PrimaryPoints) < 2 then
+    Exit;
+  SetLength(MarkerPoints, Length(Geometry.PrimaryPoints));
+  for I := 0 to High(MarkerPoints) do
+    MarkerPoints[I] := Point(Round(Geometry.PrimaryPoints[I].X),
+      Round(Geometry.PrimaryPoints[I].Y));
+  ACanvas.Pen.Color := Color;
+  ACanvas.Pen.Style := psSolid;
+  ACanvas.Pen.Width := Max(Min(PreviewStrokeWidth, 3), 1);
+  if Geometry.Filled then
+  begin
+    ACanvas.Brush.Color := Color;
+    ACanvas.Brush.Style := bsSolid;
+    ACanvas.Polygon(MarkerPoints);
+  end
+  else
+  begin
+    ACanvas.Brush.Style := bsClear;
+    ACanvas.Polyline(MarkerPoints);
+  end;
+end;
+
+procedure DrawThumbnailMarkers(ACanvas: TCanvas;
+  StartMarker, EndMarker: TVectArtLineMarker; const StartPoint,
+  StartInsidePoint, EndPoint, EndInsidePoint: TPoint;
+  PreviewStrokeWidth: Integer; StartMarkerSize, EndMarkerSize: Single;
+  Color: TColor); overload;
+begin
+  DrawThumbnailMarker(ACanvas, StartMarker, StartPoint, StartInsidePoint,
+    PreviewStrokeWidth, StartMarkerSize, Color);
+  DrawThumbnailMarker(ACanvas, EndMarker, EndPoint, EndInsidePoint,
+    PreviewStrokeWidth, EndMarkerSize, Color);
+end;
+
+procedure DrawThumbnailMarker(ACanvas: TDirect2DCanvas;
+  Marker: TVectArtLineMarker; const Tip, InsidePoint: TPoint;
+  PreviewStrokeWidth: Integer; MarkerSize: Single; Color: TColor); overload;
+var
+  Geometry: TVectArtMarkerGeometry;
+  I: Integer;
+  MarkerPoints: TArray<TPoint>;
+  PreviewMarkerSize: Single;
+begin
+  if (ACanvas = nil) or (Marker = vlmNone) then
+    Exit;
+  PreviewMarkerSize := EnsureRange(Sqrt(Max(MarkerSize, 1.0)), 2.0, 5.0);
+  Geometry := BuildLineMarkerGeometry(Ord(Marker), PointF(Tip.X, Tip.Y),
+    PointF(InsidePoint.X, InsidePoint.Y), Min(PreviewStrokeWidth, 3),
+    PreviewMarkerSize);
+  if Length(Geometry.PrimaryPoints) < 2 then
+    Exit;
+  SetLength(MarkerPoints, Length(Geometry.PrimaryPoints));
+  for I := 0 to High(MarkerPoints) do
+    MarkerPoints[I] := Point(Round(Geometry.PrimaryPoints[I].X),
+      Round(Geometry.PrimaryPoints[I].Y));
+  ACanvas.Pen.Color := Color;
+  ACanvas.Pen.Style := psSolid;
+  ACanvas.Pen.Width := Max(Min(PreviewStrokeWidth, 3), 1);
+  if Geometry.Filled then
+  begin
+    ACanvas.Brush.Color := Color;
+    ACanvas.Brush.Style := bsSolid;
+    ACanvas.Polygon(MarkerPoints);
+  end
+  else
+  begin
+    ACanvas.Brush.Style := bsClear;
+    ACanvas.Polyline(MarkerPoints);
+  end;
+end;
+
+procedure DrawThumbnailMarkers(ACanvas: TDirect2DCanvas;
+  StartMarker, EndMarker: TVectArtLineMarker; const StartPoint,
+  StartInsidePoint, EndPoint, EndInsidePoint: TPoint;
+  PreviewStrokeWidth: Integer; StartMarkerSize, EndMarkerSize: Single;
+  Color: TColor); overload;
+begin
+  DrawThumbnailMarker(ACanvas, StartMarker, StartPoint, StartInsidePoint,
+    PreviewStrokeWidth, StartMarkerSize, Color);
+  DrawThumbnailMarker(ACanvas, EndMarker, EndPoint, EndInsidePoint,
+    PreviewStrokeWidth, EndMarkerSize, Color);
 end;
 
 function VectArtLineThumbnailStrokeWidth(StrokeWidth: Single): Integer;
@@ -372,7 +471,7 @@ begin
       ACanvas.Pen.Color := BlendThumbnailColor(RectangleLayer.StrokeColor,
         RectangleLayer.Opacity);
       ACanvas.Pen.Width := Max(Round(RectangleLayer.StrokeWidth), 1);
-      if RectangleLayer.MifStrokeStyle <> vssSolid then
+      if RectangleLayer.StrokeStyle <> vssSolid then
         ACanvas.Pen.Style := psDash
       else
         ACanvas.Pen.Style := psSolid;
@@ -393,7 +492,7 @@ begin
     ACanvas.Pen.Color := BlendThumbnailColor(LineLayer.StrokeColor,
       LineLayer.Opacity);
     ACanvas.Pen.Width := LineStrokeWidth;
-    if LineLayer.MifStrokeStyle <> vssSolid then
+    if LineLayer.StrokeStyle <> vssSolid then
       ACanvas.Pen.Style := psDash
     else
       ACanvas.Pen.Style := psSolid;
@@ -403,6 +502,11 @@ begin
         ThumbnailRect.Top, ThumbnailRect.Right, ThumbnailRect.Bottom);
       ACanvas.MoveTo(LineStart.X, LineStart.Y);
       ACanvas.LineTo(LineEnd.X, LineEnd.Y);
+      DrawThumbnailMarkers(ACanvas, LineLayer.StartMarker,
+        LineLayer.EndMarker, LineStart, LineEnd, LineEnd, LineStart,
+        LineStrokeWidth, LineLayer.StartMarkerSize,
+        LineLayer.EndMarkerSize, BlendThumbnailColor(LineLayer.StrokeColor,
+        LineLayer.Opacity));
     finally
       RestoreDC(ACanvas.Handle, SavedDC);
     end;
@@ -449,11 +553,18 @@ begin
           ACanvas.Pen.Color := BlendThumbnailColor(PathLayer.StrokeColor,
             PathLayer.Opacity * 0.35);
         ACanvas.Pen.Width := LineStrokeWidth;
-        if PathLayer.MifStrokeStyle <> vssSolid then
+        if PathLayer.StrokeStyle <> vssSolid then
           ACanvas.Pen.Style := psDash
         else
           ACanvas.Pen.Style := psSolid;
         ACanvas.Polyline(PathDrawPoints);
+        if not PathLayer.Closed then
+          DrawThumbnailMarkers(ACanvas, PathLayer.StartMarker,
+            PathLayer.EndMarker, PathPoints[0], PathPoints[1],
+            PathPoints[High(PathPoints)],
+            PathPoints[High(PathPoints) - 1], LineStrokeWidth,
+            PathLayer.StartMarkerSize, PathLayer.EndMarkerSize,
+            ACanvas.Pen.Color);
       end;
     finally
       RestoreDC(ACanvas.Handle, SavedDC);
@@ -622,7 +733,7 @@ begin
         ACanvas.Pen.Color := BlendThumbnailColor(RectangleLayer.StrokeColor,
           RectangleLayer.Opacity * 0.35);
       ACanvas.Pen.Width := Max(Round(RectangleLayer.StrokeWidth), 1);
-      if RectangleLayer.MifStrokeStyle <> vssSolid then
+      if RectangleLayer.StrokeStyle <> vssSolid then
         ACanvas.Pen.Style := psDash
       else
         ACanvas.Pen.Style := psSolid;
@@ -643,7 +754,7 @@ begin
     ACanvas.Pen.Color := BlendThumbnailColor(LineLayer.StrokeColor,
       LineLayer.Opacity);
     ACanvas.Pen.Width := LineStrokeWidth;
-    if LineLayer.MifStrokeStyle <> vssSolid then
+    if LineLayer.StrokeStyle <> vssSolid then
       ACanvas.Pen.Style := psDash
     else
       ACanvas.Pen.Style := psSolid;
@@ -652,6 +763,11 @@ begin
     try
       ACanvas.MoveTo(LineStart.X, LineStart.Y);
       ACanvas.LineTo(LineEnd.X, LineEnd.Y);
+      DrawThumbnailMarkers(ACanvas, LineLayer.StartMarker,
+        LineLayer.EndMarker, LineStart, LineEnd, LineEnd, LineStart,
+        LineStrokeWidth, LineLayer.StartMarkerSize,
+        LineLayer.EndMarkerSize, BlendThumbnailColor(LineLayer.StrokeColor,
+        LineLayer.Opacity));
     finally
       ACanvas.RenderTarget.PopAxisAlignedClip;
     end;
@@ -697,11 +813,18 @@ begin
           ACanvas.Pen.Color := BlendThumbnailColor(PathLayer.StrokeColor,
             PathLayer.Opacity * 0.35);
         ACanvas.Pen.Width := LineStrokeWidth;
-        if PathLayer.MifStrokeStyle <> vssSolid then
+        if PathLayer.StrokeStyle <> vssSolid then
           ACanvas.Pen.Style := psDash
         else
           ACanvas.Pen.Style := psSolid;
         ACanvas.Polyline(PathDrawPoints);
+        if not PathLayer.Closed then
+          DrawThumbnailMarkers(ACanvas, PathLayer.StartMarker,
+            PathLayer.EndMarker, PathPoints[0], PathPoints[1],
+            PathPoints[High(PathPoints)],
+            PathPoints[High(PathPoints) - 1], LineStrokeWidth,
+            PathLayer.StartMarkerSize, PathLayer.EndMarkerSize,
+            ACanvas.Pen.Color);
       end;
     finally
       ACanvas.Brush.Handle.SetOpacity(1.0);

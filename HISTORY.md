@@ -4,6 +4,51 @@
 共通基盤の状況は [note.md](note.md)、単独編集アプリ固有の状況は
 [note_VectArtDesigner.md](note_VectArtDesigner.md) を参照する。
 
+## 2026-08-31
+
+- 製品方針をMIF特化の単体アプリへ変更し、AviUtl2画面レイアウトプラグインのプロジェクト、専用ユニット、
+  共通ABIライブラリ、専用テスト、サンプル、ノートを削除した。
+- 標準／MIF互換の編集モード列挙とメニュー切替を撤去し、MIF仕様の編集体系へ一本化した。
+- 内部モデル、EditorState、Undo／Redo、UI、描画、JSON／SVG処理の`Mif`付き装飾名を、`StrokeStyle`、
+  `AntiAlias`、`StartMarker`、`EndMarker`などの通常名へ変更した。MIF形式固有のコンテナー・変換名は維持した。
+- 名前を付けて保存する場合の既定形式と先頭フィルターをMIFへ変更し、SVGはMIF表現範囲の交換形式とした。
+- 残るテストプロジェクト25本を再コンパイルし、引数を必要とするMIF診断用2本を除く23本を実行して
+  すべてPASSした。単体アプリのDebug／Release Win64ビルドも警告0、エラー0で成功した。
+- `編集`メニューへ「モード: MIF互換」「モード: 標準」を追加し、Documentの現在モードだけへチェックを
+  表示して相互に切り替えられるようにした。MIF／SVG読込後のモード変更通知もメニュー表示へ反映する。
+- キャンバス設定を表示しない外部ホストでもモード2項目を詰めて表示し、メニュー下端から欠けないようにした。
+- モード変更通知と同一値の再設定、メニューのチェック更新とクリック切替を自動テストした。単独アプリの
+  Debug／Release Win64ビルドは警告0、エラー0で成功した。
+- Pathへ線端と接合形式を追加し、作成既定値、単一選択時のアイコン式Object Properties、Undo／Redo、
+  共通Skia描画、JSON、SVGの`stroke-linecap`／`stroke-linejoin`、MIFメタデータへ接続した。
+- Pathの値往復、外部SVGの継承、WebArt製Pathの読込、描画差、UI操作を自動テストした。単独アプリと
+  画面レイアウトプラグインのDebug／Release Win64は警告0、エラー0で成功した。
+- PathへMIF互換アンチエイリアスを追加し、作成既定値、Object PropertiesのAAボタン、Undo／Redo、
+  塗りと輪郭のSkia描画、JSON、SVGの`shape-rendering`、MIFの`vector quality`へ接続した。
+- AA有無の描画差、UI操作、JSON／SVG／MIF往復とWebArt製Path読込を自動テストした。
+- 開いたPathへ始点／終点マーカーと各サイズを追加し、作成既定値、Document、Undo／Redo、
+  Object Properties、共通Skia描画、JSON、SVG、MIFへ接続した。閉じたPathではマーカーを描画せず、
+  Object Propertiesの対応項目を無効化する。
+- PathマーカーのUI操作とUndo、開閉による描画有無、JSON／SVG／MIF往復、2頂点PathからLineへの
+  MIF変換時の保持を自動テストへ追加した。残るテスト25本を再コンパイルし、引数を必要とする
+  MIF診断用2本を除く23本がPASSした。Debug／Release Win64も警告0、エラー0で成功した。
+- SVGをMIF編集モデルへ取り込む対応範囲を`svg_compatibility.md`へ明文化した。読込時にせん断Rectangleや
+  任意の破線を変換、曲線Path、未対応描画要素、任意マーカー、filter／clip-path／maskを無視として
+  `TSvgImportReport`へ記録し、アプリから内容を通知するようにした。テスト25本の再コンパイルと診断用を
+  除く23本の実行、Debug／Release Win64ビルドはすべて成功し、警告0、エラー0を確認した。
+- MIF生成から互換性判定を`TryAnalyzeVectArtMifExport`として分離し、編集時と保存時が同じ
+  `TMifExportReport`を使用するようにした。ステータスバーへ完全互換、変換あり、非対応と件数を表示し、
+  詳細な変換・非対応内容をヒントで確認できるようにした。生成前後のレポート一致もテストへ固定し、
+  テスト25本のコンパイル、実行対象23本、Debug／Release Win64ビルドがすべて成功した。
+- Lineと開いたPathの始点／終点マーカーをレイヤー一覧のGDI／Direct2Dサムネイルへ追加し、閉じたPathでは
+  描画しないようにした。キャンバス上のマーカーも対象レイヤーの当たり判定へ含めた。Path選択枠は
+  頂点編集・リサイズの基準を変えないため頂点範囲のままとし、サムネイル描画とクリック選択をテストした。
+  テスト25本のコンパイル、実行対象23本、Debug／Release Win64ビルドがすべて成功した。
+- SVGルートの`viewBox`と`preserveAspectRatio`（`none`、9方向の`meet`／`slice`）をキャンバス座標へ
+  適用した。角丸、塗り／線の個別不透明度、fill-rule、線の補助属性、画像の比率指定、図形またはグループの
+  filter／clip／mask／合成指定など、MIF編集モデルへ保持できない属性を読込レポートへ追加した。
+  テスト25本を再コンパイルし、診断用2本を除く23本がPASSした。Debug／Release Win64ビルドも成功した。
+
 ## 2026-08-28
 
 - 縮小表示時だけ線幅を画面上1px以上へ補正する処理を正式採用した。DocumentとMIF／SVG／AviUtl2出力の

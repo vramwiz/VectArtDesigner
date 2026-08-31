@@ -59,12 +59,19 @@ begin
     Data.Points := [PointF(100, 100), PointF(200, 100),
       PointF(200, 200), PointF(100, 200)];
     Data.Closed := True;
+    Data.EndMarker := vlmNone;
+    Data.EndMarkerSize := 4.0;
     Data.Filled := True;
     Data.FillColor := clBlue;
+    Data.LineCap := vlcSquare;
+    Data.LineJoin := vljBevel;
+    Data.AntiAlias := True;
     Data.StrokeColor := clBlack;
-    Data.MifStrokeStyle := vssSolid;
+    Data.StrokeStyle := vssSolid;
     Data.StrokeWidth := 2;
     Data.Opacity := 1;
+    Data.StartMarker := vlmNone;
+    Data.StartMarkerSize := 4.0;
     Data.Visible := True;
     Data.Locked := False;
     Document.InsertPath(1, Data);
@@ -94,7 +101,76 @@ begin
     Require(SameValue(Path.Points[0].X, 100.0) and
       SameValue(Path.Points[0].Y, 100.0), 'Path vertex undo differs');
 
+    Document.SetPathLineCap(1, vlcRound);
+    History.AddApplied(TVectArtPathLineCapCommand.Create(Document, 1,
+      vlcSquare, vlcRound));
+    Document.SetPathLineJoin(1, vljRound);
+    History.AddApplied(TVectArtPathLineJoinCommand.Create(Document, 1,
+      vljBevel, vljRound));
+    Require((Path.LineCap = vlcRound) and (Path.LineJoin = vljRound),
+      'Path line cap or join edit differs');
+    History.Undo;
+    Require(Path.LineJoin = vljBevel, 'Path line join undo differs');
+    History.Undo;
+    Require(Path.LineCap = vlcSquare, 'Path line cap undo differs');
+    History.Redo;
+    History.Redo;
+    Require((Path.LineCap = vlcRound) and (Path.LineJoin = vljRound),
+      'Path line cap or join redo differs');
+    Document.SetPathAntiAlias(1, False);
+    History.AddApplied(TVectArtPathAntiAliasCommand.Create(Document, 1,
+      True, False));
+    Require(not Path.AntiAlias, 'Path anti-alias edit differs');
+    History.Undo;
+    Require(Path.AntiAlias, 'Path anti-alias undo differs');
+    History.Redo;
+    Require(not Path.AntiAlias, 'Path anti-alias redo differs');
+    Document.SetPathStartMarker(1, vlmOpenArrow);
+    History.AddApplied(TVectArtPathStartMarkerCommand.Create(Document, 1,
+      vlmNone, vlmOpenArrow));
+    Document.SetPathEndMarker(1, vlmStar);
+    History.AddApplied(TVectArtPathEndMarkerCommand.Create(Document, 1,
+      vlmNone, vlmStar));
+    Document.SetPathStartMarkerSize(1, 6.0);
+    History.AddApplied(TVectArtPathMarkerSizeCommand.Create(Document, 1,
+      True, 4.0, 6.0));
+    Document.SetPathEndMarkerSize(1, 9.0);
+    History.AddApplied(TVectArtPathMarkerSizeCommand.Create(Document, 1,
+      False, 4.0, 9.0));
+    Require((Path.StartMarker = vlmOpenArrow) and
+      (Path.EndMarker = vlmStar) and
+      SameValue(Path.StartMarkerSize, 6.0) and
+      SameValue(Path.EndMarkerSize, 9.0), 'Path marker edit differs');
+    History.Undo;
+    Require(SameValue(Path.EndMarkerSize, 4.0),
+      'Path end marker size undo differs');
+    History.Redo;
+    Require(SameValue(Path.EndMarkerSize, 9.0),
+      'Path end marker size redo differs');
+    Path.Closed := False;
+    Document.SetPathPoints(1, [PointF(100, 100), PointF(200, 100)]);
+    Document.SetPathStartMarker(1, vlmNone);
+    Document.SetPathEndMarker(1, vlmCircle);
+    Document.SetPathEndMarkerSize(1, 10.0);
+    Document.SetSelectedLayers([]);
+    Interaction.Configure(Document, Rect(0, 0, 1000, 1000), 1);
+    Require(Interaction.MouseDown(mbLeft, 190, 92),
+      'Open Path marker was not hit-testable');
+    Require(Document.SelectedIndex = 1,
+      'Open Path marker did not select its Path');
+    Interaction.MouseUp(mbLeft);
+    Path.Closed := True;
+    Document.SetPathPoints(1, [PointF(100, 100), PointF(200, 100),
+      PointF(200, 200), PointF(100, 200)]);
+
     EditorState.CurrentTool := vetPath;
+    EditorState.PathLineCap := vlcRound;
+    EditorState.PathLineJoin := vljBevel;
+    EditorState.PathAntiAlias := False;
+    EditorState.PathStartMarker := vlmDiamond;
+    EditorState.PathStartMarkerSize := 7.0;
+    EditorState.PathEndMarker := vlmCircle;
+    EditorState.PathEndMarkerSize := 8.0;
     Creation.Configure(Document, History, EditorState,
       Rect(0, 0, 1000, 1000), 1);
     Require(Creation.MouseDown(mbLeft, [], 300, 300),
@@ -110,7 +186,14 @@ begin
     Require((Document.LayerCount = 3) and
       (Document[2] is TVectArtPathLayer), 'Created path differs');
     Require(TVectArtPathLayer(Document[2]).Closed and
-      (Length(TVectArtPathLayer(Document[2]).Points) = 3),
+      (Length(TVectArtPathLayer(Document[2]).Points) = 3) and
+      (TVectArtPathLayer(Document[2]).LineCap = vlcRound) and
+      (TVectArtPathLayer(Document[2]).LineJoin = vljBevel) and
+      not TVectArtPathLayer(Document[2]).AntiAlias and
+      (TVectArtPathLayer(Document[2]).StartMarker = vlmDiamond) and
+      SameValue(TVectArtPathLayer(Document[2]).StartMarkerSize, 7.0) and
+      (TVectArtPathLayer(Document[2]).EndMarker = vlmCircle) and
+      SameValue(TVectArtPathLayer(Document[2]).EndMarkerSize, 8.0),
       'Created closed path properties differ');
     History.Undo;
     Require(Document.LayerCount = 2, 'Path creation undo differs');

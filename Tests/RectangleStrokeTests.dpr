@@ -37,7 +37,7 @@ begin
     Data.Opacity := 1.0;
     Data.RotationDegrees := 0.0;
     Data.StrokeColor := clBlack;
-    Data.MifStrokeStyle := vssSolid;
+    Data.StrokeStyle := vssSolid;
     Data.StrokeWidth := 0.0;
     Data.Visible := True;
     Document.InsertRectangle(1, Data);
@@ -49,15 +49,15 @@ begin
     Rectangle := TVectArtRectangleLayer(Document[1]);
     Require((Rectangle.StrokeColor = clRed) and
       SameValue(Rectangle.StrokeWidth, 4.5) and
-      (Rectangle.MifStrokeStyle = vssDashed), 'Stroke command differs');
+      (Rectangle.StrokeStyle = vssDashed), 'Stroke command differs');
     History.Undo;
     Require((Rectangle.StrokeColor = clBlack) and
       SameValue(Rectangle.StrokeWidth, 0.0) and
-      (Rectangle.MifStrokeStyle = vssSolid), 'Stroke undo differs');
+      (Rectangle.StrokeStyle = vssSolid), 'Stroke undo differs');
     History.Redo;
     Require((Rectangle.StrokeColor = clRed) and
       SameValue(Rectangle.StrokeWidth, 4.5) and
-      (Rectangle.MifStrokeStyle = vssDashed), 'Stroke redo differs');
+      (Rectangle.StrokeStyle = vssDashed), 'Stroke redo differs');
     Writeln('Rectangle stroke: PASS');
   finally
     History.Free;

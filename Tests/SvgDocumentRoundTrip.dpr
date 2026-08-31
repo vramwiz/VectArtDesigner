@@ -66,6 +66,7 @@ var
   ExternalDocument: TVectArtDocument;
   Image: TVectArtImageLayer;
   ImageData: TVectArtImageData;
+  ImportReport: TSvgImportReport;
   Line: TVectArtLineLayer;
   LineData: TVectArtLineData;
   LockedFile: TFileStream;
@@ -92,7 +93,7 @@ begin
     Data.Opacity := 0.625;
     Data.RotationDegrees := 27.5;
     Data.StrokeColor := TColor($00112233);
-    Data.MifStrokeStyle := vssDashDotDot;
+    Data.StrokeStyle := vssDashDotDot;
     Data.StrokeWidth := 3.5;
     Data.Visible := False;
     Data.Locked := True;
@@ -103,7 +104,7 @@ begin
     Data2.Opacity := 1.0;
     Data2.RotationDegrees := 0.0;
     Data2.StrokeColor := clBlack;
-    Data2.MifStrokeStyle := vssSolid;
+    Data2.StrokeStyle := vssSolid;
     Data2.StrokeWidth := 0.0;
     Data2.Visible := True;
     Data2.Locked := False;
@@ -112,30 +113,37 @@ begin
     LineData.EndPoint := TPointF.Create(500, 300);
     LineData.Locked := False;
     LineData.LineCap := vlcRound;
-    LineData.MifAntiAlias := False;
-    LineData.MifEndMarker := vlmStar;
-    LineData.MifEndMarkerSize := 9.0;
-    LineData.MifStartMarker := vlmOpenArrow;
-    LineData.MifStartMarkerSize := 6.0;
+    LineData.AntiAlias := False;
+    LineData.EndMarker := vlmStar;
+    LineData.EndMarkerSize := 9.0;
+    LineData.StartMarker := vlmOpenArrow;
+    LineData.StartMarkerSize := 6.0;
     LineData.LineJoin := vljBevel;
     LineData.Name := '斜線';
     LineData.Opacity := 0.8;
     LineData.StrokeColor := TColor($0000AAFF);
-    LineData.MifStrokeStyle := vssShortDash;
+    LineData.StrokeStyle := vssShortDash;
     LineData.StrokeWidth := 6.0;
     LineData.Visible := True;
     SourceDocument.InsertLine(3, LineData);
-    PathData.Name := 'Polygon';
+    PathData.Name := 'Open path';
     PathData.Points := [PointF(520, 40), PointF(760, 80),
       PointF(700, 220), PointF(560, 180)];
-    PathData.Closed := True;
-    PathData.Filled := True;
+    PathData.Closed := False;
+    PathData.Filled := False;
     PathData.FillColor := TColor($004080C0);
+    PathData.LineCap := vlcSquare;
+    PathData.LineJoin := vljRound;
+    PathData.AntiAlias := False;
+    PathData.EndMarker := vlmCircle;
+    PathData.EndMarkerSize := 8.0;
     PathData.Locked := False;
     PathData.Opacity := 0.7;
     PathData.StrokeColor := TColor($00AA2200);
-    PathData.MifStrokeStyle := vssLongDash;
+    PathData.StrokeStyle := vssLongDash;
     PathData.StrokeWidth := 4;
+    PathData.StartMarker := vlmDiamond;
+    PathData.StartMarkerSize := 5.0;
     PathData.Visible := True;
     SourceDocument.InsertPath(4, PathData);
     ImageData.Name := 'Logo image';
@@ -159,14 +167,15 @@ begin
     Require(SvgText.Contains('vad:start-marker="open-arrow"') and
       SvgText.Contains('stroke-width="1"'),
       'SVG open marker stroke does not follow the line width');
-    Require(SvgText.Contains('<polygon '), 'SVG polygon is missing');
+    Require(SvgText.Contains('<polyline '), 'SVG polyline is missing');
+    Require(SvgText.Contains('vad:start-marker="diamond"') and
+      SvgText.Contains('vad:end-marker="circle"'),
+      'SVG Path marker metadata is missing');
     Require(SvgText.Contains('<image '), 'SVG image is missing');
     Require(SvgText.Contains('data:image/png;base64,'),
       'SVG embedded PNG is missing');
     Require(TryLoadVectArtDocumentFromSvg(SvgText, TargetDocument,
       ErrorMessage), ErrorMessage);
-    Require(TargetDocument.EditingMode = vemStandard,
-      'SVG load did not select standard editing mode');
     Require((TargetDocument.CanvasLayer.Width = 854) and
       (TargetDocument.CanvasLayer.Height = 480), 'Canvas size differs');
     Require(TargetDocument.CanvasLayer.Transparent,
@@ -184,7 +193,7 @@ begin
       'Stroke color differs');
     Require(SameValue(Rectangle.StrokeWidth, Data.StrokeWidth),
       'Stroke width differs');
-    Require(Rectangle.MifStrokeStyle = Data.MifStrokeStyle,
+    Require(Rectangle.StrokeStyle = Data.StrokeStyle,
       'Stroke style differs');
     RequireSameSingle(Data.Bounds.Left, Rectangle.Bounds.Left,
       'Left differs');
@@ -209,25 +218,33 @@ begin
     RequireSameSingle(LineData.EndPoint.Y, Line.EndPoint.Y,
       'Line end differs');
     Require((Line.StrokeColor = LineData.StrokeColor) and
-      (Line.MifStrokeStyle = LineData.MifStrokeStyle) and
+      (Line.StrokeStyle = LineData.StrokeStyle) and
       (Line.LineCap = LineData.LineCap) and
       (Line.LineJoin = LineData.LineJoin) and
-      (Line.MifAntiAlias = LineData.MifAntiAlias) and
-      (Line.MifEndMarker = LineData.MifEndMarker) and
-      (Line.MifStartMarker = LineData.MifStartMarker) and
-      SameValue(Line.MifEndMarkerSize, LineData.MifEndMarkerSize) and
-      SameValue(Line.MifStartMarkerSize, LineData.MifStartMarkerSize),
+      (Line.AntiAlias = LineData.AntiAlias) and
+      (Line.EndMarker = LineData.EndMarker) and
+      (Line.StartMarker = LineData.StartMarker) and
+      SameValue(Line.EndMarkerSize, LineData.EndMarkerSize) and
+      SameValue(Line.StartMarkerSize, LineData.StartMarkerSize),
       'Line stroke differs');
     Path := TVectArtPathLayer(TargetDocument[4]);
     Require((Length(Path.Points) = Length(PathData.Points)) and
-      Path.Closed and Path.Filled, 'Path properties differ');
+      not Path.Closed and not Path.Filled, 'Path properties differ');
     RequireSameSingle(PathData.Points[2].X, Path.Points[2].X,
       'Path point X differs');
     RequireSameSingle(PathData.Points[2].Y, Path.Points[2].Y,
       'Path point Y differs');
     Require((Path.FillColor = PathData.FillColor) and
       (Path.StrokeColor = PathData.StrokeColor) and
-      (Path.MifStrokeStyle = PathData.MifStrokeStyle), 'Path style differs');
+      (Path.StrokeStyle = PathData.StrokeStyle) and
+      (Path.LineCap = PathData.LineCap) and
+      (Path.LineJoin = PathData.LineJoin) and
+      (Path.AntiAlias = PathData.AntiAlias) and
+      (Path.EndMarker = PathData.EndMarker) and
+      (Path.StartMarker = PathData.StartMarker) and
+      SameValue(Path.EndMarkerSize, PathData.EndMarkerSize) and
+      SameValue(Path.StartMarkerSize, PathData.StartMarkerSize),
+      'Path style differs');
     Image := TVectArtImageLayer(TargetDocument[5]);
     Require((Image.Name = ImageData.Name) and Image.Locked and
       not Image.Visible and (Image.SourceKind = visLogo),
@@ -304,11 +321,86 @@ begin
       'External SVG line end differs');
     Require((Line.StrokeColor = TColor($00BC3A12)) and
       SameValue(Line.StrokeWidth, 2.5) and
-      (Line.MifStrokeStyle = vssDashed) and (Line.LineCap = vlcSquare) and
+      (Line.StrokeStyle = vssDashed) and (Line.LineCap = vlcSquare) and
       (Line.LineJoin = vljRound), 'External SVG line stroke differs');
     RequireSameSingle(0.3, Line.Opacity,
       'External SVG line opacity differs');
     Require(not Line.Visible, 'External SVG line visibility differs');
+    SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
+      'height="180" viewBox="10 20 160 90" ' +
+      'preserveAspectRatio="none"><line id="viewbox-line" x1="10" ' +
+      'y1="20" x2="170" y2="110" stroke="red" ' +
+      'stroke-width="1"/></svg>';
+    Require(TryLoadVectArtDocumentFromSvg(SvgText, ExternalDocument,
+      ErrorMessage), 'viewBox none: ' + ErrorMessage);
+    Line := TVectArtLineLayer(ExternalDocument[1]);
+    Require(SameValue(Line.StartPoint.X, 0.0) and
+      SameValue(Line.StartPoint.Y, 0.0) and
+      SameValue(Line.EndPoint.X, 320.0) and
+      SameValue(Line.EndPoint.Y, 180.0) and
+      SameValue(Line.StrokeWidth, 2.0),
+      'SVG preserveAspectRatio none viewBox mapping differs');
+    SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="300" ' +
+      'height="200" viewBox="0 0 100 100"><line id="meet-line" ' +
+      'x1="0" y1="0" x2="100" y2="100" stroke="red"/></svg>';
+    Require(TryLoadVectArtDocumentFromSvg(SvgText, ExternalDocument,
+      ErrorMessage), 'viewBox meet: ' + ErrorMessage);
+    Line := TVectArtLineLayer(ExternalDocument[1]);
+    Require(SameValue(Line.StartPoint.X, 50.0) and
+      SameValue(Line.StartPoint.Y, 0.0) and
+      SameValue(Line.EndPoint.X, 250.0) and
+      SameValue(Line.EndPoint.Y, 200.0) and
+      SameValue(Line.StrokeWidth, 2.0),
+      'SVG default meet viewBox mapping differs');
+    SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="300" ' +
+      'height="200" viewBox="0 0 100 100" ' +
+      'preserveAspectRatio="unsupported"><rect width="10" ' +
+      'height="10"/></svg>';
+    Require(not TryLoadVectArtDocumentFromSvg(SvgText, ExternalDocument,
+      ErrorMessage) and (ErrorMessage <> '') and
+      (ExternalDocument.LayerCount = 2) and
+      (ExternalDocument[1].Name = 'meet-line'),
+      'Unsupported preserveAspectRatio changed the document');
+    SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
+      'height="180"><line id="converted-style" x1="0" y1="0" ' +
+      'x2="100" y2="100" stroke="red" stroke-dasharray="7 2" ' +
+      'marker-start="url(#external-marker)" filter="url(#shadow)"/>' +
+      '</svg>';
+    Require(TryLoadVectArtDocumentFromSvg(SvgText, ExternalDocument,
+      ImportReport, ErrorMessage), ErrorMessage);
+    Require((ExternalDocument.LayerCount = 2) and
+      (Length(ImportReport.Issues) = 3) and
+      (ImportReport.Issues[0].Kind = siikConversion) and
+      (ImportReport.Issues[1].Kind = siikIgnored) and
+      (ImportReport.Issues[2].Kind = siikIgnored),
+      'SVG style conversion and ignored decorations were not reported');
+    SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
+      'height="180"><g id="decorated-group" filter="url(#shadow)" ' +
+      'style="mix-blend-mode:multiply"><rect id="group-child" ' +
+      'width="10" height="10" fill="red"/></g></svg>';
+    Require(TryLoadVectArtDocumentFromSvg(SvgText, ExternalDocument,
+      ImportReport, ErrorMessage), ErrorMessage);
+    Require((ExternalDocument.LayerCount = 2) and
+      (ExternalDocument[1].Name = 'group-child') and
+      (Length(ImportReport.Issues) = 2) and
+      (ImportReport.Issues[0].ElementId = 'decorated-group') and
+      (ImportReport.Issues[1].ElementId = 'decorated-group'),
+      'Ignored group decorations were not reported');
+    SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
+      'height="180"><rect id="attribute-conversions" x="10" y="10" ' +
+      'width="100" height="60" rx="8" fill="red" stroke="blue" ' +
+      'fill-opacity="0.5" stroke-opacity="0.75" ' +
+      'stroke-dashoffset="2" stroke-miterlimit="2" ' +
+      'vector-effect="non-scaling-stroke" fill-rule="evenodd" ' +
+      'paint-order="stroke fill"/></svg>';
+    Require(TryLoadVectArtDocumentFromSvg(SvgText, ExternalDocument,
+      ImportReport, ErrorMessage), ErrorMessage);
+    Require((ExternalDocument.LayerCount = 2) and
+      (Length(ImportReport.Issues) = 7) and
+      ImportReport.ToDisplayText.Contains('角丸Rectangle') and
+      ImportReport.ToDisplayText.Contains('個別不透明度') and
+      ImportReport.ToDisplayText.Contains('vector-effect'),
+      'Lossy SVG attributes were not reported');
     SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
       'height="180"><line x1="0" y1="0" x2="100" y2="100"/></svg>';
     Require(TryLoadVectArtDocumentFromSvg(SvgText, ExternalDocument,
@@ -342,7 +434,7 @@ begin
       'External SVG polyline points differ');
     Require((Path.StrokeColor = TColor($00332211)) and
       SameValue(Path.StrokeWidth, 3.5) and
-      (Path.MifStrokeStyle = vssDashed),
+      (Path.StrokeStyle = vssDashed),
       'External SVG polyline stroke differs');
     RequireSameSingle(0.2, Path.Opacity,
       'External SVG polyline opacity differs');
@@ -366,10 +458,11 @@ begin
       '<path id="relative-path" d="m100 20 20 10 10-5" ' +
       'fill="none" stroke="blue"/>' +
       '<path id="curve-unsupported" d="M0 0 C10 10 20 10 30 0"/>' +
+      '<circle id="circle-unsupported" cx="20" cy="20" r="10"/>' +
       '<rect id="path-survivor" x="1" y="2" width="3" ' +
       'height="4"/></svg>';
     Require(TryLoadVectArtDocumentFromSvg(SvgText, ExternalDocument,
-      ErrorMessage), ErrorMessage);
+      ImportReport, ErrorMessage), ErrorMessage);
     Require((ExternalDocument.LayerCount = 4) and
       (ExternalDocument[1] is TVectArtPathLayer) and
       (ExternalDocument[2] is TVectArtPathLayer) and
@@ -395,6 +488,13 @@ begin
       'Relative SVG path points differ');
     Require(TVectArtRectangleLayer(ExternalDocument[3]).Name =
       'path-survivor', 'Unsupported curve affected another SVG layer');
+    Require((Length(ImportReport.Issues) = 2) and
+      (ImportReport.Issues[0].Kind = siikIgnored) and
+      (ImportReport.Issues[0].ElementName = 'path') and
+      (ImportReport.Issues[0].ElementId = 'curve-unsupported') and
+      (ImportReport.Issues[1].ElementName = 'circle') and
+      ImportReport.ToDisplayText.Contains('circle-unsupported'),
+      'Unsupported SVG elements were not reported');
     SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
       'height="180"><g opacity="0.5"><rect id="group-rect" ' +
       'width="20" height="10" opacity="0.8"/>' +
@@ -405,7 +505,7 @@ begin
       '<rect id="translated-group-rect" width="10" ' +
       'height="10"/></g></svg>';
     Require(TryLoadVectArtDocumentFromSvg(SvgText, ExternalDocument,
-      ErrorMessage), ErrorMessage);
+      ImportReport, ErrorMessage), ErrorMessage);
     Require((ExternalDocument.LayerCount = 5) and
       (ExternalDocument[1].Name = 'group-rect') and
       (ExternalDocument[2].Name = 'group-line') and
@@ -447,15 +547,15 @@ begin
     Require((Rectangle.FillColor = TColor($00332211)) and
       (Rectangle.StrokeColor = TColor($00665544)) and
       SameValue(Rectangle.StrokeWidth, 3.0) and
-      (Rectangle.MifStrokeStyle = vssDashed),
+      (Rectangle.StrokeStyle = vssDashed),
       'Inherited SVG Rectangle style differs');
     RequireSameSingle(0.5, Rectangle.Opacity,
       'Inherited SVG Rectangle opacity differs');
     Line := TVectArtLineLayer(ExternalDocument[2]);
     Require((Line.StrokeColor = TColor($00665544)) and
       SameValue(Line.StrokeWidth, 3.0) and
-      (Line.MifStrokeStyle = vssDashed) and (Line.LineCap = vlcRound) and
-      (Line.LineJoin = vljBevel) and not Line.MifAntiAlias,
+      (Line.StrokeStyle = vssDashed) and (Line.LineCap = vlcRound) and
+      (Line.LineJoin = vljBevel) and not Line.AntiAlias,
       'Inherited SVG Line style differs');
     RequireSameSingle(0.25, Line.Opacity,
       'Inherited SVG Line opacity differs');
@@ -463,14 +563,15 @@ begin
     Require((Path.FillColor = TColor($00332211)) and
       (Path.StrokeColor = TColor($00665544)) and
       SameValue(Path.StrokeWidth, 3.0) and
-      (Path.MifStrokeStyle = vssDashed),
+      (Path.StrokeStyle = vssDashed) and (Path.LineCap = vlcRound) and
+      (Path.LineJoin = vljBevel) and not Path.AntiAlias,
       'Inherited SVG Path style differs');
     RequireSameSingle(0.5, Path.Opacity,
       'Inherited SVG Path opacity differs');
     Line := TVectArtLineLayer(ExternalDocument[4]);
     Require((Line.StrokeColor = clBlue) and
       SameValue(Line.StrokeWidth, 2.0) and
-      (Line.MifStrokeStyle = vssDashed),
+      (Line.StrokeStyle = vssDashed),
       'Child SVG style did not override inherited style');
     SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
       'height="180"><g transform="matrix(1 0 0 1 5 0) ' +
@@ -526,7 +627,7 @@ begin
       '<rect id="sheared-rectangle" width="20" height="10" ' +
       'fill="#abcdef" stroke="blue" stroke-width="2"/></g></svg>';
     Require(TryLoadVectArtDocumentFromSvg(SvgText, ExternalDocument,
-      ErrorMessage), ErrorMessage);
+      ImportReport, ErrorMessage), ErrorMessage);
     Require((ExternalDocument.LayerCount = 3) and
       (ExternalDocument[1] is TVectArtRectangleLayer) and
       (ExternalDocument[2] is TVectArtPathLayer),
@@ -551,6 +652,10 @@ begin
       SameValue(Path.Points[2].Y, 30.0) and
       SameValue(Path.Points[3].X, 15.0),
       'Sheared SVG rectangle points differ');
+    Require((Length(ImportReport.Issues) = 1) and
+      (ImportReport.Issues[0].Kind = siikConversion) and
+      (ImportReport.Issues[0].ElementId = 'sheared-rectangle'),
+      'Sheared SVG Rectangle conversion was not reported');
     SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
       'height="180"><g transform="skewX(45)">' +
       '<rect id="skew-x-rectangle" width="10" height="10"/></g>' +

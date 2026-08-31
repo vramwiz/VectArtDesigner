@@ -1,4 +1,4 @@
-program MifWebArtLineImport;
+﻿program MifWebArtLineImport;
 
 {$APPTYPE CONSOLE}
 
@@ -55,15 +55,15 @@ begin
       SameValue(Line.EndPoint.Y, 456.0, 0.01), 'Line endpoints differ');
     Require(SameValue(Line.StrokeWidth, 100.0, 0.000001),
       'Line stroke width differs');
-    Require(Line.MifStrokeStyle = vssLongDash, 'Line stroke style differs');
+    Require(Line.StrokeStyle = vssLongDash, 'Line stroke style differs');
     Require(Line.LineCap = vlcRound, 'Line cap differs');
     Require(Line.LineJoin = vljRound, 'Line join differs');
-    Require(Line.MifAntiAlias, 'Line anti-alias differs');
-    Require(Line.MifEndMarker = vlmStar, 'Line end marker differs');
-    Require(Line.MifStartMarker = vlmOpenArrow, 'Line start marker differs');
-    Require(SameValue(Line.MifEndMarkerSize, 11.0),
+    Require(Line.AntiAlias, 'Line anti-alias differs');
+    Require(Line.EndMarker = vlmStar, 'Line end marker differs');
+    Require(Line.StartMarker = vlmOpenArrow, 'Line start marker differs');
+    Require(SameValue(Line.EndMarkerSize, 11.0),
       'Line end marker size differs');
-    Require(SameValue(Line.MifStartMarkerSize, 11.0),
+    Require(SameValue(Line.StartMarkerSize, 11.0),
       'Line start marker size differs');
     Require(ColorToRGB(Line.StrokeColor) = ColorToRGB(clBlack),
       'Line stroke color differs');

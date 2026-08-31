@@ -1,5 +1,5 @@
 ﻿// 回転を持つ図形の四隅、外接範囲、座標変換を共通計算する。
-// MIF互換の線端マーカー形状生成もこの座標計算へ集約する。
+// 線端マーカー形状の生成もこの座標計算へ集約する。
 unit VectArtDesignerGeometry;
 
 interface
@@ -30,7 +30,7 @@ function PointInRotatedRectangle(const Point: TPointF; const Bounds: TRectF;
 function PointInPolygon(const Point: TPointF;
   const Polygon: TArray<TPointF>): Boolean;
 // MIFマーカー番号、線幅、倍率から描画用の点列と閉領域情報を生成する。
-function BuildMifLineMarkerGeometry(MarkerKind: Integer; const Tip,
+function BuildLineMarkerGeometry(MarkerKind: Integer; const Tip,
   InsidePoint: TPointF; StrokeWidth, MarkerSize: Single): TVectArtMarkerGeometry;
 
 implementation
@@ -144,7 +144,7 @@ begin
   end;
 end;
 
-function BuildMifLineMarkerGeometry(MarkerKind: Integer; const Tip,
+function BuildLineMarkerGeometry(MarkerKind: Integer; const Tip,
   InsidePoint: TPointF; StrokeWidth, MarkerSize: Single): TVectArtMarkerGeometry;
 var
   Angle: Double;

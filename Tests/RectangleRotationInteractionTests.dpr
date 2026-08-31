@@ -61,7 +61,7 @@ begin
     Data.Opacity := 1.0;
     Data.RotationDegrees := 0.0;
     Data.StrokeColor := clBlack;
-    Data.MifStrokeStyle := vssSolid;
+    Data.StrokeStyle := vssSolid;
     Data.StrokeWidth := 0.0;
     Data.Visible := True;
     Document.InsertRectangle(1, Data);

@@ -1,5 +1,5 @@
-// Lineの作成初期値と選択中Lineの装飾を詳細パネルから編集し、Documentと履歴へ同期する。
-// 現在はMIF互換の線装飾パネルを担当し、標準モード用GUIは別Controlへ分離する。
+﻿// Lineの作成初期値と選択中Lineの装飾を詳細パネルから編集し、Documentと履歴へ同期する。
+// MIFで扱える線装飾を編集するツールバーパネルを提供する。
 unit VectArtDesignerLineToolbar;
 
 interface
@@ -15,20 +15,20 @@ type
   TVectArtLineToolbarControl = class(TCustomControl)
   private
     FDocument: TVectArtDocument;
-    FMifAntiAliasButton: TVectArtMifAntiAliasButton;
+    FAntiAliasButton: TVectArtAntiAliasButton;
     FApplicationEvents: TApplicationEvents;
     FDetailsButton: TVectArtDarkButton;
     FDetailsPanel: TPanel;
     FEditHistory: TVectArtEditHistory;
     FEditorState: TVectArtEditorState;
-    FMifEndMarkerCombo: TVectArtMifLineMarkerCombo;
-    FMifEndMarkerSizeTrackBar: THorizontalTrackBarControl;
-    FMifEndMarkerSizeLabel: TLabel;
-    FMifStartMarkerCombo: TVectArtMifLineMarkerCombo;
-    FMifStartMarkerSizeTrackBar: THorizontalTrackBarControl;
-    FMifStartMarkerSizeLabel: TLabel;
+    FEndMarkerCombo: TVectArtLineMarkerCombo;
+    FEndMarkerSizeTrackBar: THorizontalTrackBarControl;
+    FEndMarkerSizeLabel: TLabel;
+    FStartMarkerCombo: TVectArtLineMarkerCombo;
+    FStartMarkerSizeTrackBar: THorizontalTrackBarControl;
+    FStartMarkerSizeLabel: TLabel;
     FContextText: string;
-    FMifStrokeStyleCombo: TVectArtMifStrokeStyleCombo;
+    FStrokeStyleCombo: TVectArtStrokeStyleCombo;
     FLineCapButtons: array[TVectArtLineCap] of TVectArtLineCapButton;
     FLineJoinButtons: array[TVectArtLineJoin] of TVectArtLineJoinButton;
     FStrokeWidthTrackBar: THorizontalTrackBarControl;
@@ -45,7 +45,7 @@ type
     FUpdating: Boolean;
     procedure ApplyStrokeWidthInternal(Value: Single;
       RecordHistory: Boolean);
-    procedure ApplyMarkerSizeInternal(MifStartMarker: Boolean; Value: Single;
+    procedure ApplyMarkerSizeInternal(StartMarker: Boolean; Value: Single;
       RecordHistory: Boolean);
     procedure ApplicationIdle(Sender: TObject; var Done: Boolean);
     procedure BuildControls;
@@ -58,9 +58,9 @@ type
     function IsDetailsControl(Control: TControl): Boolean;
     procedure LineCapClick(Sender: TObject);
     procedure LineJoinClick(Sender: TObject);
-    procedure MifAntiAliasClick(Sender: TObject);
-    procedure MifEndMarkerChanged(Sender: TObject);
-    procedure MifStartMarkerChanged(Sender: TObject);
+    procedure AntiAliasClick(Sender: TObject);
+    procedure EndMarkerChanged(Sender: TObject);
+    procedure StartMarkerChanged(Sender: TObject);
     procedure MarkerSizeChanged(Sender: TObject);
     procedure MarkerSizeMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
@@ -83,19 +83,19 @@ type
     // 作成初期値または選択中の全Lineへ線端形状を適用し、必要なら履歴へ記録する。
     procedure ApplyLineCap(Value: TVectArtLineCap);
     // 作成初期値または選択中の全Lineへアンチエイリアス設定を適用する。
-    procedure ApplyLineMifAntiAlias(Value: Boolean);
+    procedure ApplyLineAntiAlias(Value: Boolean);
     // 作成初期値または選択中の全Lineへ終点マーカーを適用する。
-    procedure ApplyLineMifEndMarker(Value: TVectArtMifLineMarker);
+    procedure ApplyLineEndMarker(Value: TVectArtLineMarker);
     // 作成初期値または選択中の全Lineへ始点マーカーを適用する。
-    procedure ApplyLineMifStartMarker(Value: TVectArtMifLineMarker);
+    procedure ApplyLineStartMarker(Value: TVectArtLineMarker);
     // 作成初期値または選択中の全Lineへ終点マーカーサイズを適用する。
-    procedure ApplyLineMifEndMarkerSize(Value: Single);
+    procedure ApplyLineEndMarkerSize(Value: Single);
     // 作成初期値または選択中の全Lineへ始点マーカーサイズを適用する。
-    procedure ApplyLineMifStartMarkerSize(Value: Single);
+    procedure ApplyLineStartMarkerSize(Value: Single);
     // 作成初期値または選択中の全Lineへ接合形式を適用する。
     procedure ApplyLineJoin(Value: TVectArtLineJoin);
     // 作成初期値または選択中の全Lineへ線種を適用する。
-    procedure ApplyMifStrokeStyle(Value: TVectArtMifStrokeStyle);
+    procedure ApplyStrokeStyle(Value: TVectArtStrokeStyle);
     // 作成初期値または選択中の全Lineへ線幅を適用する。
     procedure ApplyStrokeWidth(Value: Single);
     // EditorStateと現在選択から表示値、混在状態、有効状態を再同期する。
@@ -108,23 +108,23 @@ type
     // 指定した接合形式の選択ボタンを返す。戻り値の所有権はSelfが保持する。
     function LineJoinButton(Value: TVectArtLineJoin): TVectArtLineJoinButton;
     property DetailsButton: TVectArtDarkButton read FDetailsButton;
-    property MifAntiAliasButton: TVectArtMifAntiAliasButton read FMifAntiAliasButton;
+    property AntiAliasButton: TVectArtAntiAliasButton read FAntiAliasButton;
     property DetailsPanel: TPanel read FDetailsPanel;
     property EditHistory: TVectArtEditHistory read FEditHistory
       write FEditHistory;
     property EditorState: TVectArtEditorState read FEditorState
       write FEditorState;
-    property MifStrokeStyleCombo: TVectArtMifStrokeStyleCombo
-      read FMifStrokeStyleCombo;
+    property StrokeStyleCombo: TVectArtStrokeStyleCombo
+      read FStrokeStyleCombo;
     property StrokeWidthTrackBar: THorizontalTrackBarControl
       read FStrokeWidthTrackBar;
     property StrokeWidthEdit: TEdit read FStrokeWidthEdit;
-    property MifEndMarkerSizeTrackBar: THorizontalTrackBarControl
-      read FMifEndMarkerSizeTrackBar;
-    property MifStartMarkerSizeTrackBar: THorizontalTrackBarControl
-      read FMifStartMarkerSizeTrackBar;
-    property MifEndMarkerCombo: TVectArtMifLineMarkerCombo read FMifEndMarkerCombo;
-    property MifStartMarkerCombo: TVectArtMifLineMarkerCombo read FMifStartMarkerCombo;
+    property EndMarkerSizeTrackBar: THorizontalTrackBarControl
+      read FEndMarkerSizeTrackBar;
+    property StartMarkerSizeTrackBar: THorizontalTrackBarControl
+      read FStartMarkerSizeTrackBar;
+    property EndMarkerCombo: TVectArtLineMarkerCombo read FEndMarkerCombo;
+    property StartMarkerCombo: TVectArtLineMarkerCombo read FStartMarkerCombo;
   end;
 
 implementation
@@ -225,16 +225,16 @@ begin
   FStrokeWidthEdit.OnExit := EditExit;
   FStrokeWidthEdit.OnKeyDown := EditKeyDown;
 
-  FMifStrokeStyleCombo := TVectArtMifStrokeStyleCombo.Create(Self);
-  FMifStrokeStyleCombo.Parent := Self;
-  FMifStrokeStyleCombo.Style := csOwnerDrawFixed;
-  FMifStrokeStyleCombo.ItemHeight := 22;
-  FMifStrokeStyleCombo.DropDownCount := 9;
-  FMifStrokeStyleCombo.Color := COLOR_EDIT;
-  FMifStrokeStyleCombo.Font.Color := COLOR_TEXT;
-  FMifStrokeStyleCombo.Font.Name := 'Segoe UI';
-  FMifStrokeStyleCombo.Font.Height := -12;
-  FMifStrokeStyleCombo.OnChange := StyleChanged;
+  FStrokeStyleCombo := TVectArtStrokeStyleCombo.Create(Self);
+  FStrokeStyleCombo.Parent := Self;
+  FStrokeStyleCombo.Style := csOwnerDrawFixed;
+  FStrokeStyleCombo.ItemHeight := 22;
+  FStrokeStyleCombo.DropDownCount := 9;
+  FStrokeStyleCombo.Color := COLOR_EDIT;
+  FStrokeStyleCombo.Font.Color := COLOR_TEXT;
+  FStrokeStyleCombo.Font.Name := 'Segoe UI';
+  FStrokeStyleCombo.Font.Height := -12;
+  FStrokeStyleCombo.OnChange := StyleChanged;
 
   FDetailsButton := TVectArtDarkButton.Create(Self);
   FDetailsButton.Parent := Self;
@@ -254,8 +254,8 @@ begin
   FStrokeWidthTrackBar.SetBounds(78, 3, 190, 34);
   FStrokeWidthEdit.Parent := FDetailsPanel;
   FStrokeWidthEdit.SetBounds(278, 8, 60, 25);
-  FMifStrokeStyleCombo.Parent := FDetailsPanel;
-  FMifStrokeStyleCombo.SetBounds(78, 47, 260, 25);
+  FStrokeStyleCombo.Parent := FDetailsPanel;
+  FStrokeStyleCombo.SetBounds(78, 47, 260, 25);
 
   CaptionLabel := TLabel.Create(Self);
   CaptionLabel.Parent := FDetailsPanel;
@@ -326,12 +326,12 @@ begin
   CaptionLabel.Font.Color := COLOR_LABEL;
   CaptionLabel.SetBounds(12, 188, 104, 20);
 
-  FMifAntiAliasButton := TVectArtMifAntiAliasButton.Create(Self);
-  FMifAntiAliasButton.Parent := FDetailsPanel;
-  FMifAntiAliasButton.Caption := 'AA';
-  FMifAntiAliasButton.SetBounds(170, 179, 40, 28);
-  FMifAntiAliasButton.Selected := True;
-  FMifAntiAliasButton.OnClick := MifAntiAliasClick;
+  FAntiAliasButton := TVectArtAntiAliasButton.Create(Self);
+  FAntiAliasButton.Parent := FDetailsPanel;
+  FAntiAliasButton.Caption := 'AA';
+  FAntiAliasButton.SetBounds(170, 179, 40, 28);
+  FAntiAliasButton.Selected := True;
+  FAntiAliasButton.OnClick := AntiAliasClick;
 
   CaptionLabel := TLabel.Create(Self);
   CaptionLabel.Parent := FDetailsPanel;
@@ -340,40 +340,40 @@ begin
   CaptionLabel.Font.Height := -12;
   CaptionLabel.Font.Color := COLOR_LABEL;
   CaptionLabel.SetBounds(12, 229, 60, 20);
-  FMifStartMarkerCombo := TVectArtMifLineMarkerCombo.Create(Self);
-  FMifStartMarkerCombo.Parent := FDetailsPanel;
-  FMifStartMarkerCombo.Style := csOwnerDrawFixed;
-  FMifStartMarkerCombo.ItemHeight := 24;
-  FMifStartMarkerCombo.DropDownCount := 10;
-  FMifStartMarkerCombo.Color := COLOR_EDIT;
-  FMifStartMarkerCombo.Font.Color := COLOR_TEXT;
-  FMifStartMarkerCombo.SetBounds(78, 221, 86, 27);
-  FMifStartMarkerCombo.OnChange := MifStartMarkerChanged;
+  FStartMarkerCombo := TVectArtLineMarkerCombo.Create(Self);
+  FStartMarkerCombo.Parent := FDetailsPanel;
+  FStartMarkerCombo.Style := csOwnerDrawFixed;
+  FStartMarkerCombo.ItemHeight := 24;
+  FStartMarkerCombo.DropDownCount := 10;
+  FStartMarkerCombo.Color := COLOR_EDIT;
+  FStartMarkerCombo.Font.Color := COLOR_TEXT;
+  FStartMarkerCombo.SetBounds(78, 221, 86, 27);
+  FStartMarkerCombo.OnChange := StartMarkerChanged;
 
-  FMifStartMarkerSizeTrackBar := THorizontalTrackBarControl.Create(Self);
-  FMifStartMarkerSizeTrackBar.Parent := FDetailsPanel;
-  FMifStartMarkerSizeTrackBar.BackgroundColor := COLOR_BACKGROUND;
-  FMifStartMarkerSizeTrackBar.ChannelColor := TColor($00505050);
-  FMifStartMarkerSizeTrackBar.FillColor := TColor($00D77800);
-  FMifStartMarkerSizeTrackBar.ThumbColor := COLOR_EDIT;
-  FMifStartMarkerSizeTrackBar.ThumbBorderColor := COLOR_TEXT;
-  FMifStartMarkerSizeTrackBar.ShowTicks := False;
-  FMifStartMarkerSizeTrackBar.SetRange(MARKER_SIZE_TRACK_MIN,
+  FStartMarkerSizeTrackBar := THorizontalTrackBarControl.Create(Self);
+  FStartMarkerSizeTrackBar.Parent := FDetailsPanel;
+  FStartMarkerSizeTrackBar.BackgroundColor := COLOR_BACKGROUND;
+  FStartMarkerSizeTrackBar.ChannelColor := TColor($00505050);
+  FStartMarkerSizeTrackBar.FillColor := TColor($00D77800);
+  FStartMarkerSizeTrackBar.ThumbColor := COLOR_EDIT;
+  FStartMarkerSizeTrackBar.ThumbBorderColor := COLOR_TEXT;
+  FStartMarkerSizeTrackBar.ShowTicks := False;
+  FStartMarkerSizeTrackBar.SetRange(MARKER_SIZE_TRACK_MIN,
     MARKER_SIZE_TRACK_MAX);
-  FMifStartMarkerSizeTrackBar.Position := 4;
-  FMifStartMarkerSizeTrackBar.SmallChange := 1;
-  FMifStartMarkerSizeTrackBar.LargeChange := 5;
-  FMifStartMarkerSizeTrackBar.SetBounds(172, 219, 170, 30);
-  FMifStartMarkerSizeTrackBar.OnChange := MarkerSizeChanged;
-  FMifStartMarkerSizeTrackBar.OnMouseDown := MarkerSizeMouseDown;
-  FMifStartMarkerSizeTrackBar.OnMouseUp := MarkerSizeMouseUp;
-  FMifStartMarkerSizeLabel := TLabel.Create(Self);
-  FMifStartMarkerSizeLabel.Parent := FDetailsPanel;
-  FMifStartMarkerSizeLabel.Font.Name := 'Segoe UI';
-  FMifStartMarkerSizeLabel.Font.Height := -12;
-  FMifStartMarkerSizeLabel.Font.Color := COLOR_TEXT;
-  FMifStartMarkerSizeLabel.SetBounds(352, 227, 50, 20);
-  FMifStartMarkerSizeLabel.Caption := ': 4';
+  FStartMarkerSizeTrackBar.Position := 4;
+  FStartMarkerSizeTrackBar.SmallChange := 1;
+  FStartMarkerSizeTrackBar.LargeChange := 5;
+  FStartMarkerSizeTrackBar.SetBounds(172, 219, 170, 30);
+  FStartMarkerSizeTrackBar.OnChange := MarkerSizeChanged;
+  FStartMarkerSizeTrackBar.OnMouseDown := MarkerSizeMouseDown;
+  FStartMarkerSizeTrackBar.OnMouseUp := MarkerSizeMouseUp;
+  FStartMarkerSizeLabel := TLabel.Create(Self);
+  FStartMarkerSizeLabel.Parent := FDetailsPanel;
+  FStartMarkerSizeLabel.Font.Name := 'Segoe UI';
+  FStartMarkerSizeLabel.Font.Height := -12;
+  FStartMarkerSizeLabel.Font.Color := COLOR_TEXT;
+  FStartMarkerSizeLabel.SetBounds(352, 227, 50, 20);
+  FStartMarkerSizeLabel.Caption := ': 4';
 
   CaptionLabel := TLabel.Create(Self);
   CaptionLabel.Parent := FDetailsPanel;
@@ -382,40 +382,40 @@ begin
   CaptionLabel.Font.Height := -12;
   CaptionLabel.Font.Color := COLOR_LABEL;
   CaptionLabel.SetBounds(12, 271, 60, 20);
-  FMifEndMarkerCombo := TVectArtMifLineMarkerCombo.Create(Self);
-  FMifEndMarkerCombo.Parent := FDetailsPanel;
-  FMifEndMarkerCombo.Style := csOwnerDrawFixed;
-  FMifEndMarkerCombo.ItemHeight := 24;
-  FMifEndMarkerCombo.DropDownCount := 10;
-  FMifEndMarkerCombo.Color := COLOR_EDIT;
-  FMifEndMarkerCombo.Font.Color := COLOR_TEXT;
-  FMifEndMarkerCombo.SetBounds(78, 263, 86, 27);
-  FMifEndMarkerCombo.OnChange := MifEndMarkerChanged;
+  FEndMarkerCombo := TVectArtLineMarkerCombo.Create(Self);
+  FEndMarkerCombo.Parent := FDetailsPanel;
+  FEndMarkerCombo.Style := csOwnerDrawFixed;
+  FEndMarkerCombo.ItemHeight := 24;
+  FEndMarkerCombo.DropDownCount := 10;
+  FEndMarkerCombo.Color := COLOR_EDIT;
+  FEndMarkerCombo.Font.Color := COLOR_TEXT;
+  FEndMarkerCombo.SetBounds(78, 263, 86, 27);
+  FEndMarkerCombo.OnChange := EndMarkerChanged;
 
-  FMifEndMarkerSizeTrackBar := THorizontalTrackBarControl.Create(Self);
-  FMifEndMarkerSizeTrackBar.Parent := FDetailsPanel;
-  FMifEndMarkerSizeTrackBar.BackgroundColor := COLOR_BACKGROUND;
-  FMifEndMarkerSizeTrackBar.ChannelColor := TColor($00505050);
-  FMifEndMarkerSizeTrackBar.FillColor := TColor($00D77800);
-  FMifEndMarkerSizeTrackBar.ThumbColor := COLOR_EDIT;
-  FMifEndMarkerSizeTrackBar.ThumbBorderColor := COLOR_TEXT;
-  FMifEndMarkerSizeTrackBar.ShowTicks := False;
-  FMifEndMarkerSizeTrackBar.SetRange(MARKER_SIZE_TRACK_MIN,
+  FEndMarkerSizeTrackBar := THorizontalTrackBarControl.Create(Self);
+  FEndMarkerSizeTrackBar.Parent := FDetailsPanel;
+  FEndMarkerSizeTrackBar.BackgroundColor := COLOR_BACKGROUND;
+  FEndMarkerSizeTrackBar.ChannelColor := TColor($00505050);
+  FEndMarkerSizeTrackBar.FillColor := TColor($00D77800);
+  FEndMarkerSizeTrackBar.ThumbColor := COLOR_EDIT;
+  FEndMarkerSizeTrackBar.ThumbBorderColor := COLOR_TEXT;
+  FEndMarkerSizeTrackBar.ShowTicks := False;
+  FEndMarkerSizeTrackBar.SetRange(MARKER_SIZE_TRACK_MIN,
     MARKER_SIZE_TRACK_MAX);
-  FMifEndMarkerSizeTrackBar.Position := 4;
-  FMifEndMarkerSizeTrackBar.SmallChange := 1;
-  FMifEndMarkerSizeTrackBar.LargeChange := 5;
-  FMifEndMarkerSizeTrackBar.SetBounds(172, 261, 170, 30);
-  FMifEndMarkerSizeTrackBar.OnChange := MarkerSizeChanged;
-  FMifEndMarkerSizeTrackBar.OnMouseDown := MarkerSizeMouseDown;
-  FMifEndMarkerSizeTrackBar.OnMouseUp := MarkerSizeMouseUp;
-  FMifEndMarkerSizeLabel := TLabel.Create(Self);
-  FMifEndMarkerSizeLabel.Parent := FDetailsPanel;
-  FMifEndMarkerSizeLabel.Font.Name := 'Segoe UI';
-  FMifEndMarkerSizeLabel.Font.Height := -12;
-  FMifEndMarkerSizeLabel.Font.Color := COLOR_TEXT;
-  FMifEndMarkerSizeLabel.SetBounds(352, 269, 50, 20);
-  FMifEndMarkerSizeLabel.Caption := ': 4';
+  FEndMarkerSizeTrackBar.Position := 4;
+  FEndMarkerSizeTrackBar.SmallChange := 1;
+  FEndMarkerSizeTrackBar.LargeChange := 5;
+  FEndMarkerSizeTrackBar.SetBounds(172, 261, 170, 30);
+  FEndMarkerSizeTrackBar.OnChange := MarkerSizeChanged;
+  FEndMarkerSizeTrackBar.OnMouseDown := MarkerSizeMouseDown;
+  FEndMarkerSizeTrackBar.OnMouseUp := MarkerSizeMouseUp;
+  FEndMarkerSizeLabel := TLabel.Create(Self);
+  FEndMarkerSizeLabel.Parent := FDetailsPanel;
+  FEndMarkerSizeLabel.Font.Name := 'Segoe UI';
+  FEndMarkerSizeLabel.Font.Height := -12;
+  FEndMarkerSizeLabel.Font.Color := COLOR_TEXT;
+  FEndMarkerSizeLabel.SetBounds(352, 269, 50, 20);
+  FEndMarkerSizeLabel.Caption := ': 4';
 end;
 
 procedure TVectArtLineToolbarControl.ApplyLineCap(Value: TVectArtLineCap);
@@ -464,7 +464,7 @@ begin
   RefreshState;
 end;
 
-procedure TVectArtLineToolbarControl.ApplyLineMifAntiAlias(Value: Boolean);
+procedure TVectArtLineToolbarControl.ApplyLineAntiAlias(Value: Boolean);
 var
   Command: TVectArtCompoundCommand;
   I: Integer;
@@ -487,12 +487,12 @@ begin
       for I := 0 to High(Indices) do
       begin
         Layer := TVectArtLineLayer(FDocument[Indices[I]]);
-        if Layer.MifAntiAlias = Value then
+        if Layer.AntiAlias = Value then
           Continue;
         if Command <> nil then
-          Command.Add(TVectArtLineMifAntiAliasCommand.Create(FDocument,
-            Indices[I], Layer.MifAntiAlias, Value));
-        FDocument.SetLineMifAntiAlias(Indices[I], Value);
+          Command.Add(TVectArtLineAntiAliasCommand.Create(FDocument,
+            Indices[I], Layer.AntiAlias, Value));
+        FDocument.SetLineAntiAlias(Indices[I], Value);
       end;
     finally
       if FDocument <> nil then
@@ -503,15 +503,15 @@ begin
     else
       Command.Free;
     if FEditorState <> nil then
-      FEditorState.LineMifAntiAlias := Value;
+      FEditorState.LineAntiAlias := Value;
   finally
     FUpdating := False;
   end;
   RefreshState;
 end;
 
-procedure TVectArtLineToolbarControl.ApplyLineMifEndMarker(
-  Value: TVectArtMifLineMarker);
+procedure TVectArtLineToolbarControl.ApplyLineEndMarker(
+  Value: TVectArtLineMarker);
 var
   Command: TVectArtCompoundCommand;
   I: Integer;
@@ -531,11 +531,11 @@ begin
       for I := 0 to High(Indices) do
       begin
         Layer := TVectArtLineLayer(FDocument[Indices[I]]);
-        if Layer.MifEndMarker = Value then Continue;
+        if Layer.EndMarker = Value then Continue;
         if Command <> nil then
-          Command.Add(TVectArtLineMifEndMarkerCommand.Create(FDocument,
-            Indices[I], Layer.MifEndMarker, Value));
-        FDocument.SetLineMifEndMarker(Indices[I], Value);
+          Command.Add(TVectArtLineEndMarkerCommand.Create(FDocument,
+            Indices[I], Layer.EndMarker, Value));
+        FDocument.SetLineEndMarker(Indices[I], Value);
       end;
     finally
       if FDocument <> nil then FDocument.EndUpdate;
@@ -544,15 +544,15 @@ begin
       FEditHistory.AddApplied(Command)
     else
       Command.Free;
-    if FEditorState <> nil then FEditorState.LineMifEndMarker := Value;
+    if FEditorState <> nil then FEditorState.LineEndMarker := Value;
   finally
     FUpdating := False;
   end;
   RefreshState;
 end;
 
-procedure TVectArtLineToolbarControl.ApplyLineMifStartMarker(
-  Value: TVectArtMifLineMarker);
+procedure TVectArtLineToolbarControl.ApplyLineStartMarker(
+  Value: TVectArtLineMarker);
 var
   Command: TVectArtCompoundCommand;
   I: Integer;
@@ -572,11 +572,11 @@ begin
       for I := 0 to High(Indices) do
       begin
         Layer := TVectArtLineLayer(FDocument[Indices[I]]);
-        if Layer.MifStartMarker = Value then Continue;
+        if Layer.StartMarker = Value then Continue;
         if Command <> nil then
-          Command.Add(TVectArtLineMifStartMarkerCommand.Create(FDocument,
-            Indices[I], Layer.MifStartMarker, Value));
-        FDocument.SetLineMifStartMarker(Indices[I], Value);
+          Command.Add(TVectArtLineStartMarkerCommand.Create(FDocument,
+            Indices[I], Layer.StartMarker, Value));
+        FDocument.SetLineStartMarker(Indices[I], Value);
       end;
     finally
       if FDocument <> nil then FDocument.EndUpdate;
@@ -585,7 +585,7 @@ begin
       FEditHistory.AddApplied(Command)
     else
       Command.Free;
-    if FEditorState <> nil then FEditorState.LineMifStartMarker := Value;
+    if FEditorState <> nil then FEditorState.LineStartMarker := Value;
   finally
     FUpdating := False;
   end;
@@ -638,8 +638,8 @@ begin
   RefreshState;
 end;
 
-procedure TVectArtLineToolbarControl.ApplyMifStrokeStyle(
-  Value: TVectArtMifStrokeStyle);
+procedure TVectArtLineToolbarControl.ApplyStrokeStyle(
+  Value: TVectArtStrokeStyle);
 var
   Command: TVectArtCompoundCommand;
   I: Integer;
@@ -659,11 +659,11 @@ begin
     for I := 0 to High(Indices) do
     begin
       Layer := TVectArtLineLayer(FDocument[Indices[I]]);
-      if Layer.MifStrokeStyle = Value then
+      if Layer.StrokeStyle = Value then
         Continue;
       if Command <> nil then
         Command.Add(TVectArtStrokeCommand.Create(FDocument, Indices[I],
-          Layer.StrokeColor, Layer.StrokeWidth, Layer.MifStrokeStyle,
+          Layer.StrokeColor, Layer.StrokeWidth, Layer.StrokeStyle,
           Layer.StrokeColor, Layer.StrokeWidth, Value));
       FDocument.SetLineStroke(Indices[I], Layer.StrokeColor,
         Layer.StrokeWidth, Value);
@@ -673,7 +673,7 @@ begin
     else
       Command.Free;
     if FEditorState <> nil then
-      FEditorState.LineMifStrokeStyle := Value;
+      FEditorState.LineStrokeStyle := Value;
   finally
     FUpdating := False;
   end;
@@ -685,18 +685,18 @@ begin
   ApplyStrokeWidthInternal(Value, True);
 end;
 
-procedure TVectArtLineToolbarControl.ApplyLineMifEndMarkerSize(Value: Single);
+procedure TVectArtLineToolbarControl.ApplyLineEndMarkerSize(Value: Single);
 begin
   ApplyMarkerSizeInternal(False, Value, True);
 end;
 
-procedure TVectArtLineToolbarControl.ApplyLineMifStartMarkerSize(Value: Single);
+procedure TVectArtLineToolbarControl.ApplyLineStartMarkerSize(Value: Single);
 begin
   ApplyMarkerSizeInternal(True, Value, True);
 end;
 
 procedure TVectArtLineToolbarControl.ApplyMarkerSizeInternal(
-  MifStartMarker: Boolean; Value: Single; RecordHistory: Boolean);
+  StartMarker: Boolean; Value: Single; RecordHistory: Boolean);
 var
   Command: TVectArtCompoundCommand;
   I: Integer;
@@ -718,16 +718,16 @@ begin
       for I := 0 to High(Indices) do
       begin
         Layer := TVectArtLineLayer(FDocument[Indices[I]]);
-        if MifStartMarker then OldValue := Layer.MifStartMarkerSize
-        else OldValue := Layer.MifEndMarkerSize;
+        if StartMarker then OldValue := Layer.StartMarkerSize
+        else OldValue := Layer.EndMarkerSize;
         if SameValue(OldValue, Value) then Continue;
         if Command <> nil then
-          Command.Add(TVectArtMifLineMarkerSizeCommand.Create(FDocument,
-            Indices[I], MifStartMarker, OldValue, Value));
-        if MifStartMarker then
-          FDocument.SetLineMifStartMarkerSize(Indices[I], Value)
+          Command.Add(TVectArtLineMarkerSizeCommand.Create(FDocument,
+            Indices[I], StartMarker, OldValue, Value));
+        if StartMarker then
+          FDocument.SetLineStartMarkerSize(Indices[I], Value)
         else
-          FDocument.SetLineMifEndMarkerSize(Indices[I], Value);
+          FDocument.SetLineEndMarkerSize(Indices[I], Value);
       end;
     finally
       if FDocument <> nil then FDocument.EndUpdate;
@@ -738,8 +738,8 @@ begin
       Command.Free;
     if (FEditorState <> nil) and
       (RecordHistory or (Length(Indices) = 0)) then
-      if MifStartMarker then FEditorState.LineMifStartMarkerSize := Value
-      else FEditorState.LineMifEndMarkerSize := Value;
+      if StartMarker then FEditorState.LineStartMarkerSize := Value
+      else FEditorState.LineEndMarkerSize := Value;
   finally
     FUpdating := False;
   end;
@@ -776,10 +776,10 @@ begin
           Continue;
         if Command <> nil then
           Command.Add(TVectArtStrokeCommand.Create(FDocument, Indices[I],
-            Layer.StrokeColor, Layer.StrokeWidth, Layer.MifStrokeStyle,
-            Layer.StrokeColor, Value, Layer.MifStrokeStyle));
+            Layer.StrokeColor, Layer.StrokeWidth, Layer.StrokeStyle,
+            Layer.StrokeColor, Value, Layer.StrokeStyle));
         FDocument.SetLineStroke(Indices[I], Layer.StrokeColor, Value,
-          Layer.MifStrokeStyle);
+          Layer.StrokeStyle);
       end;
     finally
       if FDocument <> nil then
@@ -828,8 +828,8 @@ begin
       if SameValue(FTrackStartWidths[I], Layer.StrokeWidth) then
         Continue;
       Command.Add(TVectArtStrokeCommand.Create(FDocument, Index,
-        Layer.StrokeColor, FTrackStartWidths[I], Layer.MifStrokeStyle,
-        Layer.StrokeColor, Layer.StrokeWidth, Layer.MifStrokeStyle));
+        Layer.StrokeColor, FTrackStartWidths[I], Layer.StrokeStyle,
+        Layer.StrokeColor, Layer.StrokeWidth, Layer.StrokeStyle));
     end;
   if (Command <> nil) and (Command.Count > 0) then
     FEditHistory.AddApplied(Command)
@@ -870,11 +870,11 @@ begin
       FDocument.LayerCount - 1) or
       not (FDocument[Index] is TVectArtLineLayer) then Continue;
     Layer := TVectArtLineLayer(FDocument[Index]);
-    if FMarkerTrackIsStart then CurrentValue := Layer.MifStartMarkerSize
-    else CurrentValue := Layer.MifEndMarkerSize;
+    if FMarkerTrackIsStart then CurrentValue := Layer.StartMarkerSize
+    else CurrentValue := Layer.EndMarkerSize;
     if SameValue(FMarkerTrackStartSizes[I], CurrentValue) then Continue;
     if Command <> nil then
-      Command.Add(TVectArtMifLineMarkerSizeCommand.Create(FDocument, Index,
+      Command.Add(TVectArtLineMarkerSizeCommand.Create(FDocument, Index,
         FMarkerTrackIsStart, FMarkerTrackStartSizes[I], CurrentValue));
   end;
   if (Command <> nil) and (Command.Count > 0) then
@@ -955,23 +955,23 @@ begin
   ApplyLineCap(TVectArtLineCapButton(Sender).LineCap);
 end;
 
-procedure TVectArtLineToolbarControl.MifAntiAliasClick(Sender: TObject);
+procedure TVectArtLineToolbarControl.AntiAliasClick(Sender: TObject);
 begin
   if FUpdating then
     Exit;
-  ApplyLineMifAntiAlias(not FMifAntiAliasButton.Selected);
+  ApplyLineAntiAlias(not FAntiAliasButton.Selected);
 end;
 
-procedure TVectArtLineToolbarControl.MifEndMarkerChanged(Sender: TObject);
+procedure TVectArtLineToolbarControl.EndMarkerChanged(Sender: TObject);
 begin
-  if FUpdating or (FMifEndMarkerCombo.ItemIndex < 0) then Exit;
-  ApplyLineMifEndMarker(FMifEndMarkerCombo.SelectedMarker);
+  if FUpdating or (FEndMarkerCombo.ItemIndex < 0) then Exit;
+  ApplyLineEndMarker(FEndMarkerCombo.SelectedMarker);
 end;
 
-procedure TVectArtLineToolbarControl.MifStartMarkerChanged(Sender: TObject);
+procedure TVectArtLineToolbarControl.StartMarkerChanged(Sender: TObject);
 begin
-  if FUpdating or (FMifStartMarkerCombo.ItemIndex < 0) then Exit;
-  ApplyLineMifStartMarker(FMifStartMarkerCombo.SelectedMarker);
+  if FUpdating or (FStartMarkerCombo.ItemIndex < 0) then Exit;
+  ApplyLineStartMarker(FStartMarkerCombo.SelectedMarker);
 end;
 
 procedure TVectArtLineToolbarControl.MarkerSizeChanged(Sender: TObject);
@@ -981,7 +981,7 @@ var
 begin
   if FUpdating or not (Sender is THorizontalTrackBarControl) then Exit;
   TrackBar := THorizontalTrackBarControl(Sender);
-  IsStart := TrackBar = FMifStartMarkerSizeTrackBar;
+  IsStart := TrackBar = FStartMarkerSizeTrackBar;
   ApplyMarkerSizeInternal(IsStart, TrackBar.Position,
     not FMarkerTrackGestureActive);
 end;
@@ -998,16 +998,16 @@ begin
   TrackBar := THorizontalTrackBarControl(Sender);
   if not TrackBar.Enabled then Exit;
   FMarkerTrackGestureActive := True;
-  FMarkerTrackIsStart := TrackBar = FMifStartMarkerSizeTrackBar;
+  FMarkerTrackIsStart := TrackBar = FStartMarkerSizeTrackBar;
   FMarkerTrackStartIndices := SelectedLineIndices;
   SetLength(FMarkerTrackStartSizes, Length(FMarkerTrackStartIndices));
   for I := 0 to High(FMarkerTrackStartIndices) do
   begin
     Layer := TVectArtLineLayer(FDocument[FMarkerTrackStartIndices[I]]);
     if FMarkerTrackIsStart then
-      FMarkerTrackStartSizes[I] := Layer.MifStartMarkerSize
+      FMarkerTrackStartSizes[I] := Layer.StartMarkerSize
     else
-      FMarkerTrackStartSizes[I] := Layer.MifEndMarkerSize;
+      FMarkerTrackStartSizes[I] := Layer.EndMarkerSize;
   end;
   if (Length(FMarkerTrackStartIndices) > 0) and (FDocument <> nil) then
   begin
@@ -1054,12 +1054,12 @@ end;
 
 procedure TVectArtLineToolbarControl.RefreshState;
 var
-  MifAntiAliasValue: Boolean;
-  CommonMifAntiAlias: Boolean;
-  CommonMifEndMarker: Boolean;
-  CommonMifEndMarkerSize: Boolean;
-  CommonMifStartMarker: Boolean;
-  CommonMifStartMarkerSize: Boolean;
+  AntiAliasValue: Boolean;
+  CommonAntiAlias: Boolean;
+  CommonEndMarker: Boolean;
+  CommonEndMarkerSize: Boolean;
+  CommonStartMarker: Boolean;
+  CommonStartMarkerSize: Boolean;
   CommonStyle: Boolean;
   CommonLineCap: Boolean;
   CommonLineJoin: Boolean;
@@ -1067,16 +1067,16 @@ var
   Cap: TVectArtLineCap;
   I: Integer;
   Indices: TArray<Integer>;
-  MifEndMarkerValue: TVectArtMifLineMarker;
-  MifEndMarkerSizeValue: Single;
-  MifStartMarkerValue: TVectArtMifLineMarker;
-  MifStartMarkerSizeValue: Single;
+  EndMarkerValue: TVectArtLineMarker;
+  EndMarkerSizeValue: Single;
+  StartMarkerValue: TVectArtLineMarker;
+  StartMarkerSizeValue: Single;
   Layer: TVectArtLineLayer;
   LineCapValue: TVectArtLineCap;
   LineJoinValue: TVectArtLineJoin;
   Join: TVectArtLineJoin;
   Locked: Boolean;
-  StyleValue: TVectArtMifStrokeStyle;
+  StyleValue: TVectArtStrokeStyle;
   WidthValue: Single;
 begin
   if FUpdating then
@@ -1093,20 +1093,20 @@ begin
         FContextText := Format('%d Lines', [Length(Indices)]);
       Layer := TVectArtLineLayer(FDocument[Indices[0]]);
       WidthValue := Layer.StrokeWidth;
-      MifAntiAliasValue := Layer.MifAntiAlias;
-      MifEndMarkerValue := Layer.MifEndMarker;
-      MifEndMarkerSizeValue := Layer.MifEndMarkerSize;
-      MifStartMarkerValue := Layer.MifStartMarker;
-      MifStartMarkerSizeValue := Layer.MifStartMarkerSize;
+      AntiAliasValue := Layer.AntiAlias;
+      EndMarkerValue := Layer.EndMarker;
+      EndMarkerSizeValue := Layer.EndMarkerSize;
+      StartMarkerValue := Layer.StartMarker;
+      StartMarkerSizeValue := Layer.StartMarkerSize;
       LineCapValue := Layer.LineCap;
       LineJoinValue := Layer.LineJoin;
-      StyleValue := Layer.MifStrokeStyle;
+      StyleValue := Layer.StrokeStyle;
       CommonWidth := True;
-      CommonMifAntiAlias := True;
-      CommonMifEndMarker := True;
-      CommonMifEndMarkerSize := True;
-      CommonMifStartMarker := True;
-      CommonMifStartMarkerSize := True;
+      CommonAntiAlias := True;
+      CommonEndMarker := True;
+      CommonEndMarkerSize := True;
+      CommonStartMarker := True;
+      CommonStartMarkerSize := True;
       CommonStyle := True;
       CommonLineCap := True;
       CommonLineJoin := True;
@@ -1115,17 +1115,17 @@ begin
         Layer := TVectArtLineLayer(FDocument[Indices[I]]);
         CommonWidth := CommonWidth and SameValue(Layer.StrokeWidth,
           WidthValue);
-        CommonMifAntiAlias := CommonMifAntiAlias and
-          (Layer.MifAntiAlias = MifAntiAliasValue);
-        CommonMifEndMarker := CommonMifEndMarker and
-          (Layer.MifEndMarker = MifEndMarkerValue);
-        CommonMifEndMarkerSize := CommonMifEndMarkerSize and
-          SameValue(Layer.MifEndMarkerSize, MifEndMarkerSizeValue);
-        CommonMifStartMarker := CommonMifStartMarker and
-          (Layer.MifStartMarker = MifStartMarkerValue);
-        CommonMifStartMarkerSize := CommonMifStartMarkerSize and
-          SameValue(Layer.MifStartMarkerSize, MifStartMarkerSizeValue);
-        CommonStyle := CommonStyle and (Layer.MifStrokeStyle = StyleValue);
+        CommonAntiAlias := CommonAntiAlias and
+          (Layer.AntiAlias = AntiAliasValue);
+        CommonEndMarker := CommonEndMarker and
+          (Layer.EndMarker = EndMarkerValue);
+        CommonEndMarkerSize := CommonEndMarkerSize and
+          SameValue(Layer.EndMarkerSize, EndMarkerSizeValue);
+        CommonStartMarker := CommonStartMarker and
+          (Layer.StartMarker = StartMarkerValue);
+        CommonStartMarkerSize := CommonStartMarkerSize and
+          SameValue(Layer.StartMarkerSize, StartMarkerSizeValue);
+        CommonStyle := CommonStyle and (Layer.StrokeStyle = StyleValue);
         CommonLineCap := CommonLineCap and
           (Layer.LineCap = LineCapValue);
         CommonLineJoin := CommonLineJoin and
@@ -1141,9 +1141,9 @@ begin
         Round(WidthValue * STROKE_WIDTH_SCALE), STROKE_WIDTH_TRACK_MIN,
         STROKE_WIDTH_TRACK_MAX);
       if CommonStyle then
-        FMifStrokeStyleCombo.SetPendingItemIndex(Ord(StyleValue))
+        FStrokeStyleCombo.SetPendingItemIndex(Ord(StyleValue))
       else
-        FMifStrokeStyleCombo.SetPendingItemIndex(-1);
+        FStrokeStyleCombo.SetPendingItemIndex(-1);
       if CommonLineCap then
         for Cap := Low(TVectArtLineCap) to High(TVectArtLineCap) do
           FLineCapButtons[Cap].Selected := Cap = LineCapValue
@@ -1159,37 +1159,37 @@ begin
       Locked := SelectionHasLockedLine;
       FStrokeWidthEdit.Enabled := not Locked;
       FStrokeWidthTrackBar.Enabled := not Locked;
-      FMifStrokeStyleCombo.Enabled := not Locked;
+      FStrokeStyleCombo.Enabled := not Locked;
       for Cap := Low(TVectArtLineCap) to High(TVectArtLineCap) do
         FLineCapButtons[Cap].Enabled := not Locked;
       for Join := Low(TVectArtLineJoin) to High(TVectArtLineJoin) do
         FLineJoinButtons[Join].Enabled := not Locked;
-      FMifAntiAliasButton.Selected := CommonMifAntiAlias and MifAntiAliasValue;
-      FMifAntiAliasButton.Enabled := not Locked;
-      FMifEndMarkerCombo.SetPendingMarker(MifEndMarkerValue, CommonMifEndMarker);
-      FMifEndMarkerCombo.Enabled := not Locked;
-      FMifStartMarkerCombo.SetPendingMarker(MifStartMarkerValue, CommonMifStartMarker);
-      FMifStartMarkerCombo.Enabled := not Locked;
-      FMifStartMarkerSizeTrackBar.Position := EnsureRange(
-        Round(MifStartMarkerSizeValue), MARKER_SIZE_TRACK_MIN,
+      FAntiAliasButton.Selected := CommonAntiAlias and AntiAliasValue;
+      FAntiAliasButton.Enabled := not Locked;
+      FEndMarkerCombo.SetPendingMarker(EndMarkerValue, CommonEndMarker);
+      FEndMarkerCombo.Enabled := not Locked;
+      FStartMarkerCombo.SetPendingMarker(StartMarkerValue, CommonStartMarker);
+      FStartMarkerCombo.Enabled := not Locked;
+      FStartMarkerSizeTrackBar.Position := EnsureRange(
+        Round(StartMarkerSizeValue), MARKER_SIZE_TRACK_MIN,
         MARKER_SIZE_TRACK_MAX);
-      FMifEndMarkerSizeTrackBar.Position := EnsureRange(
-        Round(MifEndMarkerSizeValue), MARKER_SIZE_TRACK_MIN,
+      FEndMarkerSizeTrackBar.Position := EnsureRange(
+        Round(EndMarkerSizeValue), MARKER_SIZE_TRACK_MIN,
         MARKER_SIZE_TRACK_MAX);
-      if CommonMifStartMarkerSize then
-        FMifStartMarkerSizeLabel.Caption := ': ' +
-          FormatFloat('0.##', MifStartMarkerSizeValue)
+      if CommonStartMarkerSize then
+        FStartMarkerSizeLabel.Caption := ': ' +
+          FormatFloat('0.##', StartMarkerSizeValue)
       else
-        FMifStartMarkerSizeLabel.Caption := ':';
-      if CommonMifEndMarkerSize then
-        FMifEndMarkerSizeLabel.Caption := ': ' +
-          FormatFloat('0.##', MifEndMarkerSizeValue)
+        FStartMarkerSizeLabel.Caption := ':';
+      if CommonEndMarkerSize then
+        FEndMarkerSizeLabel.Caption := ': ' +
+          FormatFloat('0.##', EndMarkerSizeValue)
       else
-        FMifEndMarkerSizeLabel.Caption := ':';
-      FMifStartMarkerSizeTrackBar.Enabled := (not Locked) and CommonMifStartMarker and
-        (MifStartMarkerValue <> vlmNone);
-      FMifEndMarkerSizeTrackBar.Enabled := (not Locked) and CommonMifEndMarker and
-        (MifEndMarkerValue <> vlmNone);
+        FEndMarkerSizeLabel.Caption := ':';
+      FStartMarkerSizeTrackBar.Enabled := (not Locked) and CommonStartMarker and
+        (StartMarkerValue <> vlmNone);
+      FEndMarkerSizeTrackBar.Enabled := (not Locked) and CommonEndMarker and
+        (EndMarkerValue <> vlmNone);
     end
     else if (FDocument <> nil) and (FDocument.SelectionCount = 0) and
       (FEditorState <> nil) and (FEditorState.CurrentTool = vetLine) then
@@ -1201,8 +1201,8 @@ begin
       FStrokeWidthTrackBar.Position := EnsureRange(
         Round(FEditorState.LineStrokeWidth * STROKE_WIDTH_SCALE),
         STROKE_WIDTH_TRACK_MIN, STROKE_WIDTH_TRACK_MAX);
-      FMifStrokeStyleCombo.SetPendingItemIndex(
-        Ord(FEditorState.LineMifStrokeStyle));
+      FStrokeStyleCombo.SetPendingItemIndex(
+        Ord(FEditorState.LineStrokeStyle));
       for Cap := Low(TVectArtLineCap) to High(TVectArtLineCap) do
       begin
         FLineCapButtons[Cap].Selected := Cap = FEditorState.LineCap;
@@ -1213,29 +1213,29 @@ begin
         FLineJoinButtons[Join].Selected := Join = FEditorState.LineJoin;
         FLineJoinButtons[Join].Enabled := True;
       end;
-      FMifAntiAliasButton.Selected := FEditorState.LineMifAntiAlias;
-      FMifAntiAliasButton.Enabled := True;
-      FMifEndMarkerCombo.SetPendingMarker(FEditorState.LineMifEndMarker, True);
-      FMifEndMarkerCombo.Enabled := True;
-      FMifStartMarkerCombo.SetPendingMarker(FEditorState.LineMifStartMarker, True);
-      FMifStartMarkerCombo.Enabled := True;
-      FMifStartMarkerSizeTrackBar.Position := EnsureRange(
-        Round(FEditorState.LineMifStartMarkerSize), MARKER_SIZE_TRACK_MIN,
+      FAntiAliasButton.Selected := FEditorState.LineAntiAlias;
+      FAntiAliasButton.Enabled := True;
+      FEndMarkerCombo.SetPendingMarker(FEditorState.LineEndMarker, True);
+      FEndMarkerCombo.Enabled := True;
+      FStartMarkerCombo.SetPendingMarker(FEditorState.LineStartMarker, True);
+      FStartMarkerCombo.Enabled := True;
+      FStartMarkerSizeTrackBar.Position := EnsureRange(
+        Round(FEditorState.LineStartMarkerSize), MARKER_SIZE_TRACK_MIN,
         MARKER_SIZE_TRACK_MAX);
-      FMifEndMarkerSizeTrackBar.Position := EnsureRange(
-        Round(FEditorState.LineMifEndMarkerSize), MARKER_SIZE_TRACK_MIN,
+      FEndMarkerSizeTrackBar.Position := EnsureRange(
+        Round(FEditorState.LineEndMarkerSize), MARKER_SIZE_TRACK_MIN,
         MARKER_SIZE_TRACK_MAX);
-      FMifStartMarkerSizeLabel.Caption := ': ' + FormatFloat('0.##',
-        FEditorState.LineMifStartMarkerSize);
-      FMifEndMarkerSizeLabel.Caption := ': ' + FormatFloat('0.##',
-        FEditorState.LineMifEndMarkerSize);
-      FMifStartMarkerSizeTrackBar.Enabled :=
-        FEditorState.LineMifStartMarker <> vlmNone;
-      FMifEndMarkerSizeTrackBar.Enabled :=
-        FEditorState.LineMifEndMarker <> vlmNone;
+      FStartMarkerSizeLabel.Caption := ': ' + FormatFloat('0.##',
+        FEditorState.LineStartMarkerSize);
+      FEndMarkerSizeLabel.Caption := ': ' + FormatFloat('0.##',
+        FEditorState.LineEndMarkerSize);
+      FStartMarkerSizeTrackBar.Enabled :=
+        FEditorState.LineStartMarker <> vlmNone;
+      FEndMarkerSizeTrackBar.Enabled :=
+        FEditorState.LineEndMarker <> vlmNone;
       FStrokeWidthEdit.Enabled := True;
       FStrokeWidthTrackBar.Enabled := True;
-      FMifStrokeStyleCombo.Enabled := True;
+      FStrokeStyleCombo.Enabled := True;
     end
     else
     begin
@@ -1284,10 +1284,10 @@ end;
 
 procedure TVectArtLineToolbarControl.StyleChanged(Sender: TObject);
 begin
-  if FUpdating or not InRange(FMifStrokeStyleCombo.ItemIndex,
-    Ord(Low(TVectArtMifStrokeStyle)), Ord(High(TVectArtMifStrokeStyle))) then
+  if FUpdating or not InRange(FStrokeStyleCombo.ItemIndex,
+    Ord(Low(TVectArtStrokeStyle)), Ord(High(TVectArtStrokeStyle))) then
     Exit;
-  ApplyMifStrokeStyle(TVectArtMifStrokeStyle(FMifStrokeStyleCombo.ItemIndex));
+  ApplyStrokeStyle(TVectArtStrokeStyle(FStrokeStyleCombo.ItemIndex));
 end;
 
 procedure TVectArtLineToolbarControl.TrackBarChanged(Sender: TObject);

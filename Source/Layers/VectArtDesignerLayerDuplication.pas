@@ -1,4 +1,4 @@
-// 同種の選択Rectangleまたは画像一式の複製、挿入、選択更新を担当する。
+﻿// 同種の選択Rectangleまたは画像一式の複製、挿入、選択更新を担当する。
 unit VectArtDesignerLayerDuplication;
 
 interface
@@ -121,7 +121,7 @@ begin
           RectangleData.Opacity := RectangleLayer.Opacity;
           RectangleData.RotationDegrees := RectangleLayer.RotationDegrees;
           RectangleData.StrokeColor := RectangleLayer.StrokeColor;
-          RectangleData.MifStrokeStyle := RectangleLayer.MifStrokeStyle;
+          RectangleData.StrokeStyle := RectangleLayer.StrokeStyle;
           RectangleData.StrokeWidth := RectangleLayer.StrokeWidth;
           RectangleData.Visible := RectangleLayer.Visible;
           DataList.Add(RectangleData);

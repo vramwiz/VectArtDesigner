@@ -1,6 +1,6 @@
-﻿// Rectangle Documentを標準SVGへ可逆保存し、対応するSVGのキャンバスと四角形を復元する。
-// 標準属性を描画情報の正本とし、SVGに表現できない編集情報だけをvad名前空間へ保持する。
-// Rectangle、Line、Path、Imageを扱い、読込後は標準編集モードを選択する。
+﻿// MIF編集モデルのDocumentをSVGへ保存し、対応するSVG要素を同じモデルへ取り込む。
+// 標準属性を描画情報の正本とし、SVGに表現できない可逆情報だけをvad名前空間へ保持する。
+// Rectangle、Line、Path、ImageだけをMIF編集モデルとして扱い、変換・無視は読込レポートへ残す。
 unit VectArtDesignerSvgDocument;
 
 interface
@@ -8,15 +8,42 @@ interface
 uses
   VectArtDesignerDocument;
 
+type
+  TSvgImportIssueKind = (siikConversion, siikIgnored);
+
+  TSvgImportIssue = record
+    Kind: TSvgImportIssueKind;
+    ElementName: string;
+    ElementId: string;
+    MessageText: string;
+  end;
+
+  TSvgImportReport = record
+  private
+    procedure AddIssue(AKind: TSvgImportIssueKind; const AElementName,
+      AElementId, AMessageText: string);
+  public
+    Issues: TArray<TSvgImportIssue>;
+    procedure Clear;
+    function HasIssues: Boolean;
+    function ToDisplayText: string;
+  end;
+
 // DocumentをUTF-8で保存可能なSVG文字列へ変換する。Documentを所有しない。
 function TryCreateVectArtSvg(Document: TVectArtDocument; out SvgText,
   ErrorMessage: string): Boolean;
-// SVG文字列から対応内容をDocumentへ適用し、標準編集モードにする。Documentを所有しない。
+// SVG文字列から対応内容をDocumentへ適用する。Documentを所有しない。
 function TryLoadVectArtDocumentFromSvg(const SvgText: string;
-  Document: TVectArtDocument; out ErrorMessage: string): Boolean;
+  Document: TVectArtDocument; out ErrorMessage: string): Boolean; overload;
+function TryLoadVectArtDocumentFromSvg(const SvgText: string;
+  Document: TVectArtDocument; out Report: TSvgImportReport;
+  out ErrorMessage: string): Boolean; overload;
 // SVGファイルを読み、対応内容をDocumentへ適用する。例外を呼び出し側へ漏らさない。
 function TryLoadVectArtDocumentFromSvgFile(const FileName: string;
-  Document: TVectArtDocument; out ErrorMessage: string): Boolean;
+  Document: TVectArtDocument; out ErrorMessage: string): Boolean; overload;
+function TryLoadVectArtDocumentFromSvgFile(const FileName: string;
+  Document: TVectArtDocument; out Report: TSvgImportReport;
+  out ErrorMessage: string): Boolean; overload;
 // 同じフォルダーの一時ファイルを置換してUTF-8 BOMなしのSVGを保存する。失敗時は既存ファイルを維持する。
 function TrySaveVectArtDocumentToSvgFile(Document: TVectArtDocument;
   const FileName: string; out ErrorMessage: string): Boolean;
@@ -51,6 +78,54 @@ const
     'fill', 'stroke', 'stroke-width', 'stroke-dasharray',
     'stroke-linecap', 'stroke-linejoin', 'fill-opacity',
     'stroke-opacity', 'shape-rendering');
+
+{ TSvgImportReport }
+
+procedure TSvgImportReport.AddIssue(AKind: TSvgImportIssueKind;
+  const AElementName, AElementId, AMessageText: string);
+var
+  IssueIndex: Integer;
+begin
+  IssueIndex := Length(Issues);
+  SetLength(Issues, IssueIndex + 1);
+  Issues[IssueIndex].Kind := AKind;
+  Issues[IssueIndex].ElementName := AElementName;
+  Issues[IssueIndex].ElementId := AElementId;
+  Issues[IssueIndex].MessageText := AMessageText;
+end;
+
+procedure TSvgImportReport.Clear;
+begin
+  Issues := nil;
+end;
+
+function TSvgImportReport.HasIssues: Boolean;
+begin
+  Result := Length(Issues) > 0;
+end;
+
+function TSvgImportReport.ToDisplayText: string;
+const
+  ISSUE_PREFIXES: array[TSvgImportIssueKind] of string = ('変換', '無視');
+var
+  ElementText: string;
+  I: Integer;
+begin
+  if not HasIssues then
+    Exit('MIF編集モデルへ変換なしで読み込めます。');
+  Result := '';
+  for I := 0 to High(Issues) do
+  begin
+    ElementText := Issues[I].ElementName;
+    if Issues[I].ElementId <> '' then
+      ElementText := Format('%s「%s」', [ElementText, Issues[I].ElementId]);
+    if Result <> '' then
+      Result := Result + sLineBreak;
+    Result := Result + Format('・[%s] %s: %s',
+      [ISSUE_PREFIXES[Issues[I].Kind], ElementText,
+       Issues[I].MessageText]);
+  end;
+end;
 
 function SvgIdentityMatrix: TSvgAffineMatrix;
 begin
@@ -166,7 +241,7 @@ begin
   end;
 end;
 
-function MifLineMarkerName(Value: TVectArtMifLineMarker): string;
+function LineMarkerName(Value: TVectArtLineMarker): string;
 begin
   case Value of
     vlmArrow: Result := 'arrow';
@@ -183,13 +258,13 @@ begin
   end;
 end;
 
-function TryParseMifLineMarkerName(const Value: string;
-  out Marker: TVectArtMifLineMarker): Boolean;
+function TryParseLineMarkerName(const Value: string;
+  out Marker: TVectArtLineMarker): Boolean;
 var
-  Candidate: TVectArtMifLineMarker;
+  Candidate: TVectArtLineMarker;
 begin
-  for Candidate := Low(TVectArtMifLineMarker) to High(TVectArtMifLineMarker) do
-    if SameText(Trim(Value), MifLineMarkerName(Candidate)) then
+  for Candidate := Low(TVectArtLineMarker) to High(TVectArtLineMarker) do
+    if SameText(Trim(Value), LineMarkerName(Candidate)) then
     begin
       Marker := Candidate;
       Exit(True);
@@ -197,7 +272,7 @@ begin
   Result := False;
 end;
 
-function SvgMifMarkerBody(Value: TVectArtMifLineMarker; MarkerSize: Single): string;
+function SvgMarkerBody(Value: TVectArtLineMarker; MarkerSize: Single): string;
 var
   OutlineWidth: string;
 begin
@@ -229,7 +304,7 @@ begin
 end;
 
 procedure AppendSvgStroke(Builder: TStringBuilder; Color: TColor;
-  Width: Single; Style: TVectArtMifStrokeStyle);
+  Width: Single; Style: TVectArtStrokeStyle);
 var
   DashIndex: Integer;
   DashIntervals: TArray<Single>;
@@ -303,19 +378,37 @@ begin
         if Document[I] is TVectArtLineLayer then
         begin
           Line := TVectArtLineLayer(Document[I]);
-          if Line.MifEndMarker <> vlmNone then
+          if Line.EndMarker <> vlmNone then
             Builder.Append('    <marker id="vad-end-marker-').Append(I)
-              .Append('" markerWidth="').Append(SvgNumber(Line.MifEndMarkerSize))
-              .Append('" markerHeight="').Append(SvgNumber(Line.MifEndMarkerSize))
+              .Append('" markerWidth="').Append(SvgNumber(Line.EndMarkerSize))
+              .Append('" markerHeight="').Append(SvgNumber(Line.EndMarkerSize))
               .Append('" refX="4" refY="2" viewBox="-1 -1 6 6" orient="auto" markerUnits="strokeWidth">')
-              .Append(SvgMifMarkerBody(Line.MifEndMarker, Line.MifEndMarkerSize))
+              .Append(SvgMarkerBody(Line.EndMarker, Line.EndMarkerSize))
               .AppendLine('</marker>');
-          if Line.MifStartMarker <> vlmNone then
+          if Line.StartMarker <> vlmNone then
             Builder.Append('    <marker id="vad-start-marker-').Append(I)
-              .Append('" markerWidth="').Append(SvgNumber(Line.MifStartMarkerSize))
-              .Append('" markerHeight="').Append(SvgNumber(Line.MifStartMarkerSize))
+              .Append('" markerWidth="').Append(SvgNumber(Line.StartMarkerSize))
+              .Append('" markerHeight="').Append(SvgNumber(Line.StartMarkerSize))
               .Append('" refX="4" refY="2" viewBox="-1 -1 6 6" orient="auto-start-reverse" markerUnits="strokeWidth">')
-              .Append(SvgMifMarkerBody(Line.MifStartMarker, Line.MifStartMarkerSize))
+              .Append(SvgMarkerBody(Line.StartMarker, Line.StartMarkerSize))
+              .AppendLine('</marker>');
+        end
+        else if Document[I] is TVectArtPathLayer then
+        begin
+          Path := TVectArtPathLayer(Document[I]);
+          if not Path.Closed and (Path.EndMarker <> vlmNone) then
+            Builder.Append('    <marker id="vad-end-marker-').Append(I)
+              .Append('" markerWidth="').Append(SvgNumber(Path.EndMarkerSize))
+              .Append('" markerHeight="').Append(SvgNumber(Path.EndMarkerSize))
+              .Append('" refX="4" refY="2" viewBox="-1 -1 6 6" orient="auto" markerUnits="strokeWidth">')
+              .Append(SvgMarkerBody(Path.EndMarker, Path.EndMarkerSize))
+              .AppendLine('</marker>');
+          if not Path.Closed and (Path.StartMarker <> vlmNone) then
+            Builder.Append('    <marker id="vad-start-marker-').Append(I)
+              .Append('" markerWidth="').Append(SvgNumber(Path.StartMarkerSize))
+              .Append('" markerHeight="').Append(SvgNumber(Path.StartMarkerSize))
+              .Append('" refX="4" refY="2" viewBox="-1 -1 6 6" orient="auto-start-reverse" markerUnits="strokeWidth">')
+              .Append(SvgMarkerBody(Path.StartMarker, Path.StartMarkerSize))
               .AppendLine('</marker>');
         end;
       Builder.AppendLine('  </defs>');
@@ -366,25 +459,25 @@ begin
             .Append('" y2="').Append(SvgNumber(Line.EndPoint.Y))
             .Append('" fill="none"');
           AppendSvgStroke(Builder, Line.StrokeColor, Line.StrokeWidth,
-            Line.MifStrokeStyle);
+            Line.StrokeStyle);
           Builder.Append(' opacity="').Append(SvgNumber(Line.Opacity))
             .Append('" stroke-linecap="')
             .Append(SvgLineCap(Line.LineCap)).Append('" stroke-linejoin="')
             .Append(SvgLineJoin(Line.LineJoin)).Append('" vad:name="')
             .Append(XmlEscape(Line.Name)).Append('" vad:locked="')
             .Append(BooleanText(Line.Locked)).Append('"');
-          if not Line.MifAntiAlias then
+          if not Line.AntiAlias then
             Builder.Append(' shape-rendering="crispEdges"');
-          if Line.MifEndMarker <> vlmNone then
+          if Line.EndMarker <> vlmNone then
             Builder.Append(' marker-end="url(#vad-end-marker-').Append(I)
-              .Append(')" vad:end-marker="').Append(MifLineMarkerName(Line.MifEndMarker))
+              .Append(')" vad:end-marker="').Append(LineMarkerName(Line.EndMarker))
               .Append('" vad:end-marker-size="')
-              .Append(SvgNumber(Line.MifEndMarkerSize)).Append('"');
-          if Line.MifStartMarker <> vlmNone then
+              .Append(SvgNumber(Line.EndMarkerSize)).Append('"');
+          if Line.StartMarker <> vlmNone then
             Builder.Append(' marker-start="url(#vad-start-marker-').Append(I)
-              .Append(')" vad:start-marker="').Append(MifLineMarkerName(Line.MifStartMarker))
+              .Append(')" vad:start-marker="').Append(LineMarkerName(Line.StartMarker))
               .Append('" vad:start-marker-size="')
-              .Append(SvgNumber(Line.MifStartMarkerSize)).Append('"');
+              .Append(SvgNumber(Line.StartMarkerSize)).Append('"');
           if not Line.Visible then
             Builder.Append(' display="none"');
           Builder.Append('><title>').Append(XmlEscape(Line.Name))
@@ -412,7 +505,24 @@ begin
             Builder.Append('none');
           Builder.Append('"');
           AppendSvgStroke(Builder, Path.StrokeColor, Path.StrokeWidth,
-            Path.MifStrokeStyle);
+            Path.StrokeStyle);
+          Builder.Append(' stroke-linecap="').Append(SvgLineCap(Path.LineCap))
+            .Append('" stroke-linejoin="').Append(SvgLineJoin(Path.LineJoin))
+            .Append('"');
+          if not Path.AntiAlias then
+            Builder.Append(' shape-rendering="crispEdges"');
+          if not Path.Closed and (Path.EndMarker <> vlmNone) then
+            Builder.Append(' marker-end="url(#vad-end-marker-').Append(I)
+              .Append(')" vad:end-marker="')
+              .Append(LineMarkerName(Path.EndMarker))
+              .Append('" vad:end-marker-size="')
+              .Append(SvgNumber(Path.EndMarkerSize)).Append('"');
+          if not Path.Closed and (Path.StartMarker <> vlmNone) then
+            Builder.Append(' marker-start="url(#vad-start-marker-').Append(I)
+              .Append(')" vad:start-marker="')
+              .Append(LineMarkerName(Path.StartMarker))
+              .Append('" vad:start-marker-size="')
+              .Append(SvgNumber(Path.StartMarkerSize)).Append('"');
           Builder.Append(' opacity="').Append(SvgNumber(Path.Opacity))
             .Append('" vad:fill-color="').Append(Integer(Path.FillColor))
             .Append('" vad:name="').Append(XmlEscape(Path.Name))
@@ -441,7 +551,7 @@ begin
           .Append(Integer(Rectangle.FillColor))
           .Append('"');
         AppendSvgStroke(Builder, Rectangle.StrokeColor,
-          Rectangle.StrokeWidth, Rectangle.MifStrokeStyle);
+          Rectangle.StrokeWidth, Rectangle.StrokeStyle);
         Builder
           .Append(' vad:name="').Append(XmlEscape(Rectangle.Name))
           .Append('" vad:locked="').Append(BooleanText(Rectangle.Locked))
@@ -866,7 +976,7 @@ var
   Opacity: Single;
   OpacityText: string;
   StrokeInteger: Integer;
-  MifStrokeStyleInteger: Integer;
+  StrokeStyleInteger: Integer;
   StrokeText: string;
   StrokeWidth: Single;
   ValueText: string;
@@ -901,7 +1011,7 @@ begin
     (ColorToRGB(TColor(FillInteger)) = ColorToRGB(Data.FillColor)) then
     Data.FillColor := TColor(FillInteger);
   Data.StrokeColor := clBlack;
-  Data.MifStrokeStyle := vssSolid;
+  Data.StrokeStyle := vssSolid;
   Data.StrokeWidth := 0.0;
   StrokeText := 'none';
   if TryGetPresentationValueOrInherited(Node, InheritedStyles, 'stroke',
@@ -922,14 +1032,14 @@ begin
       Exit;
     Data.StrokeWidth := StrokeWidth;
     if TryGetAttribute(Node, 'vad:stroke-style', ValueText) and
-      TryStrToInt(ValueText, MifStrokeStyleInteger) and
-      InRange(MifStrokeStyleInteger, Ord(Low(TVectArtMifStrokeStyle)),
-        Ord(High(TVectArtMifStrokeStyle))) then
-      Data.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyleInteger)
+      TryStrToInt(ValueText, StrokeStyleInteger) and
+      InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
+        Ord(High(TVectArtStrokeStyle))) then
+      Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
     else if TryGetPresentationValueOrInherited(Node, InheritedStyles,
       'stroke-dasharray', ValueText) and
       (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
-      Data.MifStrokeStyle := vssDashed;
+      Data.StrokeStyle := vssDashed;
   end;
   Opacity := 1.0;
   if TryGetPresentationValue(Node, 'opacity', OpacityText) and
@@ -968,7 +1078,7 @@ var
   OpacityText: string;
   StrokeInteger: Integer;
   StrokeOpacity: Single;
-  MifStrokeStyleInteger: Integer;
+  StrokeStyleInteger: Integer;
   StrokeText: string;
   ValueText: string;
   VisibilityValue: string;
@@ -1000,16 +1110,16 @@ begin
     (not TryParseSvgNumber(ValueText, Data.StrokeWidth) or
      (Data.StrokeWidth <= 0)) then
     Exit(False);
-  Data.MifStrokeStyle := vssSolid;
+  Data.StrokeStyle := vssSolid;
   if TryGetAttribute(Node, 'vad:stroke-style', ValueText) and
-    TryStrToInt(ValueText, MifStrokeStyleInteger) and
-    InRange(MifStrokeStyleInteger, Ord(Low(TVectArtMifStrokeStyle)),
-      Ord(High(TVectArtMifStrokeStyle))) then
-    Data.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyleInteger)
+    TryStrToInt(ValueText, StrokeStyleInteger) and
+    InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
+      Ord(High(TVectArtStrokeStyle))) then
+    Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
   else if TryGetPresentationValueOrInherited(Node, InheritedStyles,
     'stroke-dasharray', ValueText) and
     (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
-    Data.MifStrokeStyle := vssDashed;
+    Data.StrokeStyle := vssDashed;
   Data.LineCap := vlcButt;
   if TryGetPresentationValueOrInherited(Node, InheritedStyles,
     'stroke-linecap', LineCapText) then
@@ -1024,25 +1134,25 @@ begin
       Data.LineJoin := vljBevel
     else if SameText(Trim(LineJoinText), 'round') then
       Data.LineJoin := vljRound;
-  Data.MifAntiAlias := True;
+  Data.AntiAlias := True;
   if TryGetPresentationValueOrInherited(Node, InheritedStyles,
     'shape-rendering', ValueText) and
     SameText(Trim(ValueText), 'crispEdges') then
-    Data.MifAntiAlias := False;
-  Data.MifEndMarker := vlmNone;
-  Data.MifEndMarkerSize := 4.0;
+    Data.AntiAlias := False;
+  Data.EndMarker := vlmNone;
+  Data.EndMarkerSize := 4.0;
   if TryGetAttribute(Node, 'vad:end-marker', ValueText) then
-    TryParseMifLineMarkerName(ValueText, Data.MifEndMarker);
+    TryParseLineMarkerName(ValueText, Data.EndMarker);
   if TryGetAttribute(Node, 'vad:end-marker-size', ValueText) then
-    if not TryParseSvgNumber(ValueText, Data.MifEndMarkerSize) or
-      (Data.MifEndMarkerSize < 1.0) then Data.MifEndMarkerSize := 4.0;
-  Data.MifStartMarker := vlmNone;
-  Data.MifStartMarkerSize := 4.0;
+    if not TryParseSvgNumber(ValueText, Data.EndMarkerSize) or
+      (Data.EndMarkerSize < 1.0) then Data.EndMarkerSize := 4.0;
+  Data.StartMarker := vlmNone;
+  Data.StartMarkerSize := 4.0;
   if TryGetAttribute(Node, 'vad:start-marker', ValueText) then
-    TryParseMifLineMarkerName(ValueText, Data.MifStartMarker);
+    TryParseLineMarkerName(ValueText, Data.StartMarker);
   if TryGetAttribute(Node, 'vad:start-marker-size', ValueText) then
-    if not TryParseSvgNumber(ValueText, Data.MifStartMarkerSize) or
-      (Data.MifStartMarkerSize < 1.0) then Data.MifStartMarkerSize := 4.0;
+    if not TryParseSvgNumber(ValueText, Data.StartMarkerSize) or
+      (Data.StartMarkerSize < 1.0) then Data.StartMarkerSize := 4.0;
   Data.Opacity := 1.0;
   if TryGetPresentationValue(Node, 'opacity', OpacityText) and
     not TryParseSvgNumber(OpacityText, Data.Opacity) then
@@ -1428,13 +1538,15 @@ var
   DisplayValue: string;
   FillOpacity: Single;
   I: Integer;
+  LineCapText: string;
+  LineJoinText: string;
   LockedText: string;
   Opacity: Single;
   OpacityText: string;
   Parts: TStringList;
   PointsText: string;
   StrokeOpacity: Single;
-  MifStrokeStyleInteger: Integer;
+  StrokeStyleInteger: Integer;
   ValueText: string;
   VisibilityValue: string;
 begin
@@ -1508,16 +1620,53 @@ begin
     TryStrToInt(ValueText, ColorInteger) and
     (ColorToRGB(TColor(ColorInteger)) = ColorToRGB(Data.StrokeColor)) then
     Data.StrokeColor := TColor(ColorInteger);
-  Data.MifStrokeStyle := vssSolid;
+  Data.StrokeStyle := vssSolid;
   if TryGetAttribute(Node, 'vad:stroke-style', ValueText) and
-    TryStrToInt(ValueText, MifStrokeStyleInteger) and
-    InRange(MifStrokeStyleInteger, Ord(Low(TVectArtMifStrokeStyle)),
-      Ord(High(TVectArtMifStrokeStyle))) then
-    Data.MifStrokeStyle := TVectArtMifStrokeStyle(MifStrokeStyleInteger)
+    TryStrToInt(ValueText, StrokeStyleInteger) and
+    InRange(StrokeStyleInteger, Ord(Low(TVectArtStrokeStyle)),
+      Ord(High(TVectArtStrokeStyle))) then
+    Data.StrokeStyle := TVectArtStrokeStyle(StrokeStyleInteger)
   else if TryGetPresentationValueOrInherited(Node, InheritedStyles,
     'stroke-dasharray', ValueText) and
     (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
-    Data.MifStrokeStyle := vssDashed;
+    Data.StrokeStyle := vssDashed;
+  Data.LineCap := vlcButt;
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'stroke-linecap', LineCapText) then
+    if SameText(Trim(LineCapText), 'square') then
+      Data.LineCap := vlcSquare
+    else if SameText(Trim(LineCapText), 'round') then
+      Data.LineCap := vlcRound;
+  Data.LineJoin := vljMiter;
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'stroke-linejoin', LineJoinText) then
+    if SameText(Trim(LineJoinText), 'bevel') then
+      Data.LineJoin := vljBevel
+    else if SameText(Trim(LineJoinText), 'round') then
+      Data.LineJoin := vljRound;
+  Data.AntiAlias := True;
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'shape-rendering', ValueText) and
+    SameText(Trim(ValueText), 'crispEdges') then
+    Data.AntiAlias := False;
+  Data.EndMarker := vlmNone;
+  Data.EndMarkerSize := 4.0;
+  if not Closed and TryGetAttribute(Node, 'vad:end-marker', ValueText) then
+    TryParseLineMarkerName(ValueText, Data.EndMarker);
+  if not Closed and
+    TryGetAttribute(Node, 'vad:end-marker-size', ValueText) then
+    if not TryParseSvgNumber(ValueText, Data.EndMarkerSize) or
+      (Data.EndMarkerSize < 1.0) then
+      Data.EndMarkerSize := 4.0;
+  Data.StartMarker := vlmNone;
+  Data.StartMarkerSize := 4.0;
+  if not Closed and TryGetAttribute(Node, 'vad:start-marker', ValueText) then
+    TryParseLineMarkerName(ValueText, Data.StartMarker);
+  if not Closed and
+    TryGetAttribute(Node, 'vad:start-marker-size', ValueText) then
+    if not TryParseSvgNumber(ValueText, Data.StartMarkerSize) or
+      (Data.StartMarkerSize < 1.0) then
+      Data.StartMarkerSize := 4.0;
   if not Data.Filled and (Data.StrokeWidth <= 0) then
     Exit(False);
   Opacity := 1.0;
@@ -1552,15 +1701,48 @@ begin
   Result := True;
 end;
 
+function TryReadSvgViewBox(const Root: IXMLNode; out MinimumX, MinimumY,
+  Width, Height: Single): Boolean;
+var
+  I: Integer;
+  Parts: TStringList;
+  ViewBox: string;
+begin
+  Result := False;
+  MinimumX := 0;
+  MinimumY := 0;
+  Width := 0;
+  Height := 0;
+  if not TryGetAttribute(Root, 'viewBox', ViewBox) then
+    Exit;
+  ViewBox := StringReplace(Trim(ViewBox), ',', ' ', [rfReplaceAll]);
+  Parts := TStringList.Create;
+  try
+    Parts.StrictDelimiter := True;
+    Parts.Delimiter := ' ';
+    Parts.DelimitedText := ViewBox;
+    for I := Parts.Count - 1 downto 0 do
+      if Trim(Parts[I]) = '' then
+        Parts.Delete(I);
+    Result := (Parts.Count = 4) and
+      TryParseSvgNumber(Parts[0], MinimumX) and
+      TryParseSvgNumber(Parts[1], MinimumY) and
+      TryParseSvgNumber(Parts[2], Width) and
+      TryParseSvgNumber(Parts[3], Height) and (Width > 0) and (Height > 0);
+  finally
+    Parts.Free;
+  end;
+end;
+
 function TryReadCanvasSize(const Root: IXMLNode; out Width,
   Height: Integer): Boolean;
 var
   HeightValue: Single;
-  I: Integer;
-  Part: string;
-  Parts: TStringList;
+  MinimumX: Single;
+  MinimumY: Single;
   ValueText: string;
-  ViewBox: string;
+  ViewBoxHeight: Single;
+  ViewBoxWidth: Single;
   WidthValue: Single;
 begin
   Result := TryGetAttribute(Root, 'width', ValueText) and
@@ -1568,25 +1750,14 @@ begin
     TryGetAttribute(Root, 'height', ValueText) and
     TryParseSvgNumber(ValueText, HeightValue) and
     (WidthValue > 0) and (HeightValue > 0);
-  if not Result and TryGetAttribute(Root, 'viewBox', ViewBox) then
+  if not Result then
   begin
-    ViewBox := StringReplace(Trim(ViewBox), ',', ' ', [rfReplaceAll]);
-    Parts := TStringList.Create;
-    try
-      Parts.StrictDelimiter := True;
-      Parts.Delimiter := ' ';
-      Parts.DelimitedText := ViewBox;
-      for I := Parts.Count - 1 downto 0 do
-      begin
-        Part := Trim(Parts[I]);
-        if Part = '' then
-          Parts.Delete(I);
-      end;
-      Result := (Parts.Count = 4) and TryParseSvgNumber(Parts[2], WidthValue)
-        and TryParseSvgNumber(Parts[3], HeightValue) and
-        (WidthValue > 0) and (HeightValue > 0);
-    finally
-      Parts.Free;
+    Result := TryReadSvgViewBox(Root, MinimumX, MinimumY, ViewBoxWidth,
+      ViewBoxHeight);
+    if Result then
+    begin
+      WidthValue := ViewBoxWidth;
+      HeightValue := ViewBoxHeight;
     end;
   end;
   if Result then
@@ -1599,6 +1770,90 @@ begin
     Width := 0;
     Height := 0;
   end;
+end;
+
+function TryCreateRootViewBoxMatrix(const Root: IXMLNode; CanvasWidth,
+  CanvasHeight: Integer; out Matrix: TSvgAffineMatrix): Boolean;
+var
+  Align: string;
+  AlignLower: string;
+  MeetOrSlice: string;
+  MinimumX: Single;
+  MinimumY: Single;
+  OffsetX: Single;
+  OffsetY: Single;
+  Parts: TStringList;
+  PreserveText: string;
+  Scale: Single;
+  ScaleX: Single;
+  ScaleY: Single;
+  ViewBoxHeight: Single;
+  ViewBoxWidth: Single;
+begin
+  Matrix := SvgIdentityMatrix;
+  if not TryGetAttribute(Root, 'viewBox', PreserveText) then
+    Exit(True);
+  if not TryReadSvgViewBox(Root, MinimumX, MinimumY, ViewBoxWidth,
+    ViewBoxHeight) then
+    Exit(False);
+  if not TryGetAttribute(Root, 'preserveAspectRatio', PreserveText) then
+    PreserveText := 'xMidYMid meet';
+  PreserveText := StringReplace(Trim(PreserveText), #9, ' ', [rfReplaceAll]);
+  Parts := TStringList.Create;
+  try
+    ExtractStrings([' ', #9, #10, #13], [], PChar(PreserveText), Parts);
+    if (Parts.Count > 0) and SameText(Parts[0], 'defer') then
+      Parts.Delete(0);
+    if (Parts.Count < 1) or (Parts.Count > 2) then
+      Exit(False);
+    Align := Parts[0];
+    if Parts.Count = 2 then
+      MeetOrSlice := Parts[1]
+    else
+      MeetOrSlice := 'meet';
+  finally
+    Parts.Free;
+  end;
+  ScaleX := CanvasWidth / ViewBoxWidth;
+  ScaleY := CanvasHeight / ViewBoxHeight;
+  if SameText(Align, 'none') then
+  begin
+    if not SameText(MeetOrSlice, 'meet') then
+      Exit(False);
+    Matrix.A := ScaleX;
+    Matrix.D := ScaleY;
+    Matrix.E := -MinimumX * ScaleX;
+    Matrix.F := -MinimumY * ScaleY;
+    Exit(True);
+  end;
+  AlignLower := LowerCase(Align);
+  if not (SameText(Align, 'xMinYMin') or
+    SameText(Align, 'xMidYMin') or SameText(Align, 'xMaxYMin') or
+    SameText(Align, 'xMinYMid') or SameText(Align, 'xMidYMid') or
+    SameText(Align, 'xMaxYMid') or SameText(Align, 'xMinYMax') or
+    SameText(Align, 'xMidYMax') or SameText(Align, 'xMaxYMax')) then
+    Exit(False);
+  if SameText(MeetOrSlice, 'meet') then
+    Scale := Min(ScaleX, ScaleY)
+  else if SameText(MeetOrSlice, 'slice') then
+    Scale := Max(ScaleX, ScaleY)
+  else
+    Exit(False);
+  OffsetX := 0;
+  if Pos('xmid', AlignLower) = 1 then
+    OffsetX := (CanvasWidth - ViewBoxWidth * Scale) * 0.5
+  else if Pos('xmax', AlignLower) = 1 then
+    OffsetX := CanvasWidth - ViewBoxWidth * Scale;
+  OffsetY := 0;
+  if Pos('ymid', AlignLower) = 5 then
+    OffsetY := (CanvasHeight - ViewBoxHeight * Scale) * 0.5
+  else if Pos('ymax', AlignLower) = 5 then
+    OffsetY := CanvasHeight - ViewBoxHeight * Scale;
+  Matrix.A := Scale;
+  Matrix.D := Scale;
+  Matrix.E := OffsetX - MinimumX * Scale;
+  Matrix.F := OffsetY - MinimumY * Scale;
+  Result := True;
 end;
 
 function TransformSvgRectangle(const Matrix: TSvgAffineMatrix;
@@ -1651,6 +1906,8 @@ var
   I: Integer;
 begin
   Result.Closed := True;
+  Result.EndMarker := vlmNone;
+  Result.EndMarkerSize := 4.0;
   Result.FillColor := RectangleData.FillColor;
   Result.Filled := True;
   Result.Locked := RectangleData.Locked;
@@ -1658,11 +1915,120 @@ begin
   Result.Opacity := RectangleData.Opacity;
   SetLength(Result.Points, Length(Corners));
   for I := Low(Corners) to High(Corners) do
-    Result.Points[I] := Corners[I];
+  Result.Points[I] := Corners[I];
+  Result.StartMarker := vlmNone;
+  Result.StartMarkerSize := 4.0;
   Result.StrokeColor := RectangleData.StrokeColor;
-  Result.MifStrokeStyle := RectangleData.MifStrokeStyle;
+  Result.StrokeStyle := RectangleData.StrokeStyle;
+  Result.LineCap := vlcButt;
+  Result.LineJoin := vljMiter;
+  Result.AntiAlias := True;
   Result.StrokeWidth := RectangleData.StrokeWidth * StrokeScale;
   Result.Visible := RectangleData.Visible;
+end;
+
+procedure ReportSvgContainerAdjustments(const Node: IXMLNode;
+  const ElementName, ElementId: string; var Report: TSvgImportReport);
+var
+  ValueText: string;
+begin
+  if TryGetPresentationValue(Node, 'filter', ValueText) and
+    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
+    Report.AddIssue(siikIgnored, ElementName, ElementId,
+      'SVGフィルターは対応していないため無視しました。');
+  if TryGetPresentationValue(Node, 'clip-path', ValueText) and
+    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
+    Report.AddIssue(siikIgnored, ElementName, ElementId,
+      'SVGクリップパスは対応していないため無視しました。');
+  if TryGetPresentationValue(Node, 'mask', ValueText) and
+    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
+    Report.AddIssue(siikIgnored, ElementName, ElementId,
+      'SVGマスクは対応していないため無視しました。');
+  if TryGetPresentationValue(Node, 'mix-blend-mode', ValueText) and
+    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'normal') then
+    Report.AddIssue(siikIgnored, ElementName, ElementId,
+      'mix-blend-modeは対応していないため無視しました。');
+end;
+
+procedure ReportSvgElementAdjustments(const Node: IXMLNode;
+  InheritedStyles: TSvgInheritedStyles; const ElementName, ElementId: string;
+  SupportsMarkers, HasFill, HasStroke: Boolean;
+  var Report: TSvgImportReport);
+var
+  FillOpacity: Single;
+  StrokeOpacity: Single;
+  ValueText: string;
+begin
+  if SameText(ElementName, 'rect') and
+    ((TryGetAttribute(Node, 'rx', ValueText) and
+      not SameText(Trim(ValueText), '0')) or
+     (TryGetAttribute(Node, 'ry', ValueText) and
+      not SameText(Trim(ValueText), '0'))) then
+    Report.AddIssue(siikConversion, ElementName, ElementId,
+      '角丸Rectangleを角の直線的なRectangleへ変換しました。');
+  if SameText(ElementName, 'image') and
+    (not TryGetAttribute(Node, 'preserveAspectRatio', ValueText) or
+     not SameText(Trim(ValueText), 'none')) then
+    Report.AddIssue(siikConversion, ElementName, ElementId,
+      '画像のpreserveAspectRatioをMIFの4頂点アフィン配置へ変換しました。');
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'stroke-dasharray', ValueText) and (Trim(ValueText) <> '') and
+    not SameText(Trim(ValueText), 'none') and
+    not TryGetAttribute(Node, 'vad:stroke-style', ValueText) then
+    Report.AddIssue(siikConversion, ElementName, ElementId,
+      '任意のstroke-dasharrayをMIF編集モデルの汎用破線へ変換しました。');
+  if TryGetPresentationValue(Node, 'stroke-dashoffset', ValueText) and
+    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), '0') then
+    Report.AddIssue(siikIgnored, ElementName, ElementId,
+      'stroke-dashoffsetは対応していないため無視しました。');
+  if TryGetPresentationValue(Node, 'stroke-miterlimit', ValueText) and
+    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), '4') then
+    Report.AddIssue(siikIgnored, ElementName, ElementId,
+      'stroke-miterlimitは対応していないため無視しました。');
+  if TryGetPresentationValue(Node, 'vector-effect', ValueText) and
+    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
+    Report.AddIssue(siikIgnored, ElementName, ElementId,
+      'vector-effectは対応していないため無視しました。');
+  if TryGetPresentationValue(Node, 'fill-rule', ValueText) and
+    SameText(Trim(ValueText), 'evenodd') then
+    Report.AddIssue(siikConversion, ElementName, ElementId,
+      'evenodd塗りをMIF編集モデルの通常塗りへ変換しました。');
+  if TryGetPresentationValue(Node, 'paint-order', ValueText) and
+    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'normal') then
+    Report.AddIssue(siikIgnored, ElementName, ElementId,
+      'paint-orderは対応していないため無視しました。');
+  if TryGetPresentationValue(Node, 'transform-origin', ValueText) and
+    (Trim(ValueText) <> '') then
+    Report.AddIssue(siikIgnored, ElementName, ElementId,
+      'transform-originは対応していないため無視しました。');
+  if HasFill and HasStroke then
+  begin
+    FillOpacity := 1.0;
+    StrokeOpacity := 1.0;
+    if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+      'fill-opacity', ValueText) then
+      TryParseSvgNumber(ValueText, FillOpacity);
+    if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+      'stroke-opacity', ValueText) then
+      TryParseSvgNumber(ValueText, StrokeOpacity);
+    if not SameValue(FillOpacity, StrokeOpacity, 0.000001) then
+      Report.AddIssue(siikConversion, ElementName, ElementId,
+        '塗りと線の個別不透明度を単一のレイヤー不透明度へ統合しました。');
+  end;
+  if SupportsMarkers then
+  begin
+    if TryGetPresentationValue(Node, 'marker-start', ValueText) and
+      (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') and
+      not TryGetAttribute(Node, 'vad:start-marker', ValueText) then
+      Report.AddIssue(siikIgnored, ElementName, ElementId,
+        '任意のSVG始点マーカーは対応していないため無視しました。');
+    if TryGetPresentationValue(Node, 'marker-end', ValueText) and
+      (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') and
+      not TryGetAttribute(Node, 'vad:end-marker', ValueText) then
+      Report.AddIssue(siikIgnored, ElementName, ElementId,
+        '任意のSVG終点マーカーは対応していないため無視しました。');
+  end;
+  ReportSvgContainerAdjustments(Node, ElementName, ElementId, Report);
 end;
 
 procedure CollectSvgLayers(const Parent: IXMLNode;
@@ -1670,7 +2036,8 @@ procedure CollectSvgLayers(const Parent: IXMLNode;
   ParentVisible: Boolean; InheritedStyles: TSvgInheritedStyles;
   Rectangles: TList<TVectArtRectangleData>;
   Lines: TList<TVectArtLineData>; Paths: TList<TVectArtPathData>;
-  Images: TList<TVectArtImageData>; LayerOrder: TList<Integer>);
+  Images: TList<TVectArtImageData>; LayerOrder: TList<Integer>;
+  var Report: TSvgImportReport);
 var
   Child: IXMLNode;
   ChildMatrix: TSvgAffineMatrix;
@@ -1680,6 +2047,7 @@ var
   ChildVisible: Boolean;
   Data: TVectArtRectangleData;
   DisplayText: string;
+  ElementId: string;
   I: Integer;
   ImageData: TVectArtImageData;
   J: Integer;
@@ -1695,14 +2063,24 @@ begin
     if Child.NodeType <> ntElement then
       Continue;
     NodeName := LocalNodeName(Child);
+    ElementId := '';
+    TryGetAttribute(Child, 'id', ElementId);
     if SameText(NodeName, 'g') then
     begin
       if not TryCombineSvgTransform(Child, ParentMatrix, ChildMatrix) then
+      begin
+        Report.AddIssue(siikIgnored, NodeName, ElementId,
+          '未対応または不正なtransformのためグループ全体を読み込みません。');
         Continue;
+      end;
       ChildOpacity := 1.0;
       if TryGetPresentationValue(Child, 'opacity', OpacityText) and
         not TryParseSvgNumber(OpacityText, ChildOpacity) then
+      begin
+        Report.AddIssue(siikIgnored, NodeName, ElementId,
+          '不正なopacityのためグループ全体を読み込みません。');
         Continue;
+      end;
       ChildOpacity := ParentOpacity * EnsureRange(ChildOpacity, 0.0, 1.0);
       ChildVisible := ParentVisible;
       if TryGetPresentationValue(Child, 'display', DisplayText) then
@@ -1712,10 +2090,11 @@ begin
         ChildVisible := ChildVisible and
           not SameText(Trim(VisibilityText), 'hidden') and
           not SameText(Trim(VisibilityText), 'collapse');
+      ReportSvgContainerAdjustments(Child, NodeName, ElementId, Report);
       ChildStyles := CreateInheritedStyles(InheritedStyles, Child);
       try
         CollectSvgLayers(Child, ChildMatrix, ChildOpacity, ChildVisible,
-          ChildStyles, Rectangles, Lines, Paths, Images, LayerOrder);
+          ChildStyles, Rectangles, Lines, Paths, Images, LayerOrder, Report);
       finally
         ChildStyles.Free;
       end;
@@ -1726,7 +2105,11 @@ begin
         Data) then
     begin
       if not TryCombineSvgTransform(Child, ParentMatrix, ChildMatrix) then
+      begin
+        Report.AddIssue(siikIgnored, NodeName, ElementId,
+          '未対応または不正なtransformのため読み込みません。');
         Continue;
+      end;
       Data.Opacity := Data.Opacity * ParentOpacity;
       Data.Visible := Data.Visible and ParentVisible;
       if TransformSvgRectangle(ChildMatrix, Data, Corners) then
@@ -1740,13 +2123,21 @@ begin
           SvgStrokeScale(ChildMatrix));
         Paths.Add(PathData);
         LayerOrder.Add(-(1000000 + Paths.Count));
+        Report.AddIssue(siikConversion, NodeName, ElementId,
+          'せん断されたRectangleを閉じたPathへ変換しました。');
       end;
+      ReportSvgElementAdjustments(Child, InheritedStyles, NodeName,
+        ElementId, False, True, Data.StrokeWidth > 0, Report);
     end
     else if SameText(NodeName, 'line') and
       TryParseLine(Child, InheritedStyles, Lines.Count + 1, LineData) then
     begin
       if not TryCombineSvgTransform(Child, ParentMatrix, ChildMatrix) then
+      begin
+        Report.AddIssue(siikIgnored, NodeName, ElementId,
+          '未対応または不正なtransformのため読み込みません。');
         Continue;
+      end;
       LineData.StartPoint := SvgTransformPoint(ChildMatrix,
         LineData.StartPoint);
       LineData.EndPoint := SvgTransformPoint(ChildMatrix,
@@ -1757,6 +2148,8 @@ begin
       LineData.Visible := LineData.Visible and ParentVisible;
       Lines.Add(LineData);
       LayerOrder.Add(-Lines.Count);
+      ReportSvgElementAdjustments(Child, InheritedStyles, NodeName,
+        ElementId, True, False, True, Report);
     end
     else if (SameText(NodeName, 'polyline') or
       SameText(NodeName, 'polygon')) and
@@ -1764,7 +2157,11 @@ begin
         SameText(NodeName, 'polygon'), PathData) then
     begin
       if not TryCombineSvgTransform(Child, ParentMatrix, ChildMatrix) then
+      begin
+        Report.AddIssue(siikIgnored, NodeName, ElementId,
+          '未対応または不正なtransformのため読み込みません。');
         Continue;
+      end;
       for J := 0 to High(PathData.Points) do
         PathData.Points[J] := SvgTransformPoint(ChildMatrix,
           PathData.Points[J]);
@@ -1774,13 +2171,19 @@ begin
       PathData.Visible := PathData.Visible and ParentVisible;
       Paths.Add(PathData);
       LayerOrder.Add(-(1000000 + Paths.Count));
+      ReportSvgElementAdjustments(Child, InheritedStyles, NodeName,
+        ElementId, True, PathData.Filled, PathData.StrokeWidth > 0, Report);
     end
     else if SameText(NodeName, 'path') and
       TryParsePath(Child, InheritedStyles, Paths.Count + 1, False,
         PathData) then
     begin
       if not TryCombineSvgTransform(Child, ParentMatrix, ChildMatrix) then
+      begin
+        Report.AddIssue(siikIgnored, NodeName, ElementId,
+          '未対応または不正なtransformのため読み込みません。');
         Continue;
+      end;
       for J := 0 to High(PathData.Points) do
         PathData.Points[J] := SvgTransformPoint(ChildMatrix,
           PathData.Points[J]);
@@ -1790,6 +2193,8 @@ begin
       PathData.Visible := PathData.Visible and ParentVisible;
       Paths.Add(PathData);
       LayerOrder.Add(-(1000000 + Paths.Count));
+      ReportSvgElementAdjustments(Child, InheritedStyles, NodeName,
+        ElementId, True, PathData.Filled, PathData.StrokeWidth > 0, Report);
     end
     else if SameText(NodeName, 'image') and
       TryParseImage(Child, Images.Count + 1, ImageData) then
@@ -1801,12 +2206,36 @@ begin
       ImageData.Visible := ImageData.Visible and ParentVisible;
       Images.Add(ImageData);
       LayerOrder.Add(-(2000000 + Images.Count));
-    end;
+      ReportSvgElementAdjustments(Child, InheritedStyles, NodeName,
+        ElementId, False, False, False, Report);
+    end
+    else if SameText(NodeName, 'defs') or SameText(NodeName, 'title') or
+      SameText(NodeName, 'desc') or SameText(NodeName, 'metadata') or
+      SameText(NodeName, 'style') then
+      Continue
+    else if SameText(NodeName, 'rect') or SameText(NodeName, 'line') or
+      SameText(NodeName, 'polyline') or SameText(NodeName, 'polygon') or
+      SameText(NodeName, 'path') or SameText(NodeName, 'image') then
+      Report.AddIssue(siikIgnored, NodeName, ElementId,
+        'MIF編集モデルへ安全に変換できない内容のため読み込みません。')
+    else
+      Report.AddIssue(siikIgnored, NodeName, ElementId,
+        'MIF編集モデルの対応要素ではないため読み込みません。');
   end;
 end;
 
 function TryLoadVectArtDocumentFromSvg(const SvgText: string;
   Document: TVectArtDocument; out ErrorMessage: string): Boolean;
+var
+  Report: TSvgImportReport;
+begin
+  Result := TryLoadVectArtDocumentFromSvg(SvgText, Document, Report,
+    ErrorMessage);
+end;
+
+function TryLoadVectArtDocumentFromSvg(const SvgText: string;
+  Document: TVectArtDocument; out Report: TSvgImportReport;
+  out ErrorMessage: string): Boolean;
 var
   BackgroundColor: TColor;
   BackgroundInteger: Integer;
@@ -1825,6 +2254,7 @@ var
   Paths: TList<TVectArtPathData>;
   RectangleData: TList<TVectArtRectangleData>;
   Root: IXMLNode;
+  RootMatrix: TSvgAffineMatrix;
   RootStyles: TSvgInheritedStyles;
   SelectedIndex: Integer;
   StyleBackground: string;
@@ -1835,6 +2265,7 @@ var
 begin
   Result := False;
   ErrorMessage := '';
+  Report.Clear;
   RectangleData := TList<TVectArtRectangleData>.Create;
   Lines := TList<TVectArtLineData>.Create;
   Paths := TList<TVectArtPathData>.Create;
@@ -1854,6 +2285,15 @@ begin
         raise EConvertError.Create('SVG root element was not found');
       if not TryReadCanvasSize(Root, CanvasWidth, CanvasHeight) then
         raise EConvertError.Create('SVG canvas size is missing or unsupported');
+      if not TryCreateRootViewBoxMatrix(Root, CanvasWidth, CanvasHeight,
+        RootMatrix) then
+      begin
+        BackgroundText := '';
+        TryGetAttribute(Root, 'preserveAspectRatio', BackgroundText);
+        raise EConvertError.CreateFmt(
+          'SVG viewBox or preserveAspectRatio is unsupported: "%s"',
+          [BackgroundText]);
+      end;
 
       BackgroundColor := clWhite;
       if TryGetStyleValue(Root, 'background-color', StyleBackground) then
@@ -1874,8 +2314,8 @@ begin
 
       RootStyles := CreateInheritedStyles(nil, Root);
       try
-        CollectSvgLayers(Root, SvgIdentityMatrix, 1.0, True, RootStyles,
-          RectangleData, Lines, Paths, Images, LayerOrder);
+        CollectSvgLayers(Root, RootMatrix, 1.0, True, RootStyles,
+          RectangleData, Lines, Paths, Images, LayerOrder, Report);
       finally
         RootStyles.Free;
       end;
@@ -1910,7 +2350,6 @@ begin
             Paths[-I - 1000001])
         else
           Document.InsertLine(Document.LayerCount, Lines[-I - 1]);
-      Document.EditingMode := vemStandard;
       Document.SelectedIndex := SelectedIndex;
       Document.Changed;
       Result := True;
@@ -1930,13 +2369,25 @@ end;
 function TryLoadVectArtDocumentFromSvgFile(const FileName: string;
   Document: TVectArtDocument; out ErrorMessage: string): Boolean;
 var
+  Report: TSvgImportReport;
+begin
+  Result := TryLoadVectArtDocumentFromSvgFile(FileName, Document, Report,
+    ErrorMessage);
+end;
+
+function TryLoadVectArtDocumentFromSvgFile(const FileName: string;
+  Document: TVectArtDocument; out Report: TSvgImportReport;
+  out ErrorMessage: string): Boolean;
+var
   SvgText: string;
 begin
   Result := False;
   ErrorMessage := '';
+  Report.Clear;
   try
     SvgText := TFile.ReadAllText(FileName, TEncoding.UTF8);
-    Result := TryLoadVectArtDocumentFromSvg(SvgText, Document, ErrorMessage);
+    Result := TryLoadVectArtDocumentFromSvg(SvgText, Document, Report,
+      ErrorMessage);
   except
     on E: Exception do
       ErrorMessage := E.Message;
