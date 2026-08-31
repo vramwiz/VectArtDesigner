@@ -1,0 +1,500 @@
+﻿# VectArtDesigner MIF open debug log
+time: 2026-08-31T14:55:34.993+09:00
+file: D:\DelphiProg\test\VectArtDesigner\mif\画像.mif
+file bytes: 40138
+outer chunks: 10
+document import: SUCCESS
+
+Chunk[0]: tag=MHDR data=4
+Chunk[1]: tag=IPNG data=18609
+  PNG[0]: bytes=18609 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 640 x 480 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=32 crc=True
+      key: application name
+      value bytes: 15
+      text: WebArt Designer
+      hex: 57 65 62 41 72 74 20 44 65 73 69 67 6E 65 72
+    offset=0x00000062 type=waDA data=24 crc=True
+      key: waDAapplication version
+      value bytes: 4
+      int32-be: 700 (0x00 00 02 BC)
+    offset=0x00000086 type=waDA data=26 crc=True
+      key: waDAbackground page index
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x000000AC type=IDAT data=8192 crc=True
+    offset=0x000020B8 type=IDAT data=8192 crc=True
+    offset=0x000040C4 type=IDAT data=2005 crc=True
+    offset=0x000048A5 type=IEND data=0 crc=True
+Chunk[2]: tag=IPNG data=773
+  PNG[1]: bytes=773 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 64 x 64 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=19 crc=True
+      key: object type
+      value bytes: 7
+      text: texture
+      hex: 74 65 78 74 75 72 65
+    offset=0x00000055 type=waDA data=22 crc=True
+      key: waDAimage position1 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000077 type=waDA data=22 crc=True
+      key: waDAimage position1 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000099 type=waDA data=22 crc=True
+      key: waDAimage position2 x
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x000000BB type=waDA data=22 crc=True
+      key: waDAimage position2 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x000000DD type=waDA data=22 crc=True
+      key: waDAimage position3 x
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x000000FF type=waDA data=22 crc=True
+      key: waDAimage position3 y
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x00000121 type=waDA data=22 crc=True
+      key: waDAimage position4 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000143 type=waDA data=22 crc=True
+      key: waDAimage position4 y
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x00000165 type=waDA data=16 crc=True
+      key: waDAimage alpha
+      value bytes: 4
+      int32-be: 255 (0x00 00 00 FF)
+    offset=0x00000181 type=waDA data=17 crc=True
+      key: waDAimage hidden
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000019E type=waDA data=25 crc=True
+      key: waDAtexture object type
+      value bytes: 5
+      text: color
+      hex: 63 6F 6C 6F 72
+    offset=0x000001C3 type=waDA data=19 crc=True
+      key: waDAtexture color1
+      value bytes: 4
+      int32-be: 16777215 (0x00 FF FF FF)
+    offset=0x000001E2 type=waDA data=19 crc=True
+      key: waDAtexture color2
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000201 type=waDA data=18 crc=True
+      key: waDAtexture angle
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000021F type=waDA data=18 crc=True
+      key: waDAtexture level
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000023D type=waDA data=18 crc=True
+      key: waDAtexture pathname
+      value bytes: 1
+      text: @
+      hex: 40
+    offset=0x0000025B type=IDAT data=146 crc=True
+    offset=0x000002F9 type=IEND data=0 crc=True
+Chunk[3]: tag=IPNG data=5774
+  PNG[2]: bytes=5774 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 60 x 60 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=17 crc=True
+      key: object type
+      value bytes: 5
+      text: image
+      hex: 69 6D 61 67 65
+    offset=0x00000053 type=waDA data=22 crc=True
+      key: waDAimage position1 x
+      value bytes: 4
+      int32-be: 240 (0x00 00 00 F0)
+    offset=0x00000075 type=waDA data=22 crc=True
+      key: waDAimage position1 y
+      value bytes: 4
+      int32-be: 142 (0x00 00 00 8E)
+    offset=0x00000097 type=waDA data=22 crc=True
+      key: waDAimage position2 x
+      value bytes: 4
+      int32-be: 299 (0x00 00 01 2B)
+    offset=0x000000B9 type=waDA data=22 crc=True
+      key: waDAimage position2 y
+      value bytes: 4
+      int32-be: 142 (0x00 00 00 8E)
+    offset=0x000000DB type=waDA data=22 crc=True
+      key: waDAimage position3 x
+      value bytes: 4
+      int32-be: 299 (0x00 00 01 2B)
+    offset=0x000000FD type=waDA data=22 crc=True
+      key: waDAimage position3 y
+      value bytes: 4
+      int32-be: 201 (0x00 00 00 C9)
+    offset=0x0000011F type=waDA data=22 crc=True
+      key: waDAimage position4 x
+      value bytes: 4
+      int32-be: 240 (0x00 00 00 F0)
+    offset=0x00000141 type=waDA data=22 crc=True
+      key: waDAimage position4 y
+      value bytes: 4
+      int32-be: 201 (0x00 00 00 C9)
+    offset=0x00000163 type=waDA data=16 crc=True
+      key: waDAimage alpha
+      value bytes: 4
+      int32-be: 255 (0x00 00 00 FF)
+    offset=0x0000017F type=waDA data=17 crc=True
+      key: waDAimage hidden
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000019C type=IDAT data=5338 crc=True
+    offset=0x00001682 type=IEND data=0 crc=True
+Chunk[4]: tag=IPNG data=773
+  PNG[3]: bytes=773 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 64 x 64 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=19 crc=True
+      key: object type
+      value bytes: 7
+      text: texture
+      hex: 74 65 78 74 75 72 65
+    offset=0x00000055 type=waDA data=22 crc=True
+      key: waDAimage position1 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000077 type=waDA data=22 crc=True
+      key: waDAimage position1 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000099 type=waDA data=22 crc=True
+      key: waDAimage position2 x
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x000000BB type=waDA data=22 crc=True
+      key: waDAimage position2 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x000000DD type=waDA data=22 crc=True
+      key: waDAimage position3 x
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x000000FF type=waDA data=22 crc=True
+      key: waDAimage position3 y
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x00000121 type=waDA data=22 crc=True
+      key: waDAimage position4 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000143 type=waDA data=22 crc=True
+      key: waDAimage position4 y
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x00000165 type=waDA data=16 crc=True
+      key: waDAimage alpha
+      value bytes: 4
+      int32-be: 255 (0x00 00 00 FF)
+    offset=0x00000181 type=waDA data=17 crc=True
+      key: waDAimage hidden
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000019E type=waDA data=25 crc=True
+      key: waDAtexture object type
+      value bytes: 5
+      text: color
+      hex: 63 6F 6C 6F 72
+    offset=0x000001C3 type=waDA data=19 crc=True
+      key: waDAtexture color1
+      value bytes: 4
+      int32-be: 16777215 (0x00 FF FF FF)
+    offset=0x000001E2 type=waDA data=19 crc=True
+      key: waDAtexture color2
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000201 type=waDA data=18 crc=True
+      key: waDAtexture angle
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000021F type=waDA data=18 crc=True
+      key: waDAtexture level
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000023D type=waDA data=18 crc=True
+      key: waDAtexture pathname
+      value bytes: 1
+      text: @
+      hex: 40
+    offset=0x0000025B type=IDAT data=146 crc=True
+    offset=0x000002F9 type=IEND data=0 crc=True
+Chunk[5]: tag=IPNG data=2835
+  PNG[4]: bytes=2835 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 60 x 60 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=17 crc=True
+      key: object type
+      value bytes: 5
+      text: image
+      hex: 69 6D 61 67 65
+    offset=0x00000053 type=waDA data=22 crc=True
+      key: waDAimage position1 x
+      value bytes: 4
+      int32-be: 319 (0x00 00 01 3F)
+    offset=0x00000075 type=waDA data=22 crc=True
+      key: waDAimage position1 y
+      value bytes: 4
+      int32-be: 162 (0x00 00 00 A2)
+    offset=0x00000097 type=waDA data=22 crc=True
+      key: waDAimage position2 x
+      value bytes: 4
+      int32-be: 260 (0x00 00 01 04)
+    offset=0x000000B9 type=waDA data=22 crc=True
+      key: waDAimage position2 y
+      value bytes: 4
+      int32-be: 162 (0x00 00 00 A2)
+    offset=0x000000DB type=waDA data=22 crc=True
+      key: waDAimage position3 x
+      value bytes: 4
+      int32-be: 260 (0x00 00 01 04)
+    offset=0x000000FD type=waDA data=22 crc=True
+      key: waDAimage position3 y
+      value bytes: 4
+      int32-be: 221 (0x00 00 00 DD)
+    offset=0x0000011F type=waDA data=22 crc=True
+      key: waDAimage position4 x
+      value bytes: 4
+      int32-be: 319 (0x00 00 01 3F)
+    offset=0x00000141 type=waDA data=22 crc=True
+      key: waDAimage position4 y
+      value bytes: 4
+      int32-be: 221 (0x00 00 00 DD)
+    offset=0x00000163 type=waDA data=16 crc=True
+      key: waDAimage alpha
+      value bytes: 4
+      int32-be: 255 (0x00 00 00 FF)
+    offset=0x0000017F type=waDA data=17 crc=True
+      key: waDAimage hidden
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000019C type=IDAT data=2399 crc=True
+    offset=0x00000B07 type=IEND data=0 crc=True
+Chunk[6]: tag=IPNG data=773
+  PNG[5]: bytes=773 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 64 x 64 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=19 crc=True
+      key: object type
+      value bytes: 7
+      text: texture
+      hex: 74 65 78 74 75 72 65
+    offset=0x00000055 type=waDA data=22 crc=True
+      key: waDAimage position1 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000077 type=waDA data=22 crc=True
+      key: waDAimage position1 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000099 type=waDA data=22 crc=True
+      key: waDAimage position2 x
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x000000BB type=waDA data=22 crc=True
+      key: waDAimage position2 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x000000DD type=waDA data=22 crc=True
+      key: waDAimage position3 x
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x000000FF type=waDA data=22 crc=True
+      key: waDAimage position3 y
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x00000121 type=waDA data=22 crc=True
+      key: waDAimage position4 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000143 type=waDA data=22 crc=True
+      key: waDAimage position4 y
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x00000165 type=waDA data=16 crc=True
+      key: waDAimage alpha
+      value bytes: 4
+      int32-be: 255 (0x00 00 00 FF)
+    offset=0x00000181 type=waDA data=17 crc=True
+      key: waDAimage hidden
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000019E type=waDA data=25 crc=True
+      key: waDAtexture object type
+      value bytes: 5
+      text: color
+      hex: 63 6F 6C 6F 72
+    offset=0x000001C3 type=waDA data=19 crc=True
+      key: waDAtexture color1
+      value bytes: 4
+      int32-be: 16777215 (0x00 FF FF FF)
+    offset=0x000001E2 type=waDA data=19 crc=True
+      key: waDAtexture color2
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000201 type=waDA data=18 crc=True
+      key: waDAtexture angle
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000021F type=waDA data=18 crc=True
+      key: waDAtexture level
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000023D type=waDA data=18 crc=True
+      key: waDAtexture pathname
+      value bytes: 1
+      text: @
+      hex: 40
+    offset=0x0000025B type=IDAT data=146 crc=True
+    offset=0x000002F9 type=IEND data=0 crc=True
+Chunk[7]: tag=IPNG data=9736
+  PNG[6]: bytes=9736 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 60 x 60 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=17 crc=True
+      key: object type
+      value bytes: 5
+      text: image
+      hex: 69 6D 61 67 65
+    offset=0x00000053 type=waDA data=22 crc=True
+      key: waDAimage position1 x
+      value bytes: 4
+      int32-be: 280 (0x00 00 01 18)
+    offset=0x00000075 type=waDA data=22 crc=True
+      key: waDAimage position1 y
+      value bytes: 4
+      int32-be: 241 (0x00 00 00 F1)
+    offset=0x00000097 type=waDA data=22 crc=True
+      key: waDAimage position2 x
+      value bytes: 4
+      int32-be: 339 (0x00 00 01 53)
+    offset=0x000000B9 type=waDA data=22 crc=True
+      key: waDAimage position2 y
+      value bytes: 4
+      int32-be: 241 (0x00 00 00 F1)
+    offset=0x000000DB type=waDA data=22 crc=True
+      key: waDAimage position3 x
+      value bytes: 4
+      int32-be: 339 (0x00 00 01 53)
+    offset=0x000000FD type=waDA data=22 crc=True
+      key: waDAimage position3 y
+      value bytes: 4
+      int32-be: 182 (0x00 00 00 B6)
+    offset=0x0000011F type=waDA data=22 crc=True
+      key: waDAimage position4 x
+      value bytes: 4
+      int32-be: 280 (0x00 00 01 18)
+    offset=0x00000141 type=waDA data=22 crc=True
+      key: waDAimage position4 y
+      value bytes: 4
+      int32-be: 182 (0x00 00 00 B6)
+    offset=0x00000163 type=waDA data=16 crc=True
+      key: waDAimage alpha
+      value bytes: 4
+      int32-be: 255 (0x00 00 00 FF)
+    offset=0x0000017F type=waDA data=17 crc=True
+      key: waDAimage hidden
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000019C type=IDAT data=8192 crc=True
+    offset=0x000021A8 type=IDAT data=1096 crc=True
+    offset=0x000025FC type=IEND data=0 crc=True
+Chunk[8]: tag=IPNG data=773
+  PNG[7]: bytes=773 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 64 x 64 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=19 crc=True
+      key: object type
+      value bytes: 7
+      text: texture
+      hex: 74 65 78 74 75 72 65
+    offset=0x00000055 type=waDA data=22 crc=True
+      key: waDAimage position1 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000077 type=waDA data=22 crc=True
+      key: waDAimage position1 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000099 type=waDA data=22 crc=True
+      key: waDAimage position2 x
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x000000BB type=waDA data=22 crc=True
+      key: waDAimage position2 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x000000DD type=waDA data=22 crc=True
+      key: waDAimage position3 x
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x000000FF type=waDA data=22 crc=True
+      key: waDAimage position3 y
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x00000121 type=waDA data=22 crc=True
+      key: waDAimage position4 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000143 type=waDA data=22 crc=True
+      key: waDAimage position4 y
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x00000165 type=waDA data=16 crc=True
+      key: waDAimage alpha
+      value bytes: 4
+      int32-be: 255 (0x00 00 00 FF)
+    offset=0x00000181 type=waDA data=17 crc=True
+      key: waDAimage hidden
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000019E type=waDA data=25 crc=True
+      key: waDAtexture object type
+      value bytes: 5
+      text: color
+      hex: 63 6F 6C 6F 72
+    offset=0x000001C3 type=waDA data=19 crc=True
+      key: waDAtexture color1
+      value bytes: 4
+      int32-be: 16777215 (0x00 FF FF FF)
+    offset=0x000001E2 type=waDA data=19 crc=True
+      key: waDAtexture color2
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000201 type=waDA data=18 crc=True
+      key: waDAtexture angle
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000021F type=waDA data=18 crc=True
+      key: waDAtexture level
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000023D type=waDA data=18 crc=True
+      key: waDAtexture pathname
+      value bytes: 1
+      text: @
+      hex: 40
+    offset=0x0000025B type=IDAT data=146 crc=True
+    offset=0x000002F9 type=IEND data=0 crc=True
+Chunk[9]: tag=MEND data=0
