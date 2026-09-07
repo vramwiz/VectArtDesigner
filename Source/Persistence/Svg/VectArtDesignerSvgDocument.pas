@@ -532,6 +532,8 @@ begin
             .Append('" vad:fill-color="').Append(Integer(Path.FillColor))
             .Append('" vad:name="').Append(XmlEscape(Path.Name))
             .Append('" vad:locked="').Append(BooleanText(Path.Locked))
+            .Append('" vad:bounds-editing="')
+            .Append(BooleanText(Path.BoundsEditing))
             .Append('"');
           if not Path.Visible then
             Builder.Append(' display="none"');
@@ -546,11 +548,25 @@ begin
         if not (Layer is TVectArtRectangleLayer) then
           Continue;
         Rectangle := TVectArtRectangleLayer(Layer);
-        Builder.Append('  <rect x="').Append(SvgNumber(Rectangle.Bounds.Left))
-          .Append('" y="').Append(SvgNumber(Rectangle.Bounds.Top))
-          .Append('" width="').Append(SvgNumber(Rectangle.Bounds.Width))
-          .Append('" height="').Append(SvgNumber(Rectangle.Bounds.Height))
-          .Append('" fill="').Append(SvgColor(Rectangle.FillColor))
+        if Rectangle.Shape = vpsEllipse then
+          Builder.Append('  <ellipse cx="').Append(SvgNumber(
+            (Rectangle.Bounds.Left + Rectangle.Bounds.Right) * 0.5))
+            .Append('" cy="').Append(SvgNumber(
+            (Rectangle.Bounds.Top + Rectangle.Bounds.Bottom) * 0.5))
+            .Append('" rx="').Append(SvgNumber(Abs(Rectangle.Bounds.Width) *
+            0.5)).Append('" ry="').Append(SvgNumber(
+            Abs(Rectangle.Bounds.Height) * 0.5)).Append('" fill="')
+        else
+          Builder.Append('  <rect x="').Append(SvgNumber(Rectangle.Bounds.Left))
+            .Append('" y="').Append(SvgNumber(Rectangle.Bounds.Top))
+            .Append('" width="').Append(SvgNumber(Rectangle.Bounds.Width))
+            .Append('" height="').Append(SvgNumber(Rectangle.Bounds.Height))
+            .Append('" fill="');
+        if Rectangle.Filled then
+          Builder.Append(SvgColor(Rectangle.FillColor))
+        else
+          Builder.Append('none');
+        Builder
           .Append('" opacity="').Append(SvgNumber(Rectangle.Opacity))
           .Append('" vad:fill-color="')
           .Append(Integer(Rectangle.FillColor))
@@ -570,8 +586,11 @@ begin
               Rectangle.Bounds.Bottom) * 0.5)).Append(')"');
         if not Rectangle.Visible then
           Builder.Append(' display="none"');
-        Builder.Append('><title>').Append(XmlEscape(Rectangle.Name))
-          .AppendLine('</title></rect>');
+        Builder.Append('><title>').Append(XmlEscape(Rectangle.Name));
+        if Rectangle.Shape = vpsEllipse then
+          Builder.AppendLine('</title></ellipse>')
+        else
+          Builder.AppendLine('</title></rect>');
       end;
       Builder.AppendLine('</svg>');
       SvgText := Builder.ToString;
@@ -972,6 +991,8 @@ function TryParseRectangle(const Node: IXMLNode;
   InheritedStyles: TSvgInheritedStyles; Index: Integer;
   out Data: TVectArtRectangleData): Boolean;
 var
+  CenterX: Single;
+  CenterY: Single;
   DisplayValue: string;
   FillOpacity: Single;
   FillInteger: Integer;
@@ -984,6 +1005,8 @@ var
   StrokeStyleInteger: Integer;
   StrokeText: string;
   StrokeWidth: Single;
+  RadiusX: Single;
+  RadiusY: Single;
   ValueText: string;
   VisibilityValue: string;
   Width: Single;
@@ -991,29 +1014,43 @@ var
   Y: Single;
 begin
   Result := False;
-  if not TryGetAttribute(Node, 'x', ValueText) then
-    ValueText := '0';
-  if not TryParseSvgNumber(ValueText, X) then
-    Exit;
-  if not TryGetAttribute(Node, 'y', ValueText) then
-    ValueText := '0';
-  if not TryParseSvgNumber(ValueText, Y) then
-    Exit;
-  if not TryGetAttribute(Node, 'width', ValueText) or
-    not TryParseSvgNumber(ValueText, Width) or (Width < 0) then
-    Exit;
-  if not TryGetAttribute(Node, 'height', ValueText) or
-    not TryParseSvgNumber(ValueText, Height) or (Height < 0) then
-    Exit;
+  if SameText(LocalNodeName(Node), 'ellipse') then
+  begin
+    if not TryGetAttribute(Node, 'cx', ValueText) then ValueText := '0';
+    if not TryParseSvgNumber(ValueText, CenterX) then Exit;
+    if not TryGetAttribute(Node, 'cy', ValueText) then ValueText := '0';
+    if not TryParseSvgNumber(ValueText, CenterY) then Exit;
+    if not TryGetAttribute(Node, 'rx', ValueText) or
+      not TryParseSvgNumber(ValueText, RadiusX) or (RadiusX < 0) then Exit;
+    if not TryGetAttribute(Node, 'ry', ValueText) or
+      not TryParseSvgNumber(ValueText, RadiusY) or (RadiusY < 0) then Exit;
+    X := CenterX - RadiusX;
+    Y := CenterY - RadiusY;
+    Width := RadiusX * 2;
+    Height := RadiusY * 2;
+  end
+  else
+  begin
+    if not TryGetAttribute(Node, 'x', ValueText) then ValueText := '0';
+    if not TryParseSvgNumber(ValueText, X) then Exit;
+    if not TryGetAttribute(Node, 'y', ValueText) then ValueText := '0';
+    if not TryParseSvgNumber(ValueText, Y) then Exit;
+    if not TryGetAttribute(Node, 'width', ValueText) or
+      not TryParseSvgNumber(ValueText, Width) or (Width < 0) then Exit;
+    if not TryGetAttribute(Node, 'height', ValueText) or
+      not TryParseSvgNumber(ValueText, Height) or (Height < 0) then Exit;
+  end;
   FillText := 'black';
   TryGetPresentationValueOrInherited(Node, InheritedStyles, 'fill',
     FillText);
-  if SameText(Trim(FillText), 'none') or
-    not TryParseSvgColor(FillText, Data.FillColor) then
+  Data.Filled := not SameText(Trim(FillText), 'none');
+  Data.FillColor := clBlack;
+  if Data.Filled and not TryParseSvgColor(FillText, Data.FillColor) then
     Exit;
   if TryGetAttribute(Node, 'vad:fill-color', ValueText) and
     TryStrToInt(ValueText, FillInteger) and
-    (ColorToRGB(TColor(FillInteger)) = ColorToRGB(Data.FillColor)) then
+    (not Data.Filled or
+     (ColorToRGB(TColor(FillInteger)) = ColorToRGB(Data.FillColor))) then
     Data.FillColor := TColor(FillInteger);
   Data.StrokeColor := clBlack;
   Data.StrokeStyle := vssSolid;
@@ -1056,7 +1093,16 @@ begin
     not TryParseSvgNumber(OpacityText, FillOpacity) then
     Exit;
   Data.Bounds := TRectF.Create(X, Y, X + Width, Y + Height);
-  Data.Name := LayerName(Node, 'Rectangle', Index);
+  if SameText(LocalNodeName(Node), 'ellipse') then
+  begin
+    Data.Name := LayerName(Node, 'Ellipse', Index);
+    Data.Shape := vpsEllipse;
+  end
+  else
+  begin
+    Data.Name := LayerName(Node, 'Rectangle', Index);
+    Data.Shape := vpsRectangle;
+  end;
   Data.Opacity := EnsureRange(Opacity * FillOpacity, 0.0, 1.0);
   Data.RotationDegrees := 0.0;
   Data.Visible := True;
@@ -1557,6 +1603,7 @@ var
 begin
   Result := False;
   Data.Bezier := False;
+  Data.BoundsEditing := False;
   if SameText(LocalNodeName(Node), 'path') then
   begin
     if not TryGetAttribute(Node, 'd', PointsText) or
@@ -1704,6 +1751,8 @@ begin
   Data.Locked := False;
   if TryGetAttribute(Node, 'vad:locked', LockedText) then
     TryParseBoolean(LockedText, Data.Locked);
+  if TryGetAttribute(Node, 'vad:bounds-editing', ValueText) then
+    TryParseBoolean(ValueText, Data.BoundsEditing);
   Result := True;
 end;
 
@@ -1912,11 +1961,12 @@ var
   I: Integer;
 begin
   Result.Bezier := False;
+  Result.BoundsEditing := False;
   Result.Closed := True;
   Result.EndMarker := vlmNone;
   Result.EndMarkerSize := 4.0;
   Result.FillColor := RectangleData.FillColor;
-  Result.Filled := True;
+  Result.Filled := RectangleData.Filled;
   Result.Locked := RectangleData.Locked;
   Result.Name := RectangleData.Name;
   Result.Opacity := RectangleData.Opacity;
@@ -2107,7 +2157,7 @@ begin
       end;
       Continue;
     end;
-    if SameText(NodeName, 'rect') and
+    if (SameText(NodeName, 'rect') or SameText(NodeName, 'ellipse')) and
       TryParseRectangle(Child, InheritedStyles, Rectangles.Count + 1,
         Data) then
     begin
@@ -2124,7 +2174,7 @@ begin
         Rectangles.Add(Data);
         LayerOrder.Add(Rectangles.Count);
       end
-      else
+      else if Data.Shape = vpsRectangle then
       begin
         PathData := PathDataFromTransformedRectangle(Data, Corners,
           SvgStrokeScale(ChildMatrix));
@@ -2132,9 +2182,15 @@ begin
         LayerOrder.Add(-(1000000 + Paths.Count));
         Report.AddIssue(siikConversion, NodeName, ElementId,
           'せん断されたRectangleを閉じたPathへ変換しました。');
+      end
+      else
+      begin
+        Report.AddIssue(siikIgnored, NodeName, ElementId,
+          'せん断されたEllipseは読み込みません。');
+        Continue;
       end;
       ReportSvgElementAdjustments(Child, InheritedStyles, NodeName,
-        ElementId, False, True, Data.StrokeWidth > 0, Report);
+        ElementId, False, Data.Filled, Data.StrokeWidth > 0, Report);
     end
     else if SameText(NodeName, 'line') and
       TryParseLine(Child, InheritedStyles, Lines.Count + 1, LineData) then

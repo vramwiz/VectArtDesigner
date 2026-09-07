@@ -58,6 +58,7 @@ begin
   try
     Data.Bounds := TRectF.Create(100, 100, 200, 200);
     Data.FillColor := clWhite;
+    Data.Filled := True;
     Data.Locked := False;
     Data.Name := 'Rectangle 1';
     Data.Opacity := 1.0;

@@ -116,10 +116,12 @@ begin
           RectangleData.Bounds := RectangleLayer.Bounds;
           RectangleData.Bounds.Offset(DUPLICATE_OFFSET, DUPLICATE_OFFSET);
           RectangleData.FillColor := RectangleLayer.FillColor;
+          RectangleData.Filled := RectangleLayer.Filled;
           RectangleData.Locked := False;
           RectangleData.Name := CopyName(RectangleLayer.Name, UsedNames);
           RectangleData.Opacity := RectangleLayer.Opacity;
           RectangleData.RotationDegrees := RectangleLayer.RotationDegrees;
+          RectangleData.Shape := RectangleLayer.Shape;
           RectangleData.StrokeColor := RectangleLayer.StrokeColor;
           RectangleData.StrokeStyle := RectangleLayer.StrokeStyle;
           RectangleData.StrokeWidth := RectangleLayer.StrokeWidth;

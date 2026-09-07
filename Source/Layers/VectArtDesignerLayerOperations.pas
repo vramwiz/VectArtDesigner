@@ -61,9 +61,15 @@ begin
   Data.Bounds := TRectF.Create(Left, Top, Left + DEFAULT_RECTANGLE_WIDTH,
     Top + DEFAULT_RECTANGLE_HEIGHT);
   if FEditorState <> nil then
-    Data.FillColor := FEditorState.RectangleFillColor
+  begin
+    Data.FillColor := FEditorState.RectangleFillColor;
+    Data.Filled := VectArtRectangleModeHasFill(FEditorState.RectangleMode);
+  end
   else
+  begin
     Data.FillColor := DEFAULT_RECTANGLE_COLOR;
+    Data.Filled := True;
+  end;
   Data.Locked := False;
   Data.Name := NextRectangleName;
   if FEditorState <> nil then
@@ -71,11 +77,15 @@ begin
   else
     Data.Opacity := 1.0;
   Data.RotationDegrees := 0.0;
+  Data.Shape := vpsRectangle;
   if FEditorState <> nil then
   begin
     Data.StrokeColor := FEditorState.RectangleStrokeColor;
     Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
-    Data.StrokeWidth := FEditorState.RectangleStrokeWidth;
+    if VectArtRectangleModeHasStroke(FEditorState.RectangleMode) then
+      Data.StrokeWidth := Max(FEditorState.RectangleStrokeWidth, 1.0)
+    else
+      Data.StrokeWidth := 0.0;
   end
   else
   begin

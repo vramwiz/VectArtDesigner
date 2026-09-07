@@ -1,4 +1,4 @@
-program RectangleStrokeTests;
+﻿program RectangleStrokeTests;
 
 {$APPTYPE CONSOLE}
 
@@ -32,6 +32,7 @@ begin
   try
     Data.Bounds := TRectF.Create(10, 20, 110, 80);
     Data.FillColor := clWhite;
+    Data.Filled := True;
     Data.Locked := False;
     Data.Name := 'Rectangle 1';
     Data.Opacity := 1.0;

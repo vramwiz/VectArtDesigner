@@ -36,6 +36,7 @@ function RectangleData(const Name: string; Left: Single): TVectArtRectangleData;
 begin
   Result.Bounds := TRectF.Create(Left, 10, Left + 20, 30);
   Result.FillColor := clWhite;
+  Result.Filled := True;
   Result.Locked := False;
   Result.Name := Name;
   Result.Opacity := 1.0;

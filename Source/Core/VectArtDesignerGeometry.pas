@@ -27,6 +27,8 @@ function QuadBounds(const Quad: TVectArtQuad): TRectF;
 function PointsBounds(const Points: TArray<TPointF>): TRectF;
 function PointInRotatedRectangle(const Point: TPointF; const Bounds: TRectF;
   RotationDegrees: Single): Boolean;
+function PointInRotatedEllipse(const Point: TPointF; const Bounds: TRectF;
+  RotationDegrees: Single): Boolean;
 function PointInPolygon(const Point: TPointF;
   const Polygon: TArray<TPointF>): Boolean;
 // MIFマーカー番号、線幅、倍率から描画用の点列と閉領域情報を生成する。
@@ -121,6 +123,25 @@ begin
   Result := (LocalPoint.X >= Bounds.Left) and
     (LocalPoint.X <= Bounds.Right) and (LocalPoint.Y >= Bounds.Top) and
     (LocalPoint.Y <= Bounds.Bottom);
+end;
+
+function PointInRotatedEllipse(const Point: TPointF; const Bounds: TRectF;
+  RotationDegrees: Single): Boolean;
+var
+  Center: TPointF;
+  LocalPoint: TPointF;
+  RadiusX: Single;
+  RadiusY: Single;
+begin
+  RadiusX := Abs(Bounds.Width) * 0.5;
+  RadiusY := Abs(Bounds.Height) * 0.5;
+  if SameValue(RadiusX, 0.0) or SameValue(RadiusY, 0.0) then
+    Exit(False);
+  Center := TPointF.Create((Bounds.Left + Bounds.Right) * 0.5,
+    (Bounds.Top + Bounds.Bottom) * 0.5);
+  LocalPoint := RotatePointAround(Point, Center, -RotationDegrees);
+  Result := Sqr((LocalPoint.X - Center.X) / RadiusX) +
+    Sqr((LocalPoint.Y - Center.Y) / RadiusY) <= 1.0;
 end;
 
 function PointInPolygon(const Point: TPointF;

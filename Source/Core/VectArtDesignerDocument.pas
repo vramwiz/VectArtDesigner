@@ -10,6 +10,7 @@ uses
 
 type
   TVectArtLayerKind = (vlkCanvas, vlkRectangle, vlkLine, vlkPath, vlkImage);
+  TVectArtPrimitiveShape = (vpsRectangle, vpsEllipse);
   TVectArtImageSourceKind = (visImage, visLogo);
   TVectArtImagePoints = array[0..3] of TPointF;
   // WebArt Designerの線種コンボとMIF vector stroke style 0..8を同順で保持する。
@@ -62,7 +63,9 @@ type
   private
     FBounds: TRectF;
     FFillColor: TColor;
+    FFilled: Boolean;
     FRotationDegrees: Single;
+    FShape: TVectArtPrimitiveShape;
     FStrokeColor: TColor;
     FStrokeStyle: TVectArtStrokeStyle;
     FStrokeWidth: Single;
@@ -71,8 +74,10 @@ type
       AFillColor: TColor);
     property Bounds: TRectF read FBounds write FBounds;
     property FillColor: TColor read FFillColor write FFillColor;
+    property Filled: Boolean read FFilled write FFilled;
     property RotationDegrees: Single read FRotationDegrees
       write FRotationDegrees;
+    property Shape: TVectArtPrimitiveShape read FShape write FShape;
     property StrokeColor: TColor read FStrokeColor write FStrokeColor;
     property StrokeStyle: TVectArtStrokeStyle read FStrokeStyle
       write FStrokeStyle;
@@ -82,10 +87,12 @@ type
   TVectArtRectangleData = record
     Bounds: TRectF;                         // 回転前の基本矩形。
     FillColor: TColor;                      // 内部の塗り色。
+    Filled: Boolean;                        // 内部を塗る状態。
     Locked: Boolean;                        // 編集を禁止する状態。
     Name: string;                           // レイヤー一覧の表示名。
     Opacity: Single;                        // 0.0..1.0のレイヤー不透明度。
     RotationDegrees: Single;                // 中心回りの時計回り角度。
+    Shape: TVectArtPrimitiveShape;           // 四角または楕円の描画形状。
     StrokeColor: TColor;                    // 枠線色。
     StrokeStyle: TVectArtStrokeStyle; // 枠線パターン。
     StrokeWidth: Single;                    // ドキュメント座標の枠線幅。
@@ -147,6 +154,7 @@ type
   TVectArtPathLayer = class(TVectArtLayer)
   private
     FBezier: Boolean;
+    FBoundsEditing: Boolean;
     FClosed: Boolean;
     FEndMarker: TVectArtLineMarker;
     FEndMarkerSize: Single;
@@ -165,6 +173,7 @@ type
     constructor Create(const AName: string; const APoints: TArray<TPointF>;
       AClosed: Boolean);
     property Bezier: Boolean read FBezier write FBezier;
+    property BoundsEditing: Boolean read FBoundsEditing write FBoundsEditing;
     property Closed: Boolean read FClosed write FClosed;
     property EndMarker: TVectArtLineMarker read FEndMarker write FEndMarker;
     property EndMarkerSize: Single read FEndMarkerSize write FEndMarkerSize;
@@ -186,6 +195,7 @@ type
 
   TVectArtPathData = record
     Bezier: Boolean;                       // 頂点間を滑らかな3次ベジェで結ぶ。
+    BoundsEditing: Boolean;                 // 頂点ではなく外接枠で変形する。
     Closed: Boolean;                        // 終点と始点を閉じる状態。
     EndMarker: TVectArtLineMarker;          // 開いたPathの終点マーカー。
     EndMarkerSize: Single;                  // 終点マーカー倍率。
@@ -398,7 +408,9 @@ begin
   inherited Create(vlkRectangle, AName);
   FBounds := ABounds;
   FFillColor := AFillColor;
+  FFilled := True;
   FRotationDegrees := 0.0;
+  FShape := vpsRectangle;
   FStrokeColor := clBlack;
   FStrokeStyle := vssSolid;
   FStrokeWidth := 0.0;
@@ -432,6 +444,7 @@ begin
   inherited Create(vlkPath, AName);
   FPoints := Copy(APoints);
   FBezier := False;
+  FBoundsEditing := False;
   FClosed := AClosed;
   FEndMarker := vlmNone;
   FEndMarkerSize := 4.0;
@@ -552,10 +565,15 @@ begin
   Result := EnsureRange(Index, 1, FLayers.Count);
   RectangleLayer := TVectArtRectangleLayer.Create(Data.Name, Data.Bounds,
     Data.FillColor);
+  RectangleLayer.Filled := Data.Filled;
   RectangleLayer.Locked := Data.Locked;
   RectangleLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
   RectangleLayer.RotationDegrees := NormalizeAngleDegrees(
     Data.RotationDegrees);
+  if Data.Shape = vpsEllipse then
+    RectangleLayer.Shape := vpsEllipse
+  else
+    RectangleLayer.Shape := vpsRectangle;
   RectangleLayer.StrokeColor := Data.StrokeColor;
   RectangleLayer.StrokeStyle := Data.StrokeStyle;
   RectangleLayer.StrokeWidth := Max(Data.StrokeWidth, 0.0);
@@ -609,6 +627,7 @@ begin
   Result := EnsureRange(Index, 1, FLayers.Count);
   PathLayer := TVectArtPathLayer.Create(Data.Name, Data.Points, Data.Closed);
   PathLayer.Bezier := Data.Bezier;
+  PathLayer.BoundsEditing := Data.BoundsEditing;
   PathLayer.EndMarker := Data.EndMarker;
   PathLayer.EndMarkerSize := Max(Data.EndMarkerSize, 1.0);
   PathLayer.FillColor := Data.FillColor;
@@ -695,10 +714,12 @@ begin
   RectangleLayer := TVectArtRectangleLayer(FLayers[Index]);
   Data.Bounds := RectangleLayer.Bounds;
   Data.FillColor := RectangleLayer.FillColor;
+  Data.Filled := RectangleLayer.Filled;
   Data.Locked := RectangleLayer.Locked;
   Data.Name := RectangleLayer.Name;
   Data.Opacity := RectangleLayer.Opacity;
   Data.RotationDegrees := RectangleLayer.RotationDegrees;
+  Data.Shape := RectangleLayer.Shape;
   Data.StrokeColor := RectangleLayer.StrokeColor;
   Data.StrokeStyle := RectangleLayer.StrokeStyle;
   Data.StrokeWidth := RectangleLayer.StrokeWidth;
@@ -778,6 +799,7 @@ begin
     Exit;
   PathLayer := TVectArtPathLayer(FLayers[Index]);
   Data.Bezier := PathLayer.Bezier;
+  Data.BoundsEditing := PathLayer.BoundsEditing;
   Data.Closed := PathLayer.Closed;
   Data.EndMarker := PathLayer.EndMarker;
   Data.EndMarkerSize := PathLayer.EndMarkerSize;

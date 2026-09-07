@@ -37,6 +37,7 @@ uses
   VectArtDesignerCanvasInteraction in 'Source\Editor\VectArtDesignerCanvasInteraction.pas',
   VectArtDesignerBezierGeometry in 'Source\Editor\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerFreehandGeometry in 'Source\Editor\VectArtDesignerFreehandGeometry.pas',
+  VectArtDesignerRoundedRectangleGeometry in 'Source\Editor\VectArtDesignerRoundedRectangleGeometry.pas',
   VectArtDesignerShapeCreation in 'Source\Editor\VectArtDesignerShapeCreation.pas',
   VectArtDesignerKeyboardMovement in 'Source\Editor\VectArtDesignerKeyboardMovement.pas',
   VectArtDesignerEditorWorkspaceFrame in 'Source\Editor\VectArtDesignerEditorWorkspaceFrame.pas',

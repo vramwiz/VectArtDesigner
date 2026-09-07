@@ -8,8 +8,10 @@ uses
   System.Classes, Vcl.Graphics, VectArtDesignerDocument;
 
 type
-  TVectArtEditorTool = (vetSelect, vetRectangle, vetLine, vetPath,
+  TVectArtEditorTool = (vetSelect, vetRectangle, vetEllipse,
+    vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine, vetPath,
     vetBezier, vetFreehandLine, vetFreehandBezier);
+  TVectArtRectangleMode = (vrmOutline, vrmFill, vrmFillAndOutline);
 
   TVectArtEditorState = class
   private
@@ -33,10 +35,12 @@ type
     FPathStartMarker: TVectArtLineMarker;
     FPathStartMarkerSize: Single;
     FRectangleFillColor: TColor;
+    FRectangleMode: TVectArtRectangleMode;
     FRectangleOpacity: Single;
     FRectangleStrokeColor: TColor;
     FRectangleStrokeStyle: TVectArtStrokeStyle;
     FRectangleStrokeWidth: Single;
+    procedure CycleRectangleMode;
     procedure SetCurrentTool(const Value: TVectArtEditorTool);
     procedure SetLineCap(const Value: TVectArtLineCap);
     procedure SetLineAntiAlias(const Value: Boolean);
@@ -62,8 +66,13 @@ type
     procedure SetRectangleStrokeWidth(const Value: Single);
   public
     constructor Create;
+    procedure SelectClosedBezierToolGroup;
+    procedure SelectClosedPathToolGroup;
     procedure SelectFreehandToolGroup;
+    procedure SelectEllipseToolGroup;
     procedure SelectPathToolGroup;
+    procedure SelectRectangleToolGroup;
+    procedure SelectRoundedRectangleToolGroup;
     property CurrentTool: TVectArtEditorTool read FCurrentTool
       write SetCurrentTool;
     property LineCap: TVectArtLineCap read FLineCap write SetLineCap;
@@ -98,6 +107,7 @@ type
       write SetPathStartMarkerSize;
     property RectangleFillColor: TColor read FRectangleFillColor
       write SetRectangleFillColor;
+    property RectangleMode: TVectArtRectangleMode read FRectangleMode;
     property RectangleOpacity: Single read FRectangleOpacity
       write SetRectangleOpacity;
     property RectangleStrokeColor: TColor read FRectangleStrokeColor
@@ -108,10 +118,23 @@ type
       write SetRectangleStrokeWidth;
   end;
 
+function VectArtRectangleModeHasFill(Mode: TVectArtRectangleMode): Boolean;
+function VectArtRectangleModeHasStroke(Mode: TVectArtRectangleMode): Boolean;
+
 implementation
 
 uses
   System.Math;
+
+function VectArtRectangleModeHasFill(Mode: TVectArtRectangleMode): Boolean;
+begin
+  Result := Mode in [vrmFill, vrmFillAndOutline];
+end;
+
+function VectArtRectangleModeHasStroke(Mode: TVectArtRectangleMode): Boolean;
+begin
+  Result := Mode in [vrmOutline, vrmFillAndOutline];
+end;
 
 const
   DEFAULT_RECTANGLE_COLOR = TColor($00E2904A);
@@ -138,10 +161,74 @@ begin
   FPathStartMarker := vlmNone;
   FPathStartMarkerSize := 4.0;
   FRectangleFillColor := DEFAULT_RECTANGLE_COLOR;
+  FRectangleMode := vrmOutline;
   FRectangleOpacity := 1.0;
   FRectangleStrokeColor := clBlack;
   FRectangleStrokeStyle := vssSolid;
   FRectangleStrokeWidth := 0.0;
+end;
+
+procedure TVectArtEditorState.SelectRectangleToolGroup;
+begin
+  if FCurrentTool <> vetRectangle then
+  begin
+    CurrentTool := vetRectangle;
+    Exit;
+  end;
+  CycleRectangleMode;
+end;
+
+procedure TVectArtEditorState.SelectEllipseToolGroup;
+begin
+  if FCurrentTool <> vetEllipse then
+  begin
+    CurrentTool := vetEllipse;
+    Exit;
+  end;
+  CycleRectangleMode;
+end;
+
+procedure TVectArtEditorState.SelectRoundedRectangleToolGroup;
+begin
+  if FCurrentTool <> vetRoundedRectangle then
+  begin
+    CurrentTool := vetRoundedRectangle;
+    Exit;
+  end;
+  CycleRectangleMode;
+end;
+
+procedure TVectArtEditorState.SelectClosedPathToolGroup;
+begin
+  if FCurrentTool <> vetClosedPath then
+  begin
+    CurrentTool := vetClosedPath;
+    Exit;
+  end;
+  CycleRectangleMode;
+end;
+
+procedure TVectArtEditorState.SelectClosedBezierToolGroup;
+begin
+  if FCurrentTool <> vetClosedBezier then
+  begin
+    CurrentTool := vetClosedBezier;
+    Exit;
+  end;
+  CycleRectangleMode;
+end;
+
+procedure TVectArtEditorState.CycleRectangleMode;
+begin
+  // 面を持つ作成ツール間で同じ初期スタイルを引き継げるよう、モードは共有する。
+  case FRectangleMode of
+    vrmOutline: FRectangleMode := vrmFill;
+    vrmFill: FRectangleMode := vrmFillAndOutline;
+  else
+    FRectangleMode := vrmOutline;
+  end;
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
 end;
 
 procedure TVectArtEditorState.SelectFreehandToolGroup;

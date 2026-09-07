@@ -15,6 +15,8 @@ function BuildPathDisplayPolyline(const Anchors: TArray<TPointF>;
   Bezier, Closed: Boolean; StepsPerSegment: Integer): TArray<TPointF>;
 function BuildSmoothBezierPreview(const Anchors: TArray<TPoint>;
   StepsPerSegment: Integer): TArray<TPoint>;
+function BuildSmoothClosedBezierPreview(const Anchors: TArray<TPoint>;
+  StepsPerSegment: Integer): TArray<TPoint>;
 
 implementation
 
@@ -129,6 +131,23 @@ begin
   for I := 0 to High(Anchors) do
     FloatAnchors[I] := TPointF.Create(Anchors[I].X, Anchors[I].Y);
   FloatPoints := BuildSmoothBezierPolyline(FloatAnchors, False,
+    StepsPerSegment);
+  SetLength(Result, Length(FloatPoints));
+  for I := 0 to High(FloatPoints) do
+    Result[I] := Point(Round(FloatPoints[I].X), Round(FloatPoints[I].Y));
+end;
+
+function BuildSmoothClosedBezierPreview(const Anchors: TArray<TPoint>;
+  StepsPerSegment: Integer): TArray<TPoint>;
+var
+  FloatAnchors: TArray<TPointF>;
+  FloatPoints: TArray<TPointF>;
+  I: Integer;
+begin
+  SetLength(FloatAnchors, Length(Anchors));
+  for I := 0 to High(Anchors) do
+    FloatAnchors[I] := TPointF.Create(Anchors[I].X, Anchors[I].Y);
+  FloatPoints := BuildSmoothBezierPolyline(FloatAnchors, True,
     StepsPerSegment);
   SetLength(Result, Length(FloatPoints));
   for I := 0 to High(FloatPoints) do

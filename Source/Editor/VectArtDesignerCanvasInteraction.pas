@@ -50,6 +50,7 @@ type
     procedure BeginDocumentUpdate;
     procedure ApplyRangeSelection;
     procedure ApplyResizeSelection(X, Y: Integer);
+    procedure ApplyPathResize(X, Y: Integer);
     procedure ApplyImageResize(X, Y: Integer);
     procedure CaptureMoveSelection;
     procedure CommitBoundsCommand;
@@ -426,6 +427,31 @@ begin
   FDocument.SetImagePoints(FDragLayerIndex, NewPoints);
 end;
 
+procedure TVectArtCanvasInteraction.ApplyPathResize(X, Y: Integer);
+var
+  I: Integer;
+  NewBounds: TRectF;
+  NewPoints: TArray<TPointF>;
+  ScaleX: Single;
+  ScaleY: Single;
+begin
+  if (FDocument = nil) or (FDragLayerIndex <= 0) or
+    not (FDocument[FDragLayerIndex] is TVectArtPathLayer) or
+    (FDragStartBounds.Width <= 0) or (FDragStartBounds.Height <= 0) then
+    Exit;
+  NewBounds := ResizedBounds(X, Y);
+  ScaleX := NewBounds.Width / FDragStartBounds.Width;
+  ScaleY := NewBounds.Height / FDragStartBounds.Height;
+  SetLength(NewPoints, Length(FDragStartPathPoints));
+  for I := 0 to High(FDragStartPathPoints) do
+    NewPoints[I] := TPointF.Create(NewBounds.Left +
+      (FDragStartPathPoints[I].X - FDragStartBounds.Left) * ScaleX,
+      NewBounds.Top +
+      (FDragStartPathPoints[I].Y - FDragStartBounds.Top) * ScaleY);
+  // 半径を再計算せず全点を同じ比率で変形し、元アプリの変形後形状に合わせる。
+  FDocument.SetPathPoints(FDragLayerIndex, NewPoints);
+end;
+
 procedure TVectArtCanvasInteraction.ApplyResizeSelection(X, Y: Integer);
 var
   I: Integer;
@@ -748,8 +774,12 @@ begin
     if Layer is TVectArtRectangleLayer then
     begin
       RectangleLayer := TVectArtRectangleLayer(Layer);
-      if PointInRotatedRectangle(TPointF.Create(LogicalX, LogicalY),
-        RectangleLayer.Bounds, RectangleLayer.RotationDegrees) then
+      if (((RectangleLayer.Shape = vpsEllipse) and
+        PointInRotatedEllipse(TPointF.Create(LogicalX, LogicalY),
+          RectangleLayer.Bounds, RectangleLayer.RotationDegrees)) or
+        ((RectangleLayer.Shape = vpsRectangle) and
+        PointInRotatedRectangle(TPointF.Create(LogicalX, LogicalY),
+          RectangleLayer.Bounds, RectangleLayer.RotationDegrees))) then
         Exit(I);
     end;
   end;
@@ -931,6 +961,7 @@ var
   ImageLayer: TVectArtImageLayer;
   LineLayer: TVectArtLineLayer;
   LogicalQuad: TVectArtQuad;
+  PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
   ScreenQuad: TVectArtScreenQuad;
 begin
@@ -951,10 +982,15 @@ begin
     (FDocument.SelectedIndex > 0) and
     (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
   begin
-    Geometry := BuildPathSelectionGeometry(
-      LayerScreenRect(FDocument.SelectedIndex),
-      SelectionFrameOffset(TVectArtPathLayer(
-        FDocument[FDocument.SelectedIndex]).StrokeWidth, FZoom));
+    PathLayer := TVectArtPathLayer(FDocument[FDocument.SelectedIndex]);
+    if PathLayer.BoundsEditing then
+      Geometry := BuildSelectionGeometry(
+        LayerScreenRect(FDocument.SelectedIndex),
+        SelectionFrameOffset(PathLayer.StrokeWidth, FZoom))
+    else
+      Geometry := BuildPathSelectionGeometry(
+        LayerScreenRect(FDocument.SelectedIndex),
+        SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
     Exit(True);
   end;
   if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
@@ -1103,6 +1139,9 @@ begin
           (FDocument[FDragLayerIndex] is TVectArtLineLayer);
         FDragIsImage := (FDocument.SelectionCount = 1) and
           (FDocument[FDragLayerIndex] is TVectArtImageLayer);
+        FDragIsPath := (FDocument.SelectionCount = 1) and
+          (FDocument[FDragLayerIndex] is TVectArtPathLayer) and
+          TVectArtPathLayer(FDocument[FDragLayerIndex]).BoundsEditing;
         if FDragIsLine then
         begin
           FDragStartLineStart := TVectArtLineLayer(
@@ -1113,6 +1152,9 @@ begin
         else if FDragIsImage then
           FDragStartImagePoints := TVectArtImageLayer(
             FDocument[FDragLayerIndex]).Points
+        else if FDragIsPath then
+          FDragStartPathPoints := Copy(TVectArtPathLayer(
+            FDocument[FDragLayerIndex]).Points)
         else
           CaptureMoveSelection;
         if not FDragIsLine and (FDocument.SelectionCount = 1) and
@@ -1320,6 +1362,8 @@ begin
   end
   else if FDragIsImage then
     ApplyImageResize(X, Y)
+  else if FDragIsPath then
+    ApplyPathResize(X, Y)
   else if FDragIsLine then
   begin
     LineLength := Hypot(FDragStartLineEnd.X - FDragStartLineStart.X,
@@ -1395,7 +1439,8 @@ begin
     not (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
     Exit;
   PathLayer := TVectArtPathLayer(FDocument[FDocument.SelectedIndex]);
-  if PathLayer.Locked then
+  // 角丸四角は輪郭点を保持するが、四角と同じ外接枠だけを編集対象にする。
+  if PathLayer.Locked or PathLayer.BoundsEditing then
     Exit;
   SetLength(Result, Length(PathLayer.Points));
   HalfSize := PATH_VERTEX_HANDLE_SIZE div 2;

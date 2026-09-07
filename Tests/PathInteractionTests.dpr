@@ -1,4 +1,4 @@
-program PathInteractionTests;
+﻿program PathInteractionTests;
 
 {$APPTYPE CONSOLE}
 
@@ -29,6 +29,8 @@ uses
     'Source\Editor\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerFreehandGeometry in
     'Source\Editor\VectArtDesignerFreehandGeometry.pas',
+  VectArtDesignerRoundedRectangleGeometry in
+    'Source\Editor\VectArtDesignerRoundedRectangleGeometry.pas',
   VectArtDesignerShapeCreation in
     'Source\Editor\VectArtDesignerShapeCreation.pas',
   VectArtDesignerLayerDuplication in

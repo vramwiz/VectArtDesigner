@@ -19,6 +19,8 @@ uses
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerBezierGeometry in
     'Source\Editor\VectArtDesignerBezierGeometry.pas',
+  VectArtDesignerRoundedRectangleGeometry in
+    'Source\Editor\VectArtDesignerRoundedRectangleGeometry.pas',
   VectArtDesignerDocumentJson in
     'Source\Persistence\VectArtDesignerDocumentJson.pas',
   VectArtDesignerRenderer in
@@ -195,6 +197,7 @@ begin
     Data.Name := 'Rectangle 1';
     Data.Bounds := TRectF.Create(40, 50, 220, 180);
     Data.FillColor := clWhite;
+    Data.Filled := True;
     Data.Opacity := 1.0;
     Data.Visible := True;
     ExactDocument.InsertRectangle(1, Data);
@@ -295,6 +298,7 @@ begin
     Data.Name := 'MIF layer';
     Data.Bounds := TRectF.Create(40, 50, 220, 180);
     Data.FillColor := TColor($00A06020);
+    Data.Filled := False;
     Data.Opacity := 0.625;
     Data.RotationDegrees := 15.0;
     Data.StrokeColor := TColor($000040C0);
@@ -404,6 +408,7 @@ begin
     Require(TargetDocument.LayerCount = 4, 'Layer count differs');
     TargetRectangle := TVectArtRectangleLayer(TargetDocument[1]);
     Require(TargetRectangle.Name = 'Rectangle 1', 'Imported layer name differs');
+    Require(not TargetRectangle.Filled, 'Rectangle fill state differs');
     Require(not TargetRectangle.Locked, 'Imported layer must be unlocked');
     Require(SameValue(TargetRectangle.Opacity, Round(0.625 * 255) / 255,
       0.000001), 'Opacity differs');

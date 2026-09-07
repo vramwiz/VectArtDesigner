@@ -92,8 +92,10 @@ begin
     Data.Name := '四角 & "A"';
     Data.Bounds := TRectF.Create(10.25, -5.5, 210.75, 94.125);
     Data.FillColor := clBtnFace;
+    Data.Filled := True;
     Data.Opacity := 0.625;
     Data.RotationDegrees := 27.5;
+    Data.Shape := vpsRectangle;
     Data.StrokeColor := TColor($00112233);
     Data.StrokeStyle := vssDashDotDot;
     Data.StrokeWidth := 3.5;
@@ -103,11 +105,13 @@ begin
     Data2.Name := '前面';
     Data2.Bounds := TRectF.Create(300, 120, 420, 240);
     Data2.FillColor := clRed;
+    Data2.Filled := False;
     Data2.Opacity := 1.0;
     Data2.RotationDegrees := 0.0;
+    Data2.Shape := vpsEllipse;
     Data2.StrokeColor := clBlack;
     Data2.StrokeStyle := vssSolid;
-    Data2.StrokeWidth := 0.0;
+    Data2.StrokeWidth := 1.0;
     Data2.Visible := True;
     Data2.Locked := False;
     SourceDocument.InsertRectangle(2, Data2);
@@ -129,6 +133,7 @@ begin
     LineData.Visible := True;
     SourceDocument.InsertLine(3, LineData);
     PathData.Name := 'Open path';
+    PathData.BoundsEditing := True;
     PathData.Points := [PointF(520, 40), PointF(760, 80),
       PointF(700, 220), PointF(560, 180)];
     PathData.Closed := False;
@@ -165,6 +170,7 @@ begin
       ErrorMessage);
     Require(SvgText.Contains('xmlns:vad='), 'VAD namespace is missing');
     Require(SvgText.Contains('<rect '), 'SVG rect is missing');
+    Require(SvgText.Contains('<ellipse '), 'SVG ellipse is missing');
     Require(SvgText.Contains('<line '), 'SVG line is missing');
     Require(SvgText.Contains('vad:start-marker="open-arrow"') and
       SvgText.Contains('stroke-width="1"'),
@@ -188,6 +194,7 @@ begin
     Require(TargetDocument.SelectedIndex = 5, 'Selection differs');
     Rectangle := TVectArtRectangleLayer(TargetDocument[1]);
     Require(Rectangle.Name = Data.Name, 'Layer name differs');
+    Require(Rectangle.Filled = Data.Filled, 'Fill state differs');
     Require(Rectangle.Locked, 'Layer lock differs');
     Require(not Rectangle.Visible, 'Layer visibility differs');
     Require(Rectangle.FillColor = Data.FillColor, 'Fill color differs');
@@ -209,6 +216,9 @@ begin
       'Rotation differs');
     Rectangle := TVectArtRectangleLayer(TargetDocument[2]);
     Require(Rectangle.Name = Data2.Name, 'Front layer name differs');
+    Require(Rectangle.Shape = vpsEllipse, 'Front ellipse shape differs');
+    Require(Rectangle.Filled = Data2.Filled,
+      'Front layer fill state differs');
     Require(Rectangle.FillColor = Data2.FillColor,
       'Front layer fill differs');
     Require(Rectangle.Visible and not Rectangle.Locked,
@@ -231,7 +241,8 @@ begin
       'Line stroke differs');
     Path := TVectArtPathLayer(TargetDocument[4]);
     Require((Length(Path.Points) = Length(PathData.Points)) and
-      not Path.Closed and not Path.Filled, 'Path properties differ');
+      Path.BoundsEditing and not Path.Closed and not Path.Filled,
+      'Path properties differ');
     RequireSameSingle(PathData.Points[2].X, Path.Points[2].X,
       'Path point X differs');
     RequireSameSingle(PathData.Points[2].Y, Path.Points[2].Y,
@@ -303,6 +314,22 @@ begin
       'External SVG fill differs');
     RequireSameSingle(0.5, Rectangle.Opacity,
       'External SVG opacity differs');
+    SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
+      'height="180"><ellipse id="external-ellipse" cx="60" cy="45" ' +
+      'rx="40" ry="25" fill="none" stroke="#123456" ' +
+      'stroke-width="2"/></svg>';
+    Require(TryLoadVectArtDocumentFromSvg(SvgText, ExternalDocument,
+      ErrorMessage), ErrorMessage);
+    Require((ExternalDocument.LayerCount = 2) and
+      (ExternalDocument[1] is TVectArtRectangleLayer),
+      'External SVG ellipse was not imported');
+    Rectangle := TVectArtRectangleLayer(ExternalDocument[1]);
+    Require((Rectangle.Shape = vpsEllipse) and not Rectangle.Filled and
+      SameValue(Rectangle.Bounds.Left, 20.0) and
+      SameValue(Rectangle.Bounds.Top, 20.0) and
+      SameValue(Rectangle.Bounds.Right, 100.0) and
+      SameValue(Rectangle.Bounds.Bottom, 70.0),
+      'External SVG ellipse geometry differs');
     SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
       'height="180"><line id="external-line" x1="12.5" y1="20" ' +
       'x2="140" y2="95.5" stroke="red" stroke-width="1" ' +

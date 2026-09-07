@@ -51,10 +51,12 @@ begin
 
     Data.Bounds := TRectF.Create(12.5, 24.25, 640.75, 480.5);
     Data.FillColor := TColor($00E2904A);
+    Data.Filled := True;
     Data.Locked := True;
     Data.Name := '日本語レイヤー';
     Data.Opacity := 0.625;
     Data.RotationDegrees := 27.5;
+    Data.Shape := vpsEllipse;
     Data.StrokeColor := TColor($00112233);
     Data.StrokeStyle := vssLongDashDot;
     Data.StrokeWidth := 3.5;
@@ -79,6 +81,7 @@ begin
     SourceDocument.InsertLine(SourceDocument.LayerCount, LineData);
     PathData.Name := 'Path 1';
     PathData.Bezier := True;
+    PathData.BoundsEditing := True;
     PathData.Points := [PointF(300, 40), PointF(500, 80),
       PointF(440, 220)];
     PathData.Closed := True;
@@ -113,6 +116,8 @@ begin
     SourceDocument.SelectedIndex := 4;
 
     Serialized := SerializeVectArtDocument(SourceDocument);
+    Require(Serialized.Contains('"type":"ellipse"'),
+      'Ellipse JSON type is missing');
     Require(TryDeserializeVectArtDocument(Serialized, TargetDocument,
       ErrorMessage), ErrorMessage);
     Require(TargetDocument.LayerCount = SourceDocument.LayerCount,
@@ -125,6 +130,8 @@ begin
     Require(TargetDocument.SelectedIndex = 4, 'Selection differs');
     Rectangle := TVectArtRectangleLayer(TargetDocument.Layers[1]);
     Require(Rectangle.Name = '日本語レイヤー', 'Layer name differs');
+    Require(Rectangle.Shape = vpsEllipse, 'Ellipse shape differs');
+    Require(Rectangle.Filled = Data.Filled, 'Layer fill state differs');
     Require(Rectangle.Locked, 'Layer lock differs');
     Require(SameValue(Rectangle.Opacity, 0.625), 'Layer opacity differs');
     Require(SameValue(Rectangle.RotationDegrees, 27.5),
@@ -153,7 +160,8 @@ begin
       SameValue(TargetLine.StartMarkerSize, LineData.StartMarkerSize),
       'Line stroke differs');
     TargetPath := TVectArtPathLayer(TargetDocument[3]);
-    Require(TargetPath.Bezier and (Length(TargetPath.Points) = 3) and
+    Require(TargetPath.Bezier and TargetPath.BoundsEditing and
+      (Length(TargetPath.Points) = 3) and
       TargetPath.Closed and
       TargetPath.Filled, 'Path properties differ');
     Require(SameValue(TargetPath.Points[1].X, PathData.Points[1].X) and

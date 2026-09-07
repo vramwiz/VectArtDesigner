@@ -484,7 +484,8 @@ begin
   FShapeCreation.Configure(FDocument, EditHistory, FEditorState,
     FCanvasBounds, FZoom);
   if (Button = mbRight) and (FEditorState <> nil) and
-    (FEditorState.CurrentTool in [vetPath, vetBezier]) and
+    (FEditorState.CurrentTool in [vetPath, vetBezier, vetClosedPath,
+      vetClosedBezier]) and
     FShapeCreation.Active then
   begin
     if not FShapeCreation.FinishPath(False) then
@@ -511,15 +512,17 @@ begin
     if FShapeCreation.MouseDown(Button, Shift, X, Y) then
     begin
       if (FEditorState <> nil) and
-        not (FEditorState.CurrentTool in [vetPath, vetBezier]) then
+        not (FEditorState.CurrentTool in [vetPath, vetBezier,
+          vetClosedPath, vetClosedBezier]) then
         MouseCapture := True;
       Cursor := crCross;
       Invalidate;
       Exit;
     end;
     if (FEditorState <> nil) and
-      (FEditorState.CurrentTool in [vetRectangle, vetLine, vetPath,
-        vetBezier, vetFreehandLine, vetFreehandBezier]) then
+      (FEditorState.CurrentTool in [vetRectangle, vetEllipse,
+        vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine,
+        vetPath, vetBezier, vetFreehandLine, vetFreehandBezier]) then
     begin
       Cursor := crCross;
       Exit;
@@ -564,8 +567,9 @@ begin
     Exit;
   end;
   if (FEditorState <> nil) and
-    (FEditorState.CurrentTool in [vetRectangle, vetLine, vetPath,
-      vetBezier, vetFreehandLine, vetFreehandBezier]) then
+    (FEditorState.CurrentTool in [vetRectangle, vetEllipse,
+      vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine,
+      vetPath, vetBezier, vetFreehandLine, vetFreehandBezier]) then
   begin
     Cursor := crCross;
     Exit;
@@ -980,9 +984,27 @@ begin
       CreationRect := FShapeCreation.PreviewRect;
       if not CreationRect.IsEmpty then
       begin
-        Direct2DCanvas.Brush.Style := bsSolid;
-        Direct2DCanvas.Brush.Color := COLOR_SELECTION;
-        Direct2DCanvas.FrameRect(CreationRect);
+        if FShapeCreation.PreviewIsEllipse then
+        begin
+          Direct2DCanvas.Brush.Style := bsClear;
+          Direct2DCanvas.Pen.Color := COLOR_SELECTION;
+          Direct2DCanvas.Ellipse(CreationRect);
+        end
+        else if FShapeCreation.PreviewIsRoundedRectangle then
+        begin
+          Direct2DCanvas.Brush.Style := bsClear;
+          Direct2DCanvas.Pen.Color := COLOR_SELECTION;
+          Direct2DCanvas.RoundRect(CreationRect.Left, CreationRect.Top,
+            CreationRect.Right, CreationRect.Bottom,
+            FShapeCreation.PreviewRoundedRadius * 2,
+            FShapeCreation.PreviewRoundedRadius * 2);
+        end
+        else
+        begin
+          Direct2DCanvas.Brush.Style := bsSolid;
+          Direct2DCanvas.Brush.Color := COLOR_SELECTION;
+          Direct2DCanvas.FrameRect(CreationRect);
+        end;
       end;
       if FShapeCreation.PreviewLine(LineStart, LineEnd) then
         DrawStyledPreviewLine(Direct2DCanvas, LineStart, LineEnd,
@@ -1271,9 +1293,27 @@ begin
   CreationRect := FShapeCreation.PreviewRect;
   if not CreationRect.IsEmpty then
   begin
-    Canvas.Brush.Style := bsSolid;
-    Canvas.Brush.Color := COLOR_SELECTION;
-    Canvas.FrameRect(CreationRect);
+    if FShapeCreation.PreviewIsEllipse then
+    begin
+      Canvas.Brush.Style := bsClear;
+      Canvas.Pen.Color := COLOR_SELECTION;
+      Canvas.Ellipse(CreationRect);
+    end
+    else if FShapeCreation.PreviewIsRoundedRectangle then
+    begin
+      Canvas.Brush.Style := bsClear;
+      Canvas.Pen.Color := COLOR_SELECTION;
+      Canvas.RoundRect(CreationRect.Left, CreationRect.Top,
+        CreationRect.Right, CreationRect.Bottom,
+        FShapeCreation.PreviewRoundedRadius * 2,
+        FShapeCreation.PreviewRoundedRadius * 2);
+    end
+    else
+    begin
+      Canvas.Brush.Style := bsSolid;
+      Canvas.Brush.Color := COLOR_SELECTION;
+      Canvas.FrameRect(CreationRect);
+    end;
   end;
   if FShapeCreation.PreviewLine(LineStart, LineEnd) then
     DrawStyledPreviewLine(Canvas, LineStart, LineEnd,

@@ -17,6 +17,8 @@ uses
     'Source\Editor\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerFreehandGeometry in
     'Source\Editor\VectArtDesignerFreehandGeometry.pas',
+  VectArtDesignerRoundedRectangleGeometry in
+    'Source\Editor\VectArtDesignerRoundedRectangleGeometry.pas',
   VectArtDesignerEditorState in
     'Source\Core\VectArtDesignerEditorState.pas',
   VectArtDesignerEditCommands in

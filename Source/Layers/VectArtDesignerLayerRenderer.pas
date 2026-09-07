@@ -459,13 +459,23 @@ begin
     RectangleRect := FitThumbnailRect(ThumbnailRect,
       Max(Round(RectangleLayer.Bounds.Width), 1),
       Max(Round(RectangleLayer.Bounds.Height), 1));
-    if Layer.Visible then
-      ACanvas.Brush.Color := BlendThumbnailColor(RectangleLayer.FillColor,
-        RectangleLayer.Opacity)
-    else
-      ACanvas.Brush.Color := BlendThumbnailColor(RectangleLayer.FillColor,
-        RectangleLayer.Opacity * 0.35);
-    ACanvas.FillRect(RectangleRect);
+    if RectangleLayer.Filled then
+    begin
+      if Layer.Visible then
+        ACanvas.Brush.Color := BlendThumbnailColor(RectangleLayer.FillColor,
+          RectangleLayer.Opacity)
+      else
+        ACanvas.Brush.Color := BlendThumbnailColor(RectangleLayer.FillColor,
+          RectangleLayer.Opacity * 0.35);
+      if RectangleLayer.Shape = vpsEllipse then
+      begin
+        ACanvas.Pen.Style := psClear;
+        ACanvas.Ellipse(RectangleRect);
+        ACanvas.Pen.Style := psSolid;
+      end
+      else
+        ACanvas.FillRect(RectangleRect);
+    end;
     if RectangleLayer.StrokeWidth > 0 then
     begin
       ACanvas.Pen.Color := BlendThumbnailColor(RectangleLayer.StrokeColor,
@@ -478,7 +488,14 @@ begin
     end
     else
       ACanvas.Pen.Color := TColor($00707070);
-    ACanvas.FrameRect(RectangleRect);
+    if RectangleLayer.Shape = vpsEllipse then
+    begin
+      ACanvas.Brush.Style := bsClear;
+      ACanvas.Ellipse(RectangleRect);
+      ACanvas.Brush.Style := bsSolid;
+    end
+    else
+      ACanvas.FrameRect(RectangleRect);
     ACanvas.Pen.Style := psSolid;
     ACanvas.Pen.Width := 1;
   end;
@@ -718,13 +735,23 @@ begin
     RectangleRect := FitThumbnailRect(ThumbnailRect,
       Max(Round(RectangleLayer.Bounds.Width), 1),
       Max(Round(RectangleLayer.Bounds.Height), 1));
-    ACanvas.Brush.Color := RectangleLayer.FillColor;
-    if Layer.Visible then
-      ACanvas.Brush.Handle.SetOpacity(RectangleLayer.Opacity)
-    else
-      ACanvas.Brush.Handle.SetOpacity(RectangleLayer.Opacity * 0.35);
-    ACanvas.FillRect(RectangleRect);
-    ACanvas.Brush.Handle.SetOpacity(1.0);
+    if RectangleLayer.Filled then
+    begin
+      ACanvas.Brush.Color := RectangleLayer.FillColor;
+      if Layer.Visible then
+        ACanvas.Brush.Handle.SetOpacity(RectangleLayer.Opacity)
+      else
+        ACanvas.Brush.Handle.SetOpacity(RectangleLayer.Opacity * 0.35);
+      if RectangleLayer.Shape = vpsEllipse then
+      begin
+        ACanvas.Pen.Style := psClear;
+        ACanvas.Ellipse(RectangleRect);
+        ACanvas.Pen.Style := psSolid;
+      end
+      else
+        ACanvas.FillRect(RectangleRect);
+      ACanvas.Brush.Handle.SetOpacity(1.0);
+    end;
     if RectangleLayer.StrokeWidth > 0 then
     begin
       if Layer.Visible then
@@ -741,7 +768,14 @@ begin
     end
     else
       ACanvas.Pen.Color := TColor($00707070);
-    ACanvas.FrameRect(RectangleRect);
+    if RectangleLayer.Shape = vpsEllipse then
+    begin
+      ACanvas.Brush.Style := bsClear;
+      ACanvas.Ellipse(RectangleRect);
+      ACanvas.Brush.Style := bsSolid;
+    end
+    else
+      ACanvas.FrameRect(RectangleRect);
     ACanvas.Pen.Style := psSolid;
     ACanvas.Pen.Width := 1;
   end;

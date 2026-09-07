@@ -163,6 +163,7 @@
         <DCCReference Include="Source\Editor\VectArtDesignerCanvasInteraction.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerBezierGeometry.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerFreehandGeometry.pas"/>
+        <DCCReference Include="Source\Editor\VectArtDesignerRoundedRectangleGeometry.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerShapeCreation.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerKeyboardMovement.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerEditorWorkspaceFrame.pas"/>

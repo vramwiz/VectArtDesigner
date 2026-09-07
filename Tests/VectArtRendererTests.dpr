@@ -1,4 +1,4 @@
-program VectArtRendererTests;
+﻿program VectArtRendererTests;
 
 {$APPTYPE CONSOLE}
 
@@ -63,10 +63,12 @@ begin
 
     Data.Bounds := TRectF.Create(2, 2, 6, 6);
     Data.FillColor := TColor($000000FF);
+    Data.Filled := True;
     Data.Locked := False;
     Data.Name := 'Rectangle 1';
     Data.Opacity := 0.5;
     Data.RotationDegrees := 0.0;
+    Data.Shape := vpsRectangle;
     Data.StrokeColor := clBlack;
     Data.StrokeStyle := vssSolid;
     Data.StrokeWidth := 0.0;
@@ -117,6 +119,14 @@ begin
     Pixel := PixelAt(Rendered, 4, 4);
     Require((Pixel^.R >= 250) and (Pixel^.G >= 250) and (Pixel^.B >= 250),
       'Rectangle fill was not kept separate from the stroke');
+    TVectArtRectangleLayer(Document[1]).Shape := vpsEllipse;
+    Document.SetRectangleBounds(1, TRectF.Create(1, 1, 7, 7));
+    Document.SetRectangleStroke(1, clBlack, 0.0, vssSolid);
+    RenderVectArtDocument(Document, Rendered, 8, 8);
+    Require(PixelAt(Rendered, 1, 1)^.A < 64,
+      'Ellipse filled a bounding-box corner');
+    Require(PixelAt(Rendered, 4, 4)^.A > 0,
+      'Ellipse center was not rendered');
     LineData.StartPoint := TPointF.Create(0, 0);
     LineData.EndPoint := TPointF.Create(7, 7);
     LineData.Locked := False;

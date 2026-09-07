@@ -562,6 +562,21 @@ begin
     (FEditorState.CurrentTool = vetRectangle) then
     lblStatus.Caption := 'Ready   Tool: Rectangle   Canvas: ' + CanvasSize
   else if (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetEllipse) then
+    lblStatus.Caption := 'Ready   Tool: Ellipse   Canvas: ' + CanvasSize
+  else if (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetRoundedRectangle) then
+    lblStatus.Caption := 'Ready   Tool: Rounded Rectangle   Canvas: ' +
+      CanvasSize
+  else if (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetClosedPath) then
+    lblStatus.Caption := 'Closed path: click vertices, click first point, ' +
+      'double-click, or right-click to close   Canvas: ' + CanvasSize
+  else if (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetClosedBezier) then
+    lblStatus.Caption := 'Closed Bezier: click anchors, click first point, ' +
+      'double-click, or right-click to close   Canvas: ' + CanvasSize
+  else if (FEditorState <> nil) and
     (FEditorState.CurrentTool = vetLine) then
     lblStatus.Caption := 'Ready   Tool: Line   Canvas: ' + CanvasSize
   else if (FEditorState <> nil) and
@@ -749,6 +764,51 @@ begin
     procedure
     begin
       FEditorState.SelectFreehandToolGroup;
+    end,
+    function: Boolean
+    begin
+      Result := CanUseToolShortcut;
+    end);
+  FShortcuts.Add(Ord('R'), [],
+    procedure
+    begin
+      FEditorState.SelectRectangleToolGroup;
+    end,
+    function: Boolean
+    begin
+      Result := CanUseToolShortcut;
+    end);
+  FShortcuts.Add(Ord('E'), [],
+    procedure
+    begin
+      FEditorState.SelectEllipseToolGroup;
+    end,
+    function: Boolean
+    begin
+      Result := CanUseToolShortcut;
+    end);
+  FShortcuts.Add(Ord('U'), [],
+    procedure
+    begin
+      FEditorState.SelectRoundedRectangleToolGroup;
+    end,
+    function: Boolean
+    begin
+      Result := CanUseToolShortcut;
+    end);
+  FShortcuts.Add(Ord('C'), [],
+    procedure
+    begin
+      FEditorState.SelectClosedPathToolGroup;
+    end,
+    function: Boolean
+    begin
+      Result := CanUseToolShortcut;
+    end);
+  FShortcuts.Add(Ord('G'), [],
+    procedure
+    begin
+      FEditorState.SelectClosedBezierToolGroup;
     end,
     function: Boolean
     begin

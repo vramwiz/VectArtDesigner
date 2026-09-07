@@ -52,7 +52,7 @@ uses
   System.NetEncoding, System.Skia, System.Types, System.UITypes,
   Vcl.Graphics, Vcl.Imaging.pngimage, Winapi.Windows,
   VectArtDesignerBezierGeometry, VectArtDesignerDocumentJson,
-  VectArtDesignerGeometry,
+  VectArtDesignerGeometry, VectArtDesignerRoundedRectangleGeometry,
   VectArtDesignerRenderer;
 
 const
@@ -64,6 +64,13 @@ const
     'AAAAEnRFWHRvYmplY3QgdHlwZQB2ZWN0b3KhamnfAAAAPUlEQVR4nGNgYGBlYGBgZACBGA' +
     'cGBxAdBaWJA0wMfwPO/S+S/0+R3l8L5/zPjP9Pkl4QALmZdL3MxCtFAwBmBRfKcYTSHQAA' +
     'AABJRU5ErkJggg==';
+  // WebArt Designer 7が楕円用に生成した106x1のvector IPNGをそのまま使用する。
+  ELLIPSE_VECTOR_PNG_BASE64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAGoAAAABCAYAAAA2EjsOAAAACXBIWXMAAAsSAAALEgHS3X78' +
+    'AAAAEnRFWHRvYmplY3QgdHlwZQB2ZWN0b3KhamnfAAAAdUlEQVR4nGNgYGBnYGBgZACBrA' +
+    'UMDiA6EUoTBziIV4oBWMBk8gOIfWkKEBrkjvxtuWkpMtYOyyculkyfFYkij6w3ygHh5oi' +
+    '82GcJqstQ1ILkYWbhshdmBohWmKxuHOfeiWIWTJ5a/kUOZ2T/wewBycPcAdMJABE6LGgCK' +
+    'wGjAAAAAElFTkSuQmCC';
   LINE_VECTOR_PNG_BASE64 =
     'iVBORw0KGgoAAAANSUhEUgAAAB8AAAABCAYAAAAmcnXSAAAACXBIWXMAAAsSAAALEgHS3X78' +
     'AAAAEnRFWHRvYmplY3QgdHlwZQB2ZWN0b3KhamnfAAAALklEQVR4nGNgYGBiYGBgZACBrg' +
@@ -124,6 +131,7 @@ type
   TMifPathExportShape = (mpesUnsupported, mpesLine, mpesPath);
 
   TRectangleMifSource = record
+    ElementType: Integer;         // 元オブジェクトの図形種別
     OriginalLeft: Integer;       // ベクターペイロードが使用する基準矩形の左端
     OriginalTop: Integer;        // ベクターペイロードが使用する基準矩形の上端
     OriginalRight: Integer;      // ベクターペイロードが使用する基準矩形の右端
@@ -600,7 +608,13 @@ begin
     (Cardinal(GetRValue(RGBColor)) shl 16) or
     (Cardinal(GetGValue(RGBColor)) shl 8) or
     Cardinal(GetBValue(RGBColor)));
-  Canvas.DrawRect(TRectF.Create(0, 0, Width, Height), FillPaint);
+  if Rectangle.Filled then
+  begin
+    if Rectangle.Shape = vpsEllipse then
+      Canvas.DrawOval(TRectF.Create(0, 0, Width, Height), FillPaint)
+    else
+      Canvas.DrawRect(TRectF.Create(0, 0, Width, Height), FillPaint);
+  end;
   if Rectangle.StrokeWidth > 0 then
   begin
     StrokePaint := TSkPaint.Create(TSkPaintStyle.Stroke);
@@ -621,8 +635,12 @@ begin
       StrokePaint.StrokeCap := TSkStrokeCap.Butt;
     Inset := Min(Rectangle.StrokeWidth * 0.5,
       Min(Width, Height) * 0.5);
-    Canvas.DrawRect(TRectF.Create(Inset, Inset, Width - Inset,
-      Height - Inset), StrokePaint);
+    if Rectangle.Shape = vpsEllipse then
+      Canvas.DrawOval(TRectF.Create(Inset, Inset, Width - Inset,
+        Height - Inset), StrokePaint)
+    else
+      Canvas.DrawRect(TRectF.Create(Inset, Inset, Width - Inset,
+        Height - Inset), StrokePaint);
   end;
   Surface.Flush;
   Result := EncodeRgba(@Pixels[0], Width, Height);
@@ -952,6 +970,10 @@ const
   TEMPLATE_TOP = 105;
   TEMPLATE_RIGHT = 289;
   TEMPLATE_BOTTOM = 202;
+  ELLIPSE_TEMPLATE_LEFT = 105;
+  ELLIPSE_TEMPLATE_TOP = 105;
+  ELLIPSE_TEMPLATE_RIGHT = 212;
+  ELLIPSE_TEMPLATE_BOTTOM = 176;
 var
   OriginalBottom: Integer;
   OriginalLeft: Integer;
@@ -962,7 +984,9 @@ var
   ScaleX: Double;
   ScaleY: Double;
 begin
-  if Source.Valid then
+  if Source.Valid and
+    (((Rectangle.Shape = vpsEllipse) and (Source.ElementType = 2)) or
+     ((Rectangle.Shape = vpsRectangle) and (Source.ElementType = 4))) then
   begin
     OriginalLeft := Source.OriginalLeft;
     OriginalTop := Source.OriginalTop;
@@ -971,14 +995,27 @@ begin
   end
   else
   begin
-    OriginalLeft := TEMPLATE_LEFT;
-    OriginalTop := TEMPLATE_TOP;
-    OriginalRight := TEMPLATE_RIGHT;
-    OriginalBottom := TEMPLATE_BOTTOM;
+    if Rectangle.Shape = vpsEllipse then
+    begin
+      OriginalLeft := ELLIPSE_TEMPLATE_LEFT;
+      OriginalTop := ELLIPSE_TEMPLATE_TOP;
+      OriginalRight := ELLIPSE_TEMPLATE_RIGHT;
+      OriginalBottom := ELLIPSE_TEMPLATE_BOTTOM;
+    end
+    else
+    begin
+      OriginalLeft := TEMPLATE_LEFT;
+      OriginalTop := TEMPLATE_TOP;
+      OriginalRight := TEMPLATE_RIGHT;
+      OriginalBottom := TEMPLATE_BOTTOM;
+    end;
   end;
   AddWadaInteger(Png, 'vector closed', 1);
   AddWadaInteger(Png, 'vector quality', 1);
-  AddWadaInteger(Png, 'vector element type', 4);
+  if Rectangle.Shape = vpsEllipse then
+    AddWadaInteger(Png, 'vector element type', 2)
+  else
+    AddWadaInteger(Png, 'vector element type', 4);
   AddWadaInteger(Png, 'vector stroke style', Ord(Rectangle.StrokeStyle));
   AddWadaInteger(Png, 'vector stroke cap', 0);
   AddWadaInteger(Png, 'vector stroke join', 2);
@@ -1018,7 +1055,7 @@ begin
   AddWadaInteger(Png, 'vector original position4 y', OriginalBottom);
   AddWadaInteger(Png, 'vector enable stroke texture',
     Ord(Rectangle.StrokeWidth > 0));
-  AddWadaInteger(Png, 'vector enable fill texture', 1);
+  AddWadaInteger(Png, 'vector enable fill texture', Ord(Rectangle.Filled));
   AddWadaString(Png, 'vector effect object type', 'none');
 end;
 
@@ -1044,7 +1081,10 @@ var
   StoredOpacity: Single;
   Width: Integer;
 begin
-  ExpectedName := Format('Rectangle %d', [RectangleOrdinal]);
+  if Rectangle.Shape = vpsEllipse then
+    ExpectedName := Format('Ellipse %d', [RectangleOrdinal])
+  else
+    ExpectedName := Format('Rectangle %d', [RectangleOrdinal]);
   if Rectangle.Name <> ExpectedName then
     Report.AddIssue(meikConversion, LayerIndex, Rectangle.Name,
       Format('レイヤー名はMIFへ保持されず、再読込時に「%s」になります。',
@@ -1092,10 +1132,16 @@ begin
       '負の線幅はMIFでは線なしとして扱われます。');
 end;
 
-function CreateRectangleVectorPng(const Source: TRectangleMifSource): TBytes;
+function CreateRectangleVectorPng(Rectangle: TVectArtRectangleLayer;
+  const Source: TRectangleMifSource): TBytes;
 begin
-  if Source.Valid then
+  if Source.Valid and
+    (((Rectangle.Shape = vpsEllipse) and (Source.ElementType = 2)) or
+     ((Rectangle.Shape = vpsRectangle) and (Source.ElementType = 4))) then
     Result := Copy(Source.VectorPng)
+  else if Rectangle.Shape = vpsEllipse then
+    Result := TNetEncoding.Base64.DecodeStringToBytes(
+      ELLIPSE_VECTOR_PNG_BASE64)
   else
     Result := TNetEncoding.Base64.DecodeStringToBytes(
       RECTANGLE_VECTOR_PNG_BASE64);
@@ -1769,9 +1815,10 @@ begin
       not TryReadPngString(Container[I].Data, 'waDA', 'object subtype',
         ObjectSubtype) or not SameText(ObjectSubtype, 'vector') or
       not TryReadPngInteger(Container[I].Data, 'vector element type',
-        ElementType) or (ElementType <> 4) then
+        ElementType) or not (ElementType in [2, 4]) then
       Continue;
     Source := Default(TRectangleMifSource);
+    Source.ElementType := ElementType;
     StrokeEnabled := 0;
     TryReadPngInteger(Container[I].Data, 'vector enable stroke texture',
       StrokeEnabled);
@@ -2038,7 +2085,7 @@ begin
       if not SameText(ObjectType, 'image') or
         not SameText(ObjectSubtype, 'vector') or
         not TryReadPngInteger(Container[I].Data, 'vector element type',
-          ElementType) or not (ElementType in [4, 6]) then
+          ElementType) or not (ElementType in [2, 4, 6]) then
         Continue;
       FillColor := ColorToRGB(clWhite);
       if (I + 1 < Container.ChunkCount) and
@@ -2116,6 +2163,9 @@ begin
           PathData.Name := Format('Path %d', [Paths.Count + 1]);
           PathData.Bezier := False;
           PathData.Points := Copy(VectorPoints);
+          // 独自MIF属性は加えず、作成時の固有点列が維持された場合だけ外接枠編集へ戻す。
+          PathData.BoundsEditing :=
+            IsRoundedRectanglePathPoints(PathData.Points);
           PathData.Closed := PathClosed;
           PathData.Filled := PathClosed and (FillEnabled <> 0);
           PathData.FillColor := TColor(FillColor);
@@ -2212,7 +2262,16 @@ begin
         LayerOrder.Add(-Lines.Count);
         Continue;
       end;
-      Data.Name := Format('Rectangle %d', [Rectangles.Count + 1]);
+      if ElementType = 2 then
+      begin
+        Data.Name := Format('Ellipse %d', [Rectangles.Count + 1]);
+        Data.Shape := vpsEllipse;
+      end
+      else
+      begin
+        Data.Name := Format('Rectangle %d', [Rectangles.Count + 1]);
+        Data.Shape := vpsRectangle;
+      end;
       if (Position2Y = Top) and (Position4X = Left) then
         Data.Bounds := TRectF.Create(Min(Left, Right), Min(Top, Bottom),
           Max(Left, Right) + 1, Max(Top, Bottom) + 1)
@@ -2227,6 +2286,7 @@ begin
           (Top + Position2Y + Bottom + Position4Y) * 0.25 +
             (Hypot(Position4X - Left, Position4Y - Top) + 1) * 0.5);
       Data.FillColor := TColor(FillColor);
+      Data.Filled := FillEnabled <> 0;
       Data.Opacity := EnsureRange(Alpha / 255.0, 0.0, 1.0);
       Data.RotationDegrees := RadToDeg(ArcTan2(Position2Y - Top,
         Position2X - Left));
@@ -2534,7 +2594,8 @@ begin
         Candidate.AddChunk('IPNG', CreateRectangleImagePng(Rectangle,
           RectangleSource));
         Candidate.AddChunk('IPNG', CreateTexturePng(Rectangle.FillColor));
-        Candidate.AddChunk('IPNG', CreateRectangleVectorPng(RectangleSource));
+        Candidate.AddChunk('IPNG', CreateRectangleVectorPng(Rectangle,
+          RectangleSource));
         Candidate.AddChunk('IPNG', CreateTexturePng(Rectangle.StrokeColor));
         Inc(RectangleIndex);
       end;

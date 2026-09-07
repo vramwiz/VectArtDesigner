@@ -1,4 +1,4 @@
-program LineToolbarTests;
+﻿program LineToolbarTests;
 
 {$APPTYPE CONSOLE}
 
@@ -22,6 +22,8 @@ uses
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerBezierGeometry in
     'Source\Editor\VectArtDesignerBezierGeometry.pas',
+  VectArtDesignerRoundedRectangleGeometry in
+    'Source\Editor\VectArtDesignerRoundedRectangleGeometry.pas',
   VectArtDesignerEditorState in
     'Source\Core\VectArtDesignerEditorState.pas',
   VectArtDesignerEditCommands in

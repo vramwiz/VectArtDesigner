@@ -1,4 +1,4 @@
-program LayerRendererCanvasHiddenTests;
+﻿program LayerRendererCanvasHiddenTests;
 
 {$APPTYPE CONSOLE}
 
@@ -106,6 +106,7 @@ begin
 
     Data.Bounds := TRectF.Create(0, 0, 100, 100);
     Data.FillColor := clRed;
+    Data.Filled := True;
     Data.Locked := False;
     Data.Name := 'Rectangle 1';
     Data.Opacity := 1.0;

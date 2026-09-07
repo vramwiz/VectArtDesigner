@@ -21,6 +21,7 @@
 | `svg` | Canvas | 正の`width`／`height`、または正の寸法を持つ`viewBox`が必要。`viewBox`は`preserveAspectRatio`の`none`と9方向の`meet`／`slice`をキャンバス座標へ適用する。背景色と透明状態を保持する。 |
 | `g` | グループ解除 | 子要素へtransform、opacity、visibility、対応する継承スタイルを適用する。グループ自体は保持しない。 |
 | `rect` | Rectangle | 平行移動、拡大縮小、回転後も直交する場合。`rx`／`ry`の角丸は直線的なRectangleへ、せん断された場合は閉じたPathへ変換して通知する。 |
+| `ellipse` | Ellipse | `cx`／`cy`／`rx`／`ry`を保持する。平行移動、拡大縮小、回転後も直交する場合に対応し、せん断された場合は要素を無視して通知する。 |
 | `line` | Line | 2端点と有効なstrokeが必要。 |
 | `polyline` | 開いたPath | 2頂点以上と有効なstrokeが必要。 |
 | `polygon` | 閉じたPath | 2頂点以上。fillまたはstrokeの少なくとも一方が必要。 |
@@ -28,7 +29,7 @@
 | `image` | Image | 自己完結した`data:image/png;base64`だけを扱う。画像側の`preserveAspectRatio`は保持せず、4頂点のアフィン配置へ変換して通知する。 |
 
 曲線命令、複数サブパス、外部参照画像、不正PNG、描画不能な要素はその要素だけを無視して通知する。
-`circle`、`ellipse`、`text`、`use`など上表にない描画要素も無視して通知する。
+`circle`、`text`、`use`など上表にない描画要素も無視して通知する。
 
 ## 対応属性
 
@@ -42,7 +43,7 @@
 - マーカー: アプリ自身が出力した`vad:start-marker`、`vad:end-marker`と各サイズをLineおよび開いたPathで保持する。
   任意のSVG `marker-start`／`marker-end`定義は編集モデルへ推測変換しない。
 - アプリ固有値: 名前、ロック、選択、元のVCL色値、画像種別など、標準SVGだけでは可逆でない値は
-  `vad`名前空間へ保持する。
+  `vad`名前空間へ保持する。角丸四角Pathの外接枠編集指定は`vad:bounds-editing`で保持する。
 
 `stroke-dashoffset`、既定値以外の`stroke-miterlimit`、`vector-effect`、`paint-order`、
 `transform-origin`、`mix-blend-mode`は保持せず通知する。`fill-rule="evenodd"`は通常塗りへ変換して通知する。
@@ -50,7 +51,7 @@
 
 ## 保存
 
-DocumentのRectangle、Line、Path、PNG Imageだけを出力する。Documentは常にMIF対象型で構成されるため、
+DocumentのRectangle、Ellipse、Line、Path、PNG Imageだけを出力する。Documentは常にMIF対象型で構成されるため、
 SVG保存によってSVG専用の内部データが増えることはない。開いたPathとLineのマーカーは標準SVGの
 `marker`表示と`vad`属性を併記し、再読込時は`vad`属性を編集値の正本とする。
 

@@ -167,6 +167,8 @@ begin
         PathJson.AddPair('type', 'path');
         PathJson.AddPair('name', Path.Name);
         PathJson.AddPair('bezier', TJSONBool.Create(Path.Bezier));
+        PathJson.AddPair('boundsEditing',
+          TJSONBool.Create(Path.BoundsEditing));
         PathJson.AddPair('closed', TJSONBool.Create(Path.Closed));
         PathJson.AddPair('filled', TJSONBool.Create(Path.Filled));
         PathJson.AddPair('fillColor',
@@ -207,7 +209,10 @@ begin
         Continue;
       Rectangle := TVectArtRectangleLayer(Layer);
       RectangleJson := TJSONObject.Create;
-      RectangleJson.AddPair('type', 'rectangle');
+      if Rectangle.Shape = vpsEllipse then
+        RectangleJson.AddPair('type', 'ellipse')
+      else
+        RectangleJson.AddPair('type', 'rectangle');
       RectangleJson.AddPair('name', Rectangle.Name);
       RectangleJson.AddPair('left',
         TJSONNumber.Create(Rectangle.Bounds.Left));
@@ -219,6 +224,7 @@ begin
         TJSONNumber.Create(Rectangle.Bounds.Bottom));
       RectangleJson.AddPair('fillColor',
         TJSONNumber.Create(Integer(Rectangle.FillColor)));
+      RectangleJson.AddPair('filled', TJSONBool.Create(Rectangle.Filled));
       RectangleJson.AddPair('opacity', TJSONNumber.Create(Rectangle.Opacity));
       RectangleJson.AddPair('rotation',
         TJSONNumber.Create(Rectangle.RotationDegrees));
@@ -427,6 +433,10 @@ begin
           if LayerJson.GetValue('bezier') is TJSONBool then
             PathValue.Bezier := TJSONBool(
               LayerJson.GetValue('bezier')).AsBoolean;
+          PathValue.BoundsEditing := False;
+          if LayerJson.GetValue('boundsEditing') is TJSONBool then
+            PathValue.BoundsEditing := TJSONBool(
+              LayerJson.GetValue('boundsEditing')).AsBoolean;
           PathValue.Closed := ReadBoolean(LayerJson, 'closed');
           PathValue.Filled := ReadBoolean(LayerJson, 'filled');
           PathValue.FillColor := TColor(ReadInteger(LayerJson, 'fillColor'));
@@ -506,7 +516,8 @@ begin
           PathData[I] := PathValue;
           Continue;
         end;
-        if LayerTypes[I] <> 'rectangle' then
+        if not ((LayerTypes[I] = 'rectangle') or
+          (LayerTypes[I] = 'ellipse')) then
           raise EConvertError.CreateFmt('Layer %d has an unsupported type',
             [I]);
         Data.Name := ReadString(LayerJson, 'name');
@@ -516,11 +527,18 @@ begin
           ReadSingle(LayerJson, 'right'),
           ReadSingle(LayerJson, 'bottom'));
         Data.FillColor := TColor(ReadInteger(LayerJson, 'fillColor'));
+        Data.Filled := True;
+        if LayerJson.GetValue('filled') is TJSONBool then
+          Data.Filled := TJSONBool(LayerJson.GetValue('filled')).AsBoolean;
         Data.Opacity := ReadSingle(LayerJson, 'opacity');
         Data.RotationDegrees := 0.0;
         if LayerJson.GetValue('rotation') is TJSONNumber then
           Data.RotationDegrees := TJSONNumber(
             LayerJson.GetValue('rotation')).AsDouble;
+        if LayerTypes[I] = 'ellipse' then
+          Data.Shape := vpsEllipse
+        else
+          Data.Shape := vpsRectangle;
         Data.StrokeColor := clBlack;
         if LayerJson.GetValue('strokeColor') is TJSONNumber then
           Data.StrokeColor := TColor(TJSONNumber(
@@ -563,7 +581,7 @@ begin
       Canvas.BackgroundColor := TColor(CanvasColor);
       Canvas.Transparent := CanvasTransparent;
       for I := 0 to High(RectangleData) do
-        if LayerTypes[I] = 'rectangle' then
+        if (LayerTypes[I] = 'rectangle') or (LayerTypes[I] = 'ellipse') then
           Document.InsertRectangle(Document.LayerCount, RectangleData[I])
         else if LayerTypes[I] = 'line' then
           Document.InsertLine(Document.LayerCount, LineData[I])

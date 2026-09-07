@@ -375,7 +375,13 @@ begin
       Canvas.Rotate(RectangleLayer.RotationDegrees,
         (RectangleLayer.Bounds.Left + RectangleLayer.Bounds.Right) * 0.5,
         (RectangleLayer.Bounds.Top + RectangleLayer.Bounds.Bottom) * 0.5);
-      Canvas.DrawRect(RectangleLayer.Bounds, Paint);
+      if RectangleLayer.Filled then
+      begin
+        if RectangleLayer.Shape = vpsEllipse then
+          Canvas.DrawOval(RectangleLayer.Bounds, Paint)
+        else
+          Canvas.DrawRect(RectangleLayer.Bounds, Paint);
+      end;
       if RectangleLayer.StrokeWidth > 0 then
       begin
         StrokeWidth := Max(RectangleLayer.StrokeWidth,
@@ -394,7 +400,10 @@ begin
         else
           StrokePaint.StrokeCap := TSkStrokeCap.Butt;
         StrokePaint.StrokeJoin := TSkStrokeJoin.Miter;
-        Canvas.DrawRect(RectangleLayer.Bounds, StrokePaint);
+        if RectangleLayer.Shape = vpsEllipse then
+          Canvas.DrawOval(RectangleLayer.Bounds, StrokePaint)
+        else
+          Canvas.DrawRect(RectangleLayer.Bounds, StrokePaint);
       end;
     finally
       Canvas.Restore;

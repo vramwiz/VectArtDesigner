@@ -1,4 +1,4 @@
-program DocumentSelectionRevisionTests;
+﻿program DocumentSelectionRevisionTests;
 
 {$APPTYPE CONSOLE}
 
@@ -32,6 +32,7 @@ function RectangleData(const Name: string): TVectArtRectangleData;
 begin
   Result.Bounds := TRectF.Create(10, 10, 30, 30);
   Result.FillColor := clWhite;
+  Result.Filled := True;
   Result.Locked := False;
   Result.Name := Name;
   Result.Opacity := 1.0;

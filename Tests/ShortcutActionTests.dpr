@@ -1,4 +1,4 @@
-program ShortcutActionTests;
+﻿program ShortcutActionTests;
 
 {$APPTYPE CONSOLE}
 
@@ -126,6 +126,31 @@ begin
       begin
         State.SelectFreehandToolGroup;
       end);
+    Action.Add(Ord('R'), [],
+      procedure
+      begin
+        State.SelectRectangleToolGroup;
+      end);
+    Action.Add(Ord('E'), [],
+      procedure
+      begin
+        State.SelectEllipseToolGroup;
+      end);
+    Action.Add(Ord('U'), [],
+      procedure
+      begin
+        State.SelectRoundedRectangleToolGroup;
+      end);
+    Action.Add(Ord('C'), [],
+      procedure
+      begin
+        State.SelectClosedPathToolGroup;
+      end);
+    Action.Add(Ord('G'), [],
+      procedure
+      begin
+        State.SelectClosedBezierToolGroup;
+      end);
 
     Key := Ord('P');
     Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetPath),
@@ -149,6 +174,84 @@ begin
     Require(Action.KeyDown(Key, []) and
       (State.CurrentTool = vetFreehandLine),
       'Third B did not cycle back to the freehand-line tool');
+
+    Key := Ord('R');
+    Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetRectangle) and
+      (State.RectangleMode = vrmOutline),
+      'R did not select the outline-only rectangle tool');
+    Key := Ord('R');
+    Require(Action.KeyDown(Key, []) and (State.RectangleMode = vrmFill),
+      'Repeated R did not select the fill-only rectangle mode');
+    Key := Ord('R');
+    Require(Action.KeyDown(Key, []) and
+      (State.RectangleMode = vrmFillAndOutline),
+      'Third R did not select the filled outline rectangle mode');
+    Key := Ord('R');
+    Require(Action.KeyDown(Key, []) and (State.RectangleMode = vrmOutline),
+      'Fourth R did not cycle back to the outline-only rectangle mode');
+
+    Key := Ord('E');
+    Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetEllipse) and
+      (State.RectangleMode = vrmOutline),
+      'E did not select the outline-only ellipse tool');
+    Key := Ord('E');
+    Require(Action.KeyDown(Key, []) and (State.RectangleMode = vrmFill),
+      'Repeated E did not select the fill-only ellipse mode');
+    Key := Ord('E');
+    Require(Action.KeyDown(Key, []) and
+      (State.RectangleMode = vrmFillAndOutline),
+      'Third E did not select the filled outline ellipse mode');
+    Key := Ord('E');
+    Require(Action.KeyDown(Key, []) and (State.RectangleMode = vrmOutline),
+      'Fourth E did not cycle back to the outline-only ellipse mode');
+
+    Key := Ord('U');
+    Require(Action.KeyDown(Key, []) and
+      (State.CurrentTool = vetRoundedRectangle) and
+      (State.RectangleMode = vrmOutline),
+      'U did not select the outline-only rounded-rectangle tool');
+    Key := Ord('U');
+    Require(Action.KeyDown(Key, []) and (State.RectangleMode = vrmFill),
+      'Repeated U did not select the fill-only rounded-rectangle mode');
+    Key := Ord('U');
+    Require(Action.KeyDown(Key, []) and
+      (State.RectangleMode = vrmFillAndOutline),
+      'Third U did not select the filled outline rounded-rectangle mode');
+    Key := Ord('U');
+    Require(Action.KeyDown(Key, []) and (State.RectangleMode = vrmOutline),
+      'Fourth U did not cycle back to the outline-only rounded mode');
+
+    Key := Ord('C');
+    Require(Action.KeyDown(Key, []) and
+      (State.CurrentTool = vetClosedPath) and
+      (State.RectangleMode = vrmOutline),
+      'C did not select the outline-only closed-path tool');
+    Key := Ord('C');
+    Require(Action.KeyDown(Key, []) and (State.RectangleMode = vrmFill),
+      'Repeated C did not select the fill-only closed-path mode');
+    Key := Ord('C');
+    Require(Action.KeyDown(Key, []) and
+      (State.RectangleMode = vrmFillAndOutline),
+      'Third C did not select the filled outline closed-path mode');
+    Key := Ord('C');
+    Require(Action.KeyDown(Key, []) and (State.RectangleMode = vrmOutline),
+      'Fourth C did not cycle back to the outline-only closed-path mode');
+
+    Key := Ord('G');
+    Require(Action.KeyDown(Key, []) and
+      (State.CurrentTool = vetClosedBezier) and
+      (State.RectangleMode = vrmOutline),
+      'G did not select the outline-only closed-Bezier tool');
+    Key := Ord('G');
+    Require(Action.KeyDown(Key, []) and (State.RectangleMode = vrmFill),
+      'Repeated G did not select the fill-only closed-Bezier mode');
+    Key := Ord('G');
+    Require(Action.KeyDown(Key, []) and
+      (State.RectangleMode = vrmFillAndOutline),
+      'Third G did not select the filled outline closed-Bezier mode');
+    Key := Ord('G');
+    Require(Action.KeyDown(Key, []) and (State.RectangleMode = vrmOutline),
+      'Fourth G did not cycle back to the outline-only closed-Bezier mode');
 
     Key := Ord('L');
     Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetLine),

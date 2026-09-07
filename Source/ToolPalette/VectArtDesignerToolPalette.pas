@@ -1,5 +1,5 @@
 ﻿// 選択・図形作成ツールをコード描画アイコンで選択するControlを提供する。
-// 類似ツールは1ボタンへまとめ、選択中の再クリックでペア内を切り替える。
+// 類似ツールは1ボタンへまとめ、選択中の再クリックで描画モードを切り替える。
 unit VectArtDesignerToolPalette;
 
 interface
@@ -30,15 +30,16 @@ type
 implementation
 
 uses
-  Vcl.Graphics;
+  Winapi.Windows, Vcl.Graphics;
 
 const
   BUTTON_SIZE = 46;
-  BUTTON_COUNT = 5;
+  BUTTON_COUNT = 9;
   COLOR_BACKGROUND = TColor($00252525);
   COLOR_BUTTON = TColor($002D2D2D);
   COLOR_SELECTED = TColor($0046382B);
   COLOR_ICON = TColor($00E0E0E0);
+  COLOR_ICON_FILL = TColor($00808080);
 
 function TVectArtToolPaletteControl.ButtonRect(Index: Integer): TRect;
 begin
@@ -55,7 +56,11 @@ begin
     1: FEditorState.CurrentTool := vetLine;
     2: FEditorState.SelectPathToolGroup;
     3: FEditorState.SelectFreehandToolGroup;
-    4: FEditorState.CurrentTool := vetRectangle;
+    4: FEditorState.SelectEllipseToolGroup;
+    5: FEditorState.SelectRectangleToolGroup;
+    6: FEditorState.SelectRoundedRectangleToolGroup;
+    7: FEditorState.SelectClosedPathToolGroup;
+    8: FEditorState.SelectClosedBezierToolGroup;
   end;
 end;
 
@@ -70,7 +75,11 @@ begin
     2: Result := FEditorState.CurrentTool in [vetPath, vetBezier];
     3: Result := FEditorState.CurrentTool in
       [vetFreehandLine, vetFreehandBezier];
-    4: Result := FEditorState.CurrentTool = vetRectangle;
+    4: Result := FEditorState.CurrentTool = vetEllipse;
+    5: Result := FEditorState.CurrentTool = vetRectangle;
+    6: Result := FEditorState.CurrentTool = vetRoundedRectangle;
+    7: Result := FEditorState.CurrentTool = vetClosedPath;
+    8: Result := FEditorState.CurrentTool = vetClosedBezier;
   else
     Result := False;
   end;
@@ -184,8 +193,59 @@ begin
   end
   else
   begin
-    Canvas.Rectangle(CenterX - 10, CenterY - 8, CenterX + 10,
-      CenterY + 8);
+    Canvas.Pen.Color := COLOR_ICON;
+    if (FEditorState <> nil) and
+      VectArtRectangleModeHasStroke(FEditorState.RectangleMode) then
+      Canvas.Pen.Style := psSolid
+    else
+      Canvas.Pen.Style := psClear;
+    if (FEditorState <> nil) and
+      VectArtRectangleModeHasFill(FEditorState.RectangleMode) then
+    begin
+      Canvas.Brush.Style := bsSolid;
+      Canvas.Brush.Color := COLOR_ICON_FILL;
+    end
+    else
+      Canvas.Brush.Style := bsClear;
+    if Index = 4 then
+      Canvas.Ellipse(CenterX - 10, CenterY - 8, CenterX + 10,
+        CenterY + 8)
+    else if Index = 5 then
+      Canvas.Rectangle(CenterX - 10, CenterY - 8, CenterX + 10,
+        CenterY + 8)
+    else if Index = 6 then
+      Canvas.RoundRect(CenterX - 11, CenterY - 8, CenterX + 11,
+        CenterY + 8, 5, 5)
+    else if Index = 7 then
+      Canvas.Polygon([
+        Point(CenterX - 11, CenterY - 8),
+        Point(CenterX + 10, CenterY - 8),
+        Point(CenterX + 3, CenterY),
+        Point(CenterX + 10, CenterY + 8),
+        Point(CenterX - 11, CenterY + 8)])
+    else
+    begin
+      // GDIのPathにすることで、閉曲線にも共通の枠／塗りモードを適用する。
+      BeginPath(Canvas.Handle);
+      Canvas.PolyBezier([
+        Point(CenterX - 11, CenterY),
+        Point(CenterX - 12, CenterY - 8),
+        Point(CenterX - 5, CenterY - 11),
+        Point(CenterX, CenterY - 7),
+        Point(CenterX + 7, CenterY - 10),
+        Point(CenterX + 12, CenterY - 4),
+        Point(CenterX + 9, CenterY + 2),
+        Point(CenterX + 12, CenterY + 9),
+        Point(CenterX + 2, CenterY + 10),
+        Point(CenterX - 2, CenterY + 7),
+        Point(CenterX - 8, CenterY + 10),
+        Point(CenterX - 12, CenterY + 5),
+        Point(CenterX - 11, CenterY)]);
+      EndPath(Canvas.Handle);
+      StrokeAndFillPath(Canvas.Handle);
+    end;
+    Canvas.Pen.Style := psSolid;
+    Canvas.Brush.Style := bsClear;
   end;
 end;
 

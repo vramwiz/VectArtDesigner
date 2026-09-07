@@ -109,7 +109,27 @@ waDAvector stroke width          = 8バイトのビッグエンディアン倍�
 8 長い破線
 ```
 
-### 2.2 直線
+### 2.2 Ellipse
+
+`丸.mif`では楕円が`object type=image`、`object subtype=vector`、
+`vector element type=2`として保存されている。確認値は次のとおり。
+
+```text
+vector closed              = 1
+vector quality             = 1
+vector original position1  = (105, 105)
+vector original position3  = (212, 176)
+vector stroke width        = 1.0
+vector stroke style/cap/join = 0
+vector enable fill texture   = 1
+vector enable stroke texture = 1
+```
+
+塗り色は後続1個目、線色は後続3個目のtexture IPNGに格納される。WebArt Designer 7が生成した
+106x1のEllipse用vector IPNGを新規Ellipseの互換ペイロードとして使用する。既存MIFから読み込んだ
+同種ペイロードは保存時にそのまま再利用する。
+
+### 2.3 直線
 
 `線.mif`では直線が`object type=image`、`object subtype=vector`、
 `vector element type=6`として保存されている。確認値は次のとおり。
@@ -132,7 +152,7 @@ vector start/end marker size = 11
 回転・拡縮された直線は、この2点へ`vector matrix a..f`を適用して端点を求める。
 現行Writerは同じelement typeと確認済み31×1のvectorペイロードを使用し、マーカーなしで保存する。
 
-### 2.3 連続直線と多角形
+### 2.4 連続直線と多角形
 
 `連続直線.mif`と`多角形.mif`も`vector element type=6`を使用する。直線との区別は
 element typeではなく、補助の`object type=vector` PNGに格納されたコマンド数と
@@ -149,6 +169,33 @@ element typeではなく、補助の`object type=vector` PNGに格納された�
 各頂点には`vector matrix a..f`を適用してDocument座標へ変換する。
 現行WriterはDocument座標をそのままDouble頂点として格納し、単位行列、Path外接範囲、
 開閉・塗り・線の各メタデータを持つ高さ1pxのvector PNGを新規生成する。
+
+### 2.5 曲線の閉鎖と角丸四角形の調査
+
+WebArt Designer 21のローカルヘルプには、曲線作成とは別に`編集 > 曲線を閉じる`があり、
+「始点と終点を直線で結ぶ」操作と明記されている。専用の閉曲線作成ツールではないが、
+閉じた曲線自体は元アプリの編集対象である。
+
+付属ギャラリーの6,603個のMIFを横断すると、確認できた`vector element type`は
+`2, 4, 6, 9, 11, 12`だった。曲線を含む実データでは、60バイトレコードの
+コマンド4が3次ベジェ区間であり、先頭2個のDoubleが終点、次の4個が2制御点を表す。
+`bal011.mif`にはtype 9、`bal001.mif`にはtype 11の`vector closed=1`が存在する。
+type 11では直線コマンド2とベジェコマンド4の混在も確認できた。閉じたサンプルは末尾に
+コマンド3を持たず、最終点も始点と一致しないため、`vector closed=1`によって最後を直線で
+閉じる構造と判断でき、ヘルプの説明とも一致する。
+
+したがって閉じたベジェ形状のMIF表現は可能。VectArtDesignerには独立した閉ベジェ作成ツールを追加し、
+元アプリで分かれている作成と閉鎖を1操作へまとめた。ただし、現行Readerはコマンド1,2,3だけを読み、
+Writerはベジェを16分割した閉じた直線列へ変換するため、見た目と閉鎖は維持できても曲線の編集意味を
+保つネイティブ往復は未対応である。次段階でコマンド4とtype 9/11の読書きを実装する。
+
+角丸四角形について、ヘルプは独立ツールと枠／塗りの3状態を説明する一方、丸み量の調整方法や
+数値は記載していない。付属MIF群からも角半径を表す`waDA`キーや専用element typeは特定できなかった。
+実機観察では作成時の横方向が丸み:中央:丸みで約1:8:1となり、作成後の変形ではこの比率を
+再計算せず輪郭全体が変形される。この挙動に合わせ、VectArtDesignerでは作成時半径を幅の1/10、
+高さの半分を上限として、各1/4円弧を6分割した閉じたtype 6 Pathへ確定する。これにより現行MIFでも
+見た目と変形後の輪郭を往復できる。元アプリの専用element typeと再読込時の種別は、専用サンプルが
+得られるまで不明とする。
 
 ## 3. 数値の保存形式
 多くの数値はPNG内の独自`waDA`チャンクに保存される。PNGチャンクの構造は次のとおり。
@@ -563,9 +610,9 @@ texture = テクスチャ系
 7. logoは文字・フォント・縁取り・効果を復元
 ```
 
-Rectangleサンプルでは、編集対象の四角形が`object type=image`のラスタ画像として含まれ、
-そのほかに`texture`や`vector`の補助IPNGが並ぶ。したがって現行のRectangleモデルへ直接対応付ける前に、
-各IPNGの関連付けを確認するか、画像レイヤーとして保持する必要がある。
+Rectangle／Ellipseサンプルでは、編集対象の図形が`object type=image`のラスタ画像として含まれ、
+その後ろに塗りtexture、vector、線textureの補助IPNGが並ぶ。現行Documentではelement type 4を
+Rectangle、type 2をEllipseへ対応付け、4個のIPNGを一組として読み書きする。
 
 画像では回転・拡縮・左右反転・上下反転を専用フラグとして持たず、4頂点から再現可能。
 
