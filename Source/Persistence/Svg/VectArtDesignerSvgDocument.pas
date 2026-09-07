@@ -1,6 +1,6 @@
 ﻿// MIF編集モデルのDocumentをSVGへ保存し、対応するSVG要素を同じモデルへ取り込む。
 // 標準属性を描画情報の正本とし、SVGに表現できない可逆情報だけをvad名前空間へ保持する。
-// Rectangle、Line、Path、ImageだけをMIF編集モデルとして扱い、変換・無視は読込レポートへ残す。
+// Rectangle、Line、Path、Image、TextをMIF編集モデルとして扱い、変換・無視は読込レポートへ残す。
 unit VectArtDesignerSvgDocument;
 
 interface
@@ -75,10 +75,11 @@ type
   TSvgInheritedStyles = TDictionary<string, string>;
 
 const
-  SVG_INHERITED_STYLE_NAMES: array[0..8] of string = (
+  SVG_INHERITED_STYLE_NAMES: array[0..13] of string = (
     'fill', 'stroke', 'stroke-width', 'stroke-dasharray',
     'stroke-linecap', 'stroke-linejoin', 'fill-opacity',
-    'stroke-opacity', 'shape-rendering');
+    'stroke-opacity', 'shape-rendering', 'font-family', 'font-size',
+    'font-style', 'font-weight', 'letter-spacing');
 
 { TSvgImportReport }
 
@@ -345,6 +346,9 @@ var
   PathDisplayPoints: TArray<TPointF>;
   PointIndex: Integer;
   Rectangle: TVectArtRectangleLayer;
+  TextLayer: TVectArtTextLayer;
+  TextLines: TArray<string>;
+  TextLineIndex: Integer;
 begin
   Result := False;
   SvgText := '';
@@ -417,6 +421,53 @@ begin
       for I := 1 to Document.LayerCount - 1 do
       begin
         Layer := Document[I];
+        if Layer is TVectArtTextLayer then
+        begin
+          TextLayer := TVectArtTextLayer(Layer);
+          Builder.Append('  <text x="').Append(SvgNumber(TextLayer.Bounds.Left))
+            .Append('" y="').Append(SvgNumber(TextLayer.Bounds.Top +
+              TextLayer.FontSize)).Append('" fill="')
+            .Append(SvgColor(TextLayer.TextColor)).Append('" font-family="')
+            .Append(XmlEscape(TextLayer.FontFamily)).Append('" font-size="')
+            .Append(SvgNumber(TextLayer.FontSize)).Append('" letter-spacing="')
+            .Append(SvgNumber(TextLayer.FontSize *
+              TextLayer.LetterSpacingRatio)).Append('" opacity="')
+            .Append(SvgNumber(TextLayer.Opacity)).Append('" vad:name="')
+            .Append(XmlEscape(TextLayer.Name)).Append('" vad:locked="')
+            .Append(BooleanText(TextLayer.Locked)).Append('" vad:width="')
+            .Append(SvgNumber(TextLayer.Bounds.Width))
+            .Append('" vad:height="')
+            .Append(SvgNumber(TextLayer.Bounds.Height)).Append('"');
+          Builder.Append(' vad:letter-spacing-ratio="')
+            .Append(SvgNumber(TextLayer.LetterSpacingRatio))
+            .Append('" vad:line-spacing-ratio="')
+            .Append(SvgNumber(TextLayer.LineSpacingRatio)).Append('"');
+          if fsBold in TextLayer.FontStyle then
+            Builder.Append(' font-weight="bold"');
+          if fsItalic in TextLayer.FontStyle then
+            Builder.Append(' font-style="italic"');
+          if not SameValue(TextLayer.RotationDegrees, 0.0) then
+            Builder.Append(' transform="rotate(')
+              .Append(SvgNumber(TextLayer.RotationDegrees)).Append(' ')
+              .Append(SvgNumber(TextLayer.Bounds.CenterPoint.X)).Append(' ')
+              .Append(SvgNumber(TextLayer.Bounds.CenterPoint.Y)).Append(')"');
+          if not TextLayer.Visible then
+            Builder.Append(' display="none"');
+          Builder.AppendLine('>');
+          TextLines := StringReplace(TextLayer.Text, #13#10, #10,
+            [rfReplaceAll]).Split([#10], TStringSplitOptions.None);
+          for TextLineIndex := 0 to High(TextLines) do
+            Builder.Append('    <tspan x="')
+              .Append(SvgNumber(TextLayer.Bounds.Left)).Append('" dy="')
+              .Append(SvgNumber(IfThen(TextLineIndex = 0, 0.0,
+                TextLayer.FontSize * 1.2))).Append('">')
+              .Append(XmlEscape(TextLines[TextLineIndex]))
+              .AppendLine('</tspan>');
+          Builder.Append('    <title>').Append(XmlEscape(TextLayer.Name))
+            .AppendLine('</title>');
+          Builder.AppendLine('  </text>');
+          Continue;
+        end;
         if Layer is TVectArtImageLayer then
         begin
           Image := TVectArtImageLayer(Layer);
@@ -985,6 +1036,162 @@ begin
   if TryGetAttribute(Node, 'vad:locked', LockedText) then
     TryParseBoolean(LockedText, Data.Locked);
   Result := True;
+end;
+
+function TryParseText(const Node: IXMLNode;
+  InheritedStyles: TSvgInheritedStyles; Index: Integer;
+  out Data: TVectArtTextData): Boolean;
+var
+  Child: IXMLNode;
+  DisplayValue: string;
+  FontSizeText: string;
+  FontStyleText: string;
+  FontWeightText: string;
+  Height: Single;
+  I: Integer;
+  LineCount: Integer;
+  Lines: TStringBuilder;
+  LockedText: string;
+  OpacityText: string;
+  ValueText: string;
+  VisibilityValue: string;
+  Width: Single;
+  X: Single;
+  Y: Single;
+begin
+  Result := False;
+  if not TryGetAttribute(Node, 'x', ValueText) then
+    ValueText := '0';
+  if not TryParseSvgNumber(ValueText, X) then
+    Exit;
+  if not TryGetAttribute(Node, 'y', ValueText) or
+    not TryParseSvgNumber(ValueText, Y) then
+    Exit;
+  Data.FontSize := 16;
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'font-size', FontSizeText) and
+    not TryParseSvgNumber(FontSizeText, Data.FontSize) then
+    Exit;
+  if Data.FontSize <= 0 then
+    Exit;
+
+  Lines := TStringBuilder.Create;
+  try
+    LineCount := 0;
+    for I := 0 to Node.ChildNodes.Count - 1 do
+    begin
+      Child := Node.ChildNodes[I];
+      if not SameText(LocalNodeName(Child), 'tspan') then
+        Continue;
+      if LineCount > 0 then
+        Lines.Append(sLineBreak);
+      Lines.Append(Child.Text);
+      Inc(LineCount);
+    end;
+    if LineCount = 0 then
+    begin
+      Data.Text := Node.Text;
+      LineCount := 1;
+    end
+    else
+      Data.Text := Lines.ToString;
+  finally
+    Lines.Free;
+  end;
+  if Data.Text = '' then
+    Exit;
+
+  Data.FontFamily := 'Yu Gothic UI';
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'font-family', ValueText) and (Trim(ValueText) <> '') then
+    Data.FontFamily := Trim(ValueText).Trim(['"', '''']);
+  Data.FontStyle := [];
+  Data.LetterSpacingRatio := 0.0;
+  if TryGetAttribute(Node, 'vad:letter-spacing-ratio', ValueText) then
+  begin
+    if not TryParseSvgNumber(ValueText, Data.LetterSpacingRatio) then
+      Exit;
+  end
+  else if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'letter-spacing', ValueText) and
+    not SameText(Trim(ValueText), 'normal') then
+  begin
+    if not TryParseSvgNumber(ValueText, Data.LetterSpacingRatio) then
+      Exit;
+    Data.LetterSpacingRatio := Data.LetterSpacingRatio / Data.FontSize;
+  end;
+  Data.LineSpacingRatio := 0.0;
+  if TryGetAttribute(Node, 'vad:line-spacing-ratio', ValueText) and
+    not TryParseSvgNumber(ValueText, Data.LineSpacingRatio) then
+    Exit;
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'font-weight', FontWeightText) and
+    (SameText(Trim(FontWeightText), 'bold') or
+     SameText(Trim(FontWeightText), 'bolder') or
+     (StrToIntDef(Trim(FontWeightText), 400) >= 600)) then
+    Include(Data.FontStyle, fsBold);
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'font-style', FontStyleText) and
+    (SameText(Trim(FontStyleText), 'italic') or
+     SameText(Trim(FontStyleText), 'oblique')) then
+    Include(Data.FontStyle, fsItalic);
+  Data.TextColor := clBlack;
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'fill', ValueText) and not TryParseSvgColor(ValueText,
+    Data.TextColor) then
+    Exit;
+  Width := 0;
+  if not TryGetAttribute(Node, 'vad:width', ValueText) or
+    not TryParseSvgNumber(ValueText, Width) or (Width <= 0) then
+    Width := Max(Data.FontSize, Length(Data.Text) * Data.FontSize * 0.6);
+  Height := 0;
+  if not TryGetAttribute(Node, 'vad:height', ValueText) or
+    not TryParseSvgNumber(ValueText, Height) or (Height <= 0) then
+    Height := Max(Data.FontSize, LineCount * Data.FontSize * 1.2);
+  Data.Bounds := RectF(X, Y - Data.FontSize, X + Width,
+    Y - Data.FontSize + Height);
+  Data.Name := LayerName(Node, 'Text', Index);
+  Data.Opacity := 1.0;
+  if TryGetPresentationValue(Node, 'opacity', OpacityText) and
+    not TryParseSvgNumber(OpacityText, Data.Opacity) then
+    Exit;
+  Data.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
+  Data.Visible := True;
+  if TryGetPresentationValue(Node, 'display', DisplayValue) then
+    Data.Visible := not SameText(Trim(DisplayValue), 'none');
+  if TryGetPresentationValue(Node, 'visibility', VisibilityValue) then
+    Data.Visible := Data.Visible and
+      not SameText(Trim(VisibilityValue), 'hidden') and
+      not SameText(Trim(VisibilityValue), 'collapse');
+  Data.Locked := False;
+  if TryGetAttribute(Node, 'vad:locked', LockedText) then
+    TryParseBoolean(LockedText, Data.Locked);
+  Data.RotationDegrees := 0;
+  Result := True;
+end;
+
+function TransformSvgText(const Matrix: TSvgAffineMatrix;
+  var Data: TVectArtTextData): Boolean;
+var
+  Center: TPointF;
+  ScaleX: Single;
+  ScaleY: Single;
+  TransformedCenter: TPointF;
+begin
+  ScaleX := Hypot(Matrix.A, Matrix.B);
+  ScaleY := Hypot(Matrix.C, Matrix.D);
+  Result := (ScaleX > 0.000001) and (ScaleY > 0.000001) and
+    SameValue(Matrix.A * Matrix.C + Matrix.B * Matrix.D, 0, 0.0001) and
+    ((Matrix.A * Matrix.D - Matrix.B * Matrix.C) > 0);
+  if not Result then
+    Exit;
+  Center := Data.Bounds.CenterPoint;
+  TransformedCenter := SvgTransformPoint(Matrix, Center);
+  Data.Bounds := RectF(TransformedCenter.X - Data.Bounds.Width * ScaleX / 2,
+    TransformedCenter.Y - Data.Bounds.Height * ScaleY / 2,
+    TransformedCenter.X + Data.Bounds.Width * ScaleX / 2,
+    TransformedCenter.Y + Data.Bounds.Height * ScaleY / 2);
+  Data.RotationDegrees := RadToDeg(ArcTan2(Matrix.B, Matrix.A));
 end;
 
 function TryParseRectangle(const Node: IXMLNode;
@@ -2093,7 +2300,8 @@ procedure CollectSvgLayers(const Parent: IXMLNode;
   ParentVisible: Boolean; InheritedStyles: TSvgInheritedStyles;
   Rectangles: TList<TVectArtRectangleData>;
   Lines: TList<TVectArtLineData>; Paths: TList<TVectArtPathData>;
-  Images: TList<TVectArtImageData>; LayerOrder: TList<Integer>;
+  Images: TList<TVectArtImageData>; Texts: TList<TVectArtTextData>;
+  LayerOrder: TList<Integer>;
   var Report: TSvgImportReport);
 var
   Child: IXMLNode;
@@ -2112,6 +2320,7 @@ var
   NodeName: string;
   OpacityText: string;
   PathData: TVectArtPathData;
+  TextData: TVectArtTextData;
   VisibilityText: string;
 begin
   for I := 0 to Parent.ChildNodes.Count - 1 do
@@ -2151,7 +2360,8 @@ begin
       ChildStyles := CreateInheritedStyles(InheritedStyles, Child);
       try
         CollectSvgLayers(Child, ChildMatrix, ChildOpacity, ChildVisible,
-          ChildStyles, Rectangles, Lines, Paths, Images, LayerOrder, Report);
+          ChildStyles, Rectangles, Lines, Paths, Images, Texts, LayerOrder,
+          Report);
       finally
         ChildStyles.Free;
       end;
@@ -2272,13 +2482,31 @@ begin
       ReportSvgElementAdjustments(Child, InheritedStyles, NodeName,
         ElementId, False, False, False, Report);
     end
+    else if SameText(NodeName, 'text') and
+      TryParseText(Child, InheritedStyles, Texts.Count + 1, TextData) then
+    begin
+      if not TryCombineSvgTransform(Child, ParentMatrix, ChildMatrix) or
+        not TransformSvgText(ChildMatrix, TextData) then
+      begin
+        Report.AddIssue(siikIgnored, NodeName, ElementId,
+          '未対応または不正な文字transformのため読み込みません。');
+        Continue;
+      end;
+      TextData.Opacity := TextData.Opacity * ParentOpacity;
+      TextData.Visible := TextData.Visible and ParentVisible;
+      Texts.Add(TextData);
+      LayerOrder.Add(-(3000000 + Texts.Count));
+      ReportSvgElementAdjustments(Child, InheritedStyles, NodeName,
+        ElementId, False, True, False, Report);
+    end
     else if SameText(NodeName, 'defs') or SameText(NodeName, 'title') or
       SameText(NodeName, 'desc') or SameText(NodeName, 'metadata') or
       SameText(NodeName, 'style') then
       Continue
     else if SameText(NodeName, 'rect') or SameText(NodeName, 'line') or
       SameText(NodeName, 'polyline') or SameText(NodeName, 'polygon') or
-      SameText(NodeName, 'path') or SameText(NodeName, 'image') then
+      SameText(NodeName, 'path') or SameText(NodeName, 'image') or
+      SameText(NodeName, 'text') then
       Report.AddIssue(siikIgnored, NodeName, ElementId,
         'MIF編集モデルへ安全に変換できない内容のため読み込みません。')
     else
@@ -2310,6 +2538,7 @@ var
   DiscardedImage: TVectArtImageData;
   DiscardedLine: TVectArtLineData;
   DiscardedPath: TVectArtPathData;
+  DiscardedText: TVectArtTextData;
   I: Integer;
   Images: TList<TVectArtImageData>;
   LayerOrder: TList<Integer>;
@@ -2325,6 +2554,7 @@ var
   SvgDocumentObject: TXMLDocument;
   Transparent: Boolean;
   TransparentText: string;
+  Texts: TList<TVectArtTextData>;
 begin
   Result := False;
   ErrorMessage := '';
@@ -2333,6 +2563,7 @@ begin
   Lines := TList<TVectArtLineData>.Create;
   Paths := TList<TVectArtPathData>.Create;
   Images := TList<TVectArtImageData>.Create;
+  Texts := TList<TVectArtTextData>.Create;
   LayerOrder := TList<Integer>.Create;
   try
     try
@@ -2378,7 +2609,7 @@ begin
       RootStyles := CreateInheritedStyles(nil, Root);
       try
         CollectSvgLayers(Root, RootMatrix, 1.0, True, RootStyles,
-          RectangleData, Lines, Paths, Images, LayerOrder, Report);
+          RectangleData, Lines, Paths, Images, Texts, LayerOrder, Report);
       finally
         RootStyles.Free;
       end;
@@ -2395,6 +2626,8 @@ begin
           Document.RemovePath(Document.LayerCount - 1, DiscardedPath)
         else if Document[Document.LayerCount - 1] is TVectArtImageLayer then
           Document.RemoveImage(Document.LayerCount - 1, DiscardedImage)
+        else if Document[Document.LayerCount - 1] is TVectArtTextLayer then
+          Document.RemoveText(Document.LayerCount - 1, DiscardedText)
         else
           raise EInvalidOp.Create('Document contains an unsupported layer');
       Canvas.Width := CanvasWidth;
@@ -2405,6 +2638,9 @@ begin
         if I > 0 then
           Document.InsertRectangle(Document.LayerCount,
             RectangleData[I - 1])
+        else if I <= -3000000 then
+          Document.InsertText(Document.LayerCount,
+            Texts[-I - 3000001])
         else if I <= -2000000 then
           Document.InsertImage(Document.LayerCount,
             Images[-I - 2000001])
@@ -2422,6 +2658,7 @@ begin
     end;
   finally
     LayerOrder.Free;
+    Texts.Free;
     Images.Free;
     Lines.Free;
     Paths.Free;

@@ -23,6 +23,7 @@ function CanDuplicateSelectedLayers(ADocument: TVectArtDocument): Boolean;
 var
   HasImages: Boolean;
   HasRectangles: Boolean;
+  HasTexts: Boolean;
   I: Integer;
 begin
   Result := (ADocument <> nil) and (ADocument.SelectionCount > 0);
@@ -30,6 +31,7 @@ begin
     Exit;
   HasImages := False;
   HasRectangles := False;
+  HasTexts := False;
   for I := 0 to ADocument.LayerCount - 1 do
     if ADocument.IsLayerSelected(I) and
       ((I = 0) or ADocument[I].Locked) then
@@ -40,9 +42,11 @@ begin
         HasRectangles := True
       else if ADocument[I] is TVectArtImageLayer then
         HasImages := True
+      else if ADocument[I] is TVectArtTextLayer then
+        HasTexts := True
       else
         Exit(False);
-      if HasRectangles and HasImages then
+      if Ord(HasRectangles) + Ord(HasImages) + Ord(HasTexts) > 1 then
         Exit(False);
     end;
 end;
@@ -79,6 +83,10 @@ var
   RectangleData: TVectArtRectangleData;
   RectangleLayer: TVectArtRectangleLayer;
   StartIndex: Integer;
+  TextData: TArray<TVectArtTextData>;
+  TextDataList: TList<TVectArtTextData>;
+  TextLayer: TVectArtTextLayer;
+  TextValue: TVectArtTextData;
   UsedNames: TStringList;
 begin
   if not CanDuplicateSelectedLayers(ADocument) then
@@ -86,6 +94,7 @@ begin
   BeforeSelection := ADocument.GetSelectedLayerIndices;
   DataList := TList<TVectArtRectangleData>.Create;
   ImageDataList := TList<TVectArtImageData>.Create;
+  TextDataList := TList<TVectArtTextData>.Create;
   NewIndices := TList<Integer>.Create;
   UsedNames := TStringList.Create;
   try
@@ -109,6 +118,15 @@ begin
               TPointF.Create(ImageLayer.Points[J].X + DUPLICATE_OFFSET,
                 ImageLayer.Points[J].Y + DUPLICATE_OFFSET);
           ImageDataList.Add(ImageValue);
+        end
+        else if ADocument[I] is TVectArtTextLayer then
+        begin
+          TextLayer := TVectArtTextLayer(ADocument[I]);
+          TextValue := CaptureVectArtTextData(TextLayer);
+          TextValue.Name := CopyName(TextLayer.Name, UsedNames);
+          TextValue.Locked := False;
+          TextValue.Bounds.Offset(DUPLICATE_OFFSET, DUPLICATE_OFFSET);
+          TextDataList.Add(TextValue);
         end
         else
         begin
@@ -140,6 +158,15 @@ begin
         NewIndices.Add(Index);
       end;
     end
+    else if TextDataList.Count > 0 then
+    begin
+      TextData := TextDataList.ToArray;
+      for I := 0 to High(TextData) do
+      begin
+        Index := ADocument.InsertText(ADocument.LayerCount, TextData[I]);
+        NewIndices.Add(Index);
+      end;
+    end
     else
     begin
       Data := DataList.ToArray;
@@ -155,12 +182,16 @@ begin
       if ImageDataList.Count > 0 then
         AEditHistory.AddApplied(TVectArtInsertImagesCommand.Create(
           ADocument, StartIndex, ImageData, BeforeSelection, AfterSelection))
+      else if TextDataList.Count > 0 then
+        AEditHistory.AddApplied(TVectArtInsertTextsCommand.Create(
+          ADocument, StartIndex, TextData, BeforeSelection, AfterSelection))
       else
         AEditHistory.AddApplied(TVectArtInsertRectanglesCommand.Create(
           ADocument, StartIndex, Data, BeforeSelection, AfterSelection));
   finally
     UsedNames.Free;
     NewIndices.Free;
+    TextDataList.Free;
     ImageDataList.Free;
     DataList.Free;
   end;

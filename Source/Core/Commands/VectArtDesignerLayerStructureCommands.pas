@@ -52,6 +52,21 @@ type
     procedure Undo; override;
   end;
 
+  TVectArtInsertTextCommand = class(TVectArtEditCommand)
+  private
+    FAfterSelection: TArray<Integer>;
+    FBeforeSelection: TArray<Integer>;
+    FData: TVectArtTextData;
+    FDocument: TVectArtDocument;
+    FIndex: Integer;
+  public
+    constructor Create(ADocument: TVectArtDocument; Index: Integer;
+      const Data: TVectArtTextData; const BeforeSelection,
+      AfterSelection: TArray<Integer>);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
   TVectArtDeleteRectangleCommand = class(TVectArtEditCommand)
   private
     FAfterSelection: TArray<Integer>;
@@ -112,6 +127,21 @@ type
     procedure Undo; override;
   end;
 
+  TVectArtDeleteTextCommand = class(TVectArtEditCommand)
+  private
+    FAfterSelection: TArray<Integer>;
+    FBeforeSelection: TArray<Integer>;
+    FData: TVectArtTextData;
+    FDocument: TVectArtDocument;
+    FIndex: Integer;
+  public
+    constructor Create(ADocument: TVectArtDocument; Index: Integer;
+      const Data: TVectArtTextData; const BeforeSelection,
+      AfterSelection: TArray<Integer>);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
   TVectArtMoveLayerCommand = class(TVectArtEditCommand)
   private
     FAfterSelection: TArray<Integer>;
@@ -128,6 +158,70 @@ type
   end;
 
 implementation
+
+{ TVectArtDeleteTextCommand }
+
+constructor TVectArtDeleteTextCommand.Create(ADocument: TVectArtDocument;
+  Index: Integer; const Data: TVectArtTextData; const BeforeSelection,
+  AfterSelection: TArray<Integer>);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FIndex := Index;
+  FData := Data;
+  FBeforeSelection := Copy(BeforeSelection);
+  FAfterSelection := Copy(AfterSelection);
+end;
+
+procedure TVectArtDeleteTextCommand.Execute;
+var
+  RemovedData: TVectArtTextData;
+begin
+  if FDocument = nil then
+    Exit;
+  FDocument.RemoveText(FIndex, RemovedData);
+  FDocument.SetSelectedLayers(FAfterSelection);
+end;
+
+procedure TVectArtDeleteTextCommand.Undo;
+begin
+  if FDocument = nil then
+    Exit;
+  FIndex := FDocument.InsertText(FIndex, FData);
+  FDocument.SetSelectedLayers(FBeforeSelection);
+end;
+
+{ TVectArtInsertTextCommand }
+
+constructor TVectArtInsertTextCommand.Create(ADocument: TVectArtDocument;
+  Index: Integer; const Data: TVectArtTextData; const BeforeSelection,
+  AfterSelection: TArray<Integer>);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FIndex := Index;
+  FData := Data;
+  FBeforeSelection := Copy(BeforeSelection);
+  FAfterSelection := Copy(AfterSelection);
+end;
+
+procedure TVectArtInsertTextCommand.Execute;
+begin
+  if FDocument = nil then
+    Exit;
+  FIndex := FDocument.InsertText(FIndex, FData);
+  FDocument.SetSelectedLayers(FAfterSelection);
+end;
+
+procedure TVectArtInsertTextCommand.Undo;
+var
+  RemovedData: TVectArtTextData;
+begin
+  if FDocument = nil then
+    Exit;
+  FDocument.RemoveText(FIndex, RemovedData);
+  FDocument.SetSelectedLayers(FBeforeSelection);
+end;
 
 { TVectArtInsertPathCommand }
 

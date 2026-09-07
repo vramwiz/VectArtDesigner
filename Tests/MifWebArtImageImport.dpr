@@ -16,6 +16,8 @@ uses
   VectArtDesignerDocument in
     'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
+  VectArtDesignerTextGeometry in
+    'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerBezierGeometry in
     'Source\Editor\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerRoundedRectangleGeometry in
@@ -198,9 +200,13 @@ begin
 
     LoadDocument('mif' + PathDelim + #$6587 + #$5B57 + '.mif', Document);
     Require((Document.LayerCount = 2) and
-      (Document[1] is TVectArtImageLayer), 'Logo was not imported');
-    Require(TVectArtImageLayer(Document[1]).SourceKind = visLogo,
-      'Logo source kind differs');
+      (Document[1] is TVectArtTextLayer), 'Logo text was not imported');
+    Require((TVectArtTextLayer(Document[1]).Text =
+      'abc 123 あいうえお　カタカナ　漢字' + sLineBreak +
+      '2行目' + sLineBreak) and
+      (TVectArtTextLayer(Document[1]).FontFamily = 'MS UI Gothic') and
+      SameValue(TVectArtTextLayer(Document[1]).FontSize, 22.0),
+      'Logo text properties differ');
     SavedContainer := nil;
     try
       Require(TryCreateVectArtMifFromDocument(Document, nil, SavedContainer,
@@ -210,9 +216,11 @@ begin
       Require(TryLoadVectArtDocumentFromMif(SavedContainer, Document,
         ErrorMessage), ErrorMessage);
       Require((Document.LayerCount = 2) and
-        (Document[1] is TVectArtImageLayer) and
-        (TVectArtImageLayer(Document[1]).SourceKind = visLogo),
-        'Logo did not survive MIF round trip');
+        (Document[1] is TVectArtTextLayer) and
+        (TVectArtTextLayer(Document[1]).Text =
+          'abc 123 あいうえお　カタカナ　漢字' + sLineBreak +
+          '2行目' + sLineBreak),
+        'Logo text did not survive MIF round trip');
     finally
       SavedContainer.Free;
     end;

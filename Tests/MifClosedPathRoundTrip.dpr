@@ -16,6 +16,8 @@ uses
   VectArtDesignerDocument in
     'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
+  VectArtDesignerTextGeometry in
+    'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerBezierGeometry in
     'Source\Editor\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerRoundedRectangleGeometry in

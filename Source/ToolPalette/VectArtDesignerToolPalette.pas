@@ -34,7 +34,7 @@ uses
 
 const
   BUTTON_SIZE = 46;
-  BUTTON_COUNT = 9;
+  BUTTON_COUNT = 10;
   COLOR_BACKGROUND = TColor($00252525);
   COLOR_BUTTON = TColor($002D2D2D);
   COLOR_SELECTED = TColor($0046382B);
@@ -61,6 +61,7 @@ begin
     6: FEditorState.SelectRoundedRectangleToolGroup;
     7: FEditorState.SelectClosedPathToolGroup;
     8: FEditorState.SelectClosedBezierToolGroup;
+    9: FEditorState.CurrentTool := vetText;
   end;
 end;
 
@@ -80,6 +81,7 @@ begin
     6: Result := FEditorState.CurrentTool = vetRoundedRectangle;
     7: Result := FEditorState.CurrentTool = vetClosedPath;
     8: Result := FEditorState.CurrentTool = vetClosedBezier;
+    9: Result := FEditorState.CurrentTool = vetText;
   else
     Result := False;
   end;
@@ -190,6 +192,17 @@ begin
     Canvas.Pen.Color := COLOR_BACKGROUND;
     Canvas.MoveTo(CenterX + 9, CenterY - 7);
     Canvas.LineTo(CenterX + 12, CenterY - 4);
+  end
+  else if Index = 9 then
+  begin
+    Canvas.Font.Name := 'Times New Roman';
+    Canvas.Font.Height := -28;
+    Canvas.Font.Style := [fsBold];
+    Canvas.Font.Color := COLOR_ICON;
+    Canvas.Brush.Style := bsClear;
+    Canvas.TextOut(CenterX - Canvas.TextWidth('A') div 2,
+      CenterY - Canvas.TextHeight('A') div 2, 'A');
+    Canvas.Font.Style := [];
   end
   else
   begin

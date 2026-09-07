@@ -84,6 +84,7 @@ type
       X, Y: Integer): Boolean; overload;
     function MouseMove(Shift: TShiftState; X, Y: Integer): Boolean;
     function MouseUp(Button: TMouseButton): Boolean;
+    function LayerAt(X, Y: Integer): Integer;
     function SelectedPathVertexRects: TArray<TRect>;
     property Dragging: Boolean read GetDragging;
     property AxisAlignedSelection: Boolean read FAxisAlignedSelection;
@@ -516,7 +517,8 @@ begin
         ((FDocument[I] is TVectArtRectangleLayer) or
          (FDocument[I] is TVectArtLineLayer) or
          (FDocument[I] is TVectArtPathLayer) or
-         (FDocument[I] is TVectArtImageLayer)) then
+         (FDocument[I] is TVectArtImageLayer) or
+         (FDocument[I] is TVectArtTextLayer)) then
       begin
         LayerRect := LayerScreenRect(I);
         if IntersectRect(Intersection, RangeRect, LayerRect) then
@@ -543,11 +545,16 @@ begin
   for I := 1 to FDocument.LayerCount - 1 do
     if FDocument.IsLayerSelected(I) then
     begin
-      if FDocument[I] is TVectArtRectangleLayer then
+      if (FDocument[I] is TVectArtRectangleLayer) or
+        (FDocument[I] is TVectArtTextLayer) then
       begin
         FMoveLayerIndices[MoveIndex] := I;
-        FMoveStartBounds[MoveIndex] :=
-          TVectArtRectangleLayer(FDocument[I]).Bounds;
+        if FDocument[I] is TVectArtTextLayer then
+          FMoveStartBounds[MoveIndex] :=
+            TVectArtTextLayer(FDocument[I]).Bounds
+        else
+          FMoveStartBounds[MoveIndex] :=
+            TVectArtRectangleLayer(FDocument[I]).Bounds;
         Inc(MoveIndex);
       end
       else if FDocument[I] is TVectArtImageLayer then
@@ -583,8 +590,12 @@ begin
   BoundsChanged := False;
   for I := 0 to High(FMoveLayerIndices) do
   begin
-    NewBounds[I] := TVectArtRectangleLayer(
-      FDocument[FMoveLayerIndices[I]]).Bounds;
+    if FDocument[FMoveLayerIndices[I]] is TVectArtTextLayer then
+      NewBounds[I] := TVectArtTextLayer(
+        FDocument[FMoveLayerIndices[I]]).Bounds
+    else
+      NewBounds[I] := TVectArtRectangleLayer(
+        FDocument[FMoveLayerIndices[I]]).Bounds;
     BoundsChanged := BoundsChanged or
       not SameValue(NewBounds[I].Left, FMoveStartBounds[I].Left) or
       not SameValue(NewBounds[I].Top, FMoveStartBounds[I].Top) or
@@ -771,6 +782,14 @@ begin
       end;
       Continue;
     end;
+    if Layer is TVectArtTextLayer then
+    begin
+      if PointInRotatedRectangle(TPointF.Create(LogicalX, LogicalY),
+        TVectArtTextLayer(Layer).Bounds,
+        TVectArtTextLayer(Layer).RotationDegrees) then
+        Exit(I);
+      Continue;
+    end;
     if Layer is TVectArtRectangleLayer then
     begin
       RectangleLayer := TVectArtRectangleLayer(Layer);
@@ -783,6 +802,11 @@ begin
         Exit(I);
     end;
   end;
+end;
+
+function TVectArtCanvasInteraction.LayerAt(X, Y: Integer): Integer;
+begin
+  Result := HitTestLayer(X, Y);
 end;
 
 function TVectArtCanvasInteraction.LayerScreenRect(Index: Integer): TRect;
@@ -799,8 +823,20 @@ begin
     not ((FDocument[Index] is TVectArtRectangleLayer) or
       (FDocument[Index] is TVectArtLineLayer) or
       (FDocument[Index] is TVectArtPathLayer) or
-      (FDocument[Index] is TVectArtImageLayer)) then
+      (FDocument[Index] is TVectArtImageLayer) or
+      (FDocument[Index] is TVectArtTextLayer)) then
     Exit;
+  if FDocument[Index] is TVectArtTextLayer then
+  begin
+    Bounds := QuadBounds(RectangleCorners(
+      TVectArtTextLayer(FDocument[Index]).Bounds,
+      TVectArtTextLayer(FDocument[Index]).RotationDegrees));
+    Result := Rect(FCanvasBounds.Left + Round(Bounds.Left * FZoom),
+      FCanvasBounds.Top + Round(Bounds.Top * FZoom),
+      FCanvasBounds.Left + Round(Bounds.Right * FZoom),
+      FCanvasBounds.Top + Round(Bounds.Bottom * FZoom));
+    Exit;
+  end;
   if FDocument[Index] is TVectArtImageLayer then
   begin
     ImageLayer := TVectArtImageLayer(FDocument[Index]);
@@ -869,9 +905,14 @@ begin
       ((FDocument[I] is TVectArtRectangleLayer) or
        (FDocument[I] is TVectArtLineLayer) or
        (FDocument[I] is TVectArtPathLayer) or
-       (FDocument[I] is TVectArtImageLayer)) then
+       (FDocument[I] is TVectArtImageLayer) or
+       (FDocument[I] is TVectArtTextLayer)) then
     begin
-      if FDocument[I] is TVectArtRectangleLayer then
+      if FDocument[I] is TVectArtTextLayer then
+        Bounds := QuadBounds(RectangleCorners(
+          TVectArtTextLayer(FDocument[I]).Bounds,
+          TVectArtTextLayer(FDocument[I]).RotationDegrees))
+      else if FDocument[I] is TVectArtRectangleLayer then
       begin
         RectangleLayer := TVectArtRectangleLayer(FDocument[I]);
         Bounds := QuadBounds(RectangleCorners(RectangleLayer.Bounds,

@@ -23,11 +23,13 @@ var
   LineData: TVectArtLineData;
   ImageData: TVectArtImageData;
   PathData: TVectArtPathData;
+  TextData: TVectArtTextData;
   ErrorMessage: string;
   Rectangle: TVectArtRectangleLayer;
   TargetLine: TVectArtLineLayer;
   TargetImage: TVectArtImageLayer;
   TargetPath: TVectArtPathLayer;
+  TargetText: TVectArtTextLayer;
   Serialized: string;
   SourceDocument: TVectArtDocument;
   TargetDocument: TVectArtDocument;
@@ -112,8 +114,22 @@ begin
     ImageData.SourceKind := visLogo;
     ImageData.Visible := True;
     SourceDocument.InsertImage(SourceDocument.LayerCount, ImageData);
+    TextData.Bounds := TRectF.Create(80, 240, 420, 340);
+    TextData.FontFamily := 'Yu Gothic UI';
+    TextData.FontSize := 36;
+    TextData.FontStyle := [fsBold, fsItalic];
+    TextData.LetterSpacingRatio := 0.15;
+    TextData.LineSpacingRatio := 0.25;
+    TextData.Locked := False;
+    TextData.Name := 'Text 1';
+    TextData.Opacity := 0.8;
+    TextData.RotationDegrees := -12.5;
+    TextData.Text := '1行目' + sLineBreak + 'second line';
+    TextData.TextColor := clFuchsia;
+    TextData.Visible := True;
+    SourceDocument.InsertText(SourceDocument.LayerCount, TextData);
     SourceDocument.CanvasLayer.Transparent := True;
-    SourceDocument.SelectedIndex := 4;
+    SourceDocument.SelectedIndex := 5;
 
     Serialized := SerializeVectArtDocument(SourceDocument);
     Require(Serialized.Contains('"type":"ellipse"'),
@@ -127,7 +143,7 @@ begin
     Require((TargetDocument.CanvasLayer.Width = 2560) and
       (TargetDocument.CanvasLayer.Height = 1440),
       'Canvas size differs');
-    Require(TargetDocument.SelectedIndex = 4, 'Selection differs');
+    Require(TargetDocument.SelectedIndex = 5, 'Selection differs');
     Rectangle := TVectArtRectangleLayer(TargetDocument.Layers[1]);
     Require(Rectangle.Name = '日本語レイヤー', 'Layer name differs');
     Require(Rectangle.Shape = vpsEllipse, 'Ellipse shape differs');
@@ -190,6 +206,22 @@ begin
     Require(SameValue(TargetImage.Points[0].X,
       ImageData.Points[0].X) and SameValue(TargetImage.Points[2].Y,
       ImageData.Points[2].Y), 'Image points differ');
+    TargetText := TVectArtTextLayer(TargetDocument[5]);
+    Require((TargetText.Name = TextData.Name) and
+      (TargetText.Text = TextData.Text) and
+      (TargetText.FontFamily = TextData.FontFamily) and
+      SameValue(TargetText.FontSize, TextData.FontSize) and
+      (TargetText.FontStyle = TextData.FontStyle) and
+      SameValue(TargetText.LetterSpacingRatio,
+        TextData.LetterSpacingRatio) and
+      SameValue(TargetText.LineSpacingRatio, TextData.LineSpacingRatio) and
+      (TargetText.TextColor = TextData.TextColor) and
+      SameValue(TargetText.RotationDegrees, TextData.RotationDegrees) and
+      SameValue(TargetText.Opacity, TextData.Opacity),
+      'Text properties differ');
+    Require(SameValue(TargetText.Bounds.Left, TextData.Bounds.Left) and
+      SameValue(TargetText.Bounds.Bottom, TextData.Bounds.Bottom),
+      'Text bounds differ');
 
     Require(not TryDeserializeVectArtDocument('{broken', TargetDocument,
       ErrorMessage), 'Invalid JSON was accepted');

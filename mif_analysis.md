@@ -589,9 +589,12 @@ texture = テクスチャ系
 
 # 13. 画像で未確認の項目
 
-実装では通常`image`と`logo`のPNG本体、alpha、hidden、配置4頂点を画像レイヤーへ取り込み、
-複数オブジェクトの順序と回転／反転を表示へ反映している。`logo`の文字・フォント・装飾を編集可能な
-構造へ戻す処理は未対応で、現段階ではラスタライズ済みPNGを正として扱う。
+実装では通常`image`のPNG本体、alpha、hidden、配置4頂点を画像レイヤーへ取り込む。`logo`は
+`logo text unicode`をUTF-16LEとして読み、フォント名、高さ、weight、italic、underline、strikeout、
+色、alpha、hidden、配置4頂点を編集可能なTextへ復元する。新規Textも同じ`logo`メタデータと
+ラスタライズ済みPNGを生成する。outline、effect、writing modeは今後の分類対象とする。
+字間率・行間率は編集モデルと表示PNGへ反映する。対応するMIFの編集可能属性は未確定のため、
+0以外を保存した場合はMIF変換レポートへ通知し、再読込時の率そのものは0へ戻る。
 1. `waDAimage alpha` とGUI透明度の正確な対応
 2. `waDAimage hidden` のON時の値
 3. 縦横比保持チェック状態そのものがMIF保存されるか

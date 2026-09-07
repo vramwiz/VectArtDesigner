@@ -17,6 +17,8 @@ uses
   VectArtDesignerDocument in
     'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
+  VectArtDesignerTextGeometry in
+    'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerBezierGeometry in
     'Source\Editor\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerRoundedRectangleGeometry in
@@ -171,6 +173,8 @@ var
   TargetRectangle: TVectArtRectangleLayer;
   TargetLine: TVectArtLineLayer;
   TargetPath: TVectArtPathLayer;
+  TargetText: TVectArtTextLayer;
+  TextData: TVectArtTextData;
   TwoPointContainer: TVectArtMifContainer;
   TwoPointDocument: TVectArtDocument;
   TwoPointReadDocument: TVectArtDocument;
@@ -344,6 +348,18 @@ begin
     PathData.Visible := True;
     PathData.Locked := False;
     SourceDocument.InsertPath(3, PathData);
+    TextData := Default(TVectArtTextData);
+    TextData.Bounds := RectF(180, 210, 480, 290);
+    TextData.FontFamily := 'MS UI Gothic';
+    TextData.FontSize := 22;
+    TextData.FontStyle := [fsBold, fsItalic];
+    TextData.Name := 'Text 1';
+    TextData.Opacity := 1.0;
+    TextData.RotationDegrees := 0;
+    TextData.Text := '日本語 abc' + sLineBreak + '2行目';
+    TextData.TextColor := TColor($002030D0);
+    TextData.Visible := True;
+    SourceDocument.InsertText(4, TextData);
 
     Require(TryAnalyzeVectArtMifExport(SourceDocument, AnalysisReport,
       ErrorMessage), ErrorMessage);
@@ -375,10 +391,10 @@ begin
       'Path opacity conversion was not reported');
     Require(not HasExportIssue(ExportReport, 3, meikUnchecked, ''),
       'Path is still reported as unchecked');
-    Require(Container.ChunkCount = 16, 'Unexpected MIF chunk count');
+    Require(Container.ChunkCount = 18, 'Unexpected MIF chunk count');
     Require((Length(Container[0].Data) = 4) and
       (Container[0].Data[0] = 0) and (Container[0].Data[1] = 0) and
-      (Container[0].Data[2] = 0) and (Container[0].Data[3] = 14),
+      (Container[0].Data[2] = 0) and (Container[0].Data[3] = 16),
       'MHDR chunk count differs');
     MatrixA := ReadWadaDouble(Container[3].Data, 'vector matrix a');
     MatrixB := ReadWadaDouble(Container[3].Data, 'vector matrix b');
@@ -405,7 +421,7 @@ begin
       ErrorMessage), ErrorMessage);
     Require((TargetDocument.CanvasLayer.Width = 640) and
       (TargetDocument.CanvasLayer.Height = 360), 'Canvas size differs');
-    Require(TargetDocument.LayerCount = 4, 'Layer count differs');
+    Require(TargetDocument.LayerCount = 5, 'Layer count differs');
     TargetRectangle := TVectArtRectangleLayer(TargetDocument[1]);
     Require(TargetRectangle.Name = 'Rectangle 1', 'Imported layer name differs');
     Require(not TargetRectangle.Filled, 'Rectangle fill state differs');
@@ -481,6 +497,16 @@ begin
       SameValue(TargetPath.EndMarkerSize, PathData.EndMarkerSize) and
       SameValue(TargetPath.StartMarkerSize, PathData.StartMarkerSize),
       'Path markers differ');
+    TargetText := TVectArtTextLayer(TargetDocument[4]);
+    Require((TargetText.Text = TextData.Text) and
+      (TargetText.FontFamily = TextData.FontFamily) and
+      (TargetText.FontStyle = TextData.FontStyle) and
+      (ColorToRGB(TargetText.TextColor) = ColorToRGB(TextData.TextColor)),
+      'Text properties differ');
+    Require(SameValue(TargetText.FontSize, TextData.FontSize) and
+      SameValue(TargetText.Bounds.Left, TextData.Bounds.Left, 1.0) and
+      SameValue(TargetText.Bounds.Bottom, TextData.Bounds.Bottom, 1.0),
+      'Text geometry differs');
     Writeln('MIF document round-trip: PASS');
   finally
     Memory.Free;

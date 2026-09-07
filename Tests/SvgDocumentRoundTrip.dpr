@@ -79,6 +79,8 @@ var
   SvgText: string;
   TargetDocument: TVectArtDocument;
   TestFileName: string;
+  Text: TVectArtTextLayer;
+  TextData: TVectArtTextData;
 begin
   SourceDocument := TVectArtDocument.Create;
   TargetDocument := TVectArtDocument.Create;
@@ -164,7 +166,21 @@ begin
     ImageData.SourceKind := visLogo;
     ImageData.Visible := False;
     SourceDocument.InsertImage(5, ImageData);
-    SourceDocument.SelectedIndex := 5;
+    TextData.Bounds := RectF(120, 340, 500, 430);
+    TextData.FontFamily := 'Yu Gothic UI';
+    TextData.FontSize := 28;
+    TextData.FontStyle := [fsBold, fsItalic];
+    TextData.LetterSpacingRatio := 0.12;
+    TextData.LineSpacingRatio := 0.3;
+    TextData.Locked := False;
+    TextData.Name := '複数行 text';
+    TextData.Opacity := 0.75;
+    TextData.RotationDegrees := 15;
+    TextData.Text := '一行目' + sLineBreak + 'second line';
+    TextData.TextColor := TColor($00123456);
+    TextData.Visible := True;
+    SourceDocument.InsertText(6, TextData);
+    SourceDocument.SelectedIndex := 6;
 
     Require(TryCreateVectArtSvg(SourceDocument, SvgText, ErrorMessage),
       ErrorMessage);
@@ -180,6 +196,8 @@ begin
       SvgText.Contains('vad:end-marker="circle"'),
       'SVG Path marker metadata is missing');
     Require(SvgText.Contains('<image '), 'SVG image is missing');
+    Require(SvgText.Contains('<text ') and SvgText.Contains('<tspan '),
+      'SVG multiline text is missing');
     Require(SvgText.Contains('data:image/png;base64,'),
       'SVG embedded PNG is missing');
     Require(TryLoadVectArtDocumentFromSvg(SvgText, TargetDocument,
@@ -190,8 +208,8 @@ begin
       'Canvas transparency differs');
     Require(TargetDocument.CanvasLayer.BackgroundColor = TColor($00332211),
       'Canvas background differs');
-    Require(TargetDocument.LayerCount = 6, 'Layer count differs');
-    Require(TargetDocument.SelectedIndex = 5, 'Selection differs');
+    Require(TargetDocument.LayerCount = 7, 'Layer count differs');
+    Require(TargetDocument.SelectedIndex = 6, 'Selection differs');
     Rectangle := TVectArtRectangleLayer(TargetDocument[1]);
     Require(Rectangle.Name = Data.Name, 'Layer name differs');
     Require(Rectangle.Filled = Data.Filled, 'Fill state differs');
@@ -275,6 +293,22 @@ begin
       'Image point 2 X differs');
     RequireSameSingle(ImageData.Points[3].Y, Image.Points[3].Y,
       'Image point 3 Y differs');
+    Text := TVectArtTextLayer(TargetDocument[6]);
+    Require((Text.Name = TextData.Name) and (Text.Text = TextData.Text) and
+      (Text.FontFamily = TextData.FontFamily) and
+      (Text.FontStyle = TextData.FontStyle) and
+      SameValue(Text.LetterSpacingRatio, TextData.LetterSpacingRatio) and
+      SameValue(Text.LineSpacingRatio, TextData.LineSpacingRatio) and
+      (Text.TextColor = TextData.TextColor) and Text.Visible and
+      not Text.Locked, 'Text properties differ');
+    RequireSameSingle(TextData.FontSize, Text.FontSize,
+      'Text font size differs');
+    RequireSameSingle(TextData.RotationDegrees, Text.RotationDegrees,
+      'Text rotation differs');
+    RequireSameSingle(TextData.Bounds.Left, Text.Bounds.Left,
+      'Text left differs');
+    RequireSameSingle(TextData.Bounds.Bottom, Text.Bounds.Bottom,
+      'Text bottom differs');
     TFile.WriteAllText(TestFileName, 'existing SVG must survive',
       TEncoding.UTF8);
     LockedFile := TFileStream.Create(TestFileName,
@@ -300,6 +334,8 @@ begin
       'File round-trip name differs');
     Require(TVectArtImageLayer(TargetDocument[5]).Name = ImageData.Name,
       'File round-trip image differs');
+    Require(TVectArtTextLayer(TargetDocument[6]).Text = TextData.Text,
+      'File round-trip text differs');
 
     SvgText := '<svg xmlns="http://www.w3.org/2000/svg" width="320" ' +
       'height="180"><rect id="external" x="12.5" y="20" width="40" ' +

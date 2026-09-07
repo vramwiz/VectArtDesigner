@@ -99,6 +99,19 @@ type
     procedure Undo; override;
   end;
 
+  TVectArtTextDataCommand = class(TVectArtEditCommand)
+  private
+    FAfter: TVectArtTextData;
+    FBefore: TVectArtTextData;
+    FDocument: TVectArtDocument;
+    FLayerIndex: Integer;
+  public
+    constructor Create(ADocument: TVectArtDocument; LayerIndex: Integer;
+      const BeforeData, AfterData: TVectArtTextData);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
   TVectArtImagePointsCommand = class(TVectArtEditCommand)
   private
     FDocument: TVectArtDocument;
@@ -325,6 +338,30 @@ implementation
 
 uses
   System.Math;
+
+{ TVectArtTextDataCommand }
+
+constructor TVectArtTextDataCommand.Create(ADocument: TVectArtDocument;
+  LayerIndex: Integer; const BeforeData, AfterData: TVectArtTextData);
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FLayerIndex := LayerIndex;
+  FBefore := BeforeData;
+  FAfter := AfterData;
+end;
+
+procedure TVectArtTextDataCommand.Execute;
+begin
+  if FDocument <> nil then
+    FDocument.SetTextData(FLayerIndex, FAfter);
+end;
+
+procedure TVectArtTextDataCommand.Undo;
+begin
+  if FDocument <> nil then
+    FDocument.SetTextData(FLayerIndex, FBefore);
+end;
 
 procedure TVectArtCompoundCommand.Add(Command: TVectArtEditCommand);
 begin

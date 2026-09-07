@@ -13,6 +13,8 @@ uses
   VectArtDesignerDocument in
     'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
+  VectArtDesignerTextGeometry in
+    'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerBezierGeometry in
     'Source\Editor\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerRenderer in
@@ -29,6 +31,28 @@ function PixelAt(Buffer: TVectArtRenderBuffer;
 begin
   Result := Buffer.Data;
   Inc(Result, NativeInt(Y) * Buffer.Width + X);
+end;
+
+function AlphaBounds(Buffer: TVectArtRenderBuffer; out Bounds: TRect): Boolean;
+var
+  Pixel: PVectArtRgbaPixel;
+  X: Integer;
+  Y: Integer;
+begin
+  Bounds := Rect(Buffer.Width, Buffer.Height, 0, 0);
+  Result := False;
+  for Y := 0 to Buffer.Height - 1 do
+    for X := 0 to Buffer.Width - 1 do
+    begin
+      Pixel := PixelAt(Buffer, X, Y);
+      if Pixel^.A = 0 then
+        Continue;
+      Result := True;
+      if X < Bounds.Left then Bounds.Left := X;
+      if Y < Bounds.Top then Bounds.Top := Y;
+      if X + 1 > Bounds.Right then Bounds.Right := X + 1;
+      if Y + 1 > Bounds.Bottom then Bounds.Bottom := Y + 1;
+    end;
 end;
 
 var
@@ -49,6 +73,10 @@ var
   MarkerChecksum: UInt64;
   NoMarkerChecksum: UInt64;
   EnhancedThinAlpha: Byte;
+  TextBounds: TRect;
+  TextData: TVectArtTextData;
+  TextLayout: TVectArtTextLayout;
+  WideTextBounds: TRect;
 begin
   TTextRendererSkiaRuntime.Acquire(BundledSkiaRuntimeFileName);
   Document := TVectArtDocument.Create;
@@ -251,6 +279,34 @@ begin
     end;
     Require(ClosedMarkerChecksum = NoMarkerChecksum,
       'Closed Path unexpectedly rendered an end marker');
+    Document.SetLayerVisible(3, False);
+    Document.SetCanvasSize(400, 200);
+    TextData := Default(TVectArtTextData);
+    TextData.FontFamily := 'Yu Gothic UI';
+    TextData.FontSize := 40;
+    TextData.LetterSpacingRatio := 0.25;
+    TextData.LineSpacingRatio := 0.2;
+    TextData.Name := 'Text 1';
+    TextData.Opacity := 1.0;
+    TextData.Text := 'ABCD' + sLineBreak + 'AB';
+    TextData.TextColor := clWhite;
+    TextData.Visible := True;
+    TextLayout := BuildVectArtTextLayout(TextData.Text, TextData.FontFamily,
+      TextData.FontSize, TextData.FontStyle, TextData.LetterSpacingRatio,
+      TextData.LineSpacingRatio);
+    TextData.Bounds := RectF(20, 20, 20 + TextLayout.Width,
+      20 + TextLayout.Height);
+    Document.InsertText(4, TextData);
+    RenderVectArtDocument(Document, Rendered, 400, 200);
+    Require(AlphaBounds(Rendered, TextBounds), 'Text was not rendered');
+    Document.SetRectangleBounds(4, RectF(TextData.Bounds.Left,
+      TextData.Bounds.Top, TextData.Bounds.Left + TextData.Bounds.Width * 2,
+      TextData.Bounds.Bottom));
+    RenderVectArtDocument(Document, Rendered, 400, 200);
+    Require(AlphaBounds(Rendered, WideTextBounds),
+      'Scaled text was not rendered');
+    Require(WideTextBounds.Width > TextBounds.Width * 1.7,
+      'Text glyphs did not follow horizontal bounds scaling');
     Writeln('VectArt shared renderer: PASS');
   finally
     Destination.Free;

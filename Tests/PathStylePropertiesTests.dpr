@@ -11,6 +11,8 @@ uses
   Vcl.Graphics,
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
+  VectArtDesignerTextGeometry in
+    'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerBezierGeometry in
     'Source\Editor\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerEditorState in
@@ -78,6 +80,10 @@ var
   JoinButton: TVectArtLineJoinButton;
   Path: TVectArtPathLayer;
   PropertiesControl: TVectArtObjectPropertiesControl;
+  TextBounds: TRectF;
+  TextData: TVectArtTextData;
+  TextLayer: TVectArtTextLayer;
+  TextLayout: TVectArtTextLayout;
 begin
   Application.Initialize;
   HostForm := TForm.Create(nil);
@@ -161,6 +167,42 @@ begin
       not PropertiesControl.PathEndMarkerCombo.Enabled and
       not PropertiesControl.PathEndMarkerSizeEdit.Enabled,
       'Closed Path marker controls are enabled');
+    TextData := Default(TVectArtTextData);
+    TextData.FontFamily := 'Yu Gothic UI';
+    TextData.FontSize := 24;
+    TextData.Name := 'Text 1';
+    TextData.Opacity := 1;
+    TextData.Text := 'AB' + sLineBreak + 'A';
+    TextData.TextColor := clBlack;
+    TextData.Visible := True;
+    TextLayout := BuildVectArtTextLayout(TextData.Text,
+      TextData.FontFamily, TextData.FontSize, TextData.FontStyle);
+    TextData.Bounds := TRectF.Create(20, 30, 20 + TextLayout.Width,
+      30 + TextLayout.Height);
+    Document.InsertText(2, TextData);
+    Document.SetSelectedLayers([2]);
+    PropertiesControl.RefreshFromDocument;
+    Require(PropertiesControl.TextLetterSpacingEdit.Visible and
+      PropertiesControl.TextLineSpacingEdit.Visible,
+      'Text spacing controls are not visible');
+    TextBounds := TextData.Bounds;
+    PropertiesControl.TextLetterSpacingEdit.Text := '20';
+    PropertiesControl.TextLineSpacingEdit.Text := '35';
+    PropertiesControl.TextLineSpacingEdit.OnExit(
+      PropertiesControl.TextLineSpacingEdit);
+    TextLayer := TVectArtTextLayer(Document[2]);
+    Require(SameValue(TextLayer.LetterSpacingRatio, 0.2, 0.0001) and
+      SameValue(TextLayer.LineSpacingRatio, 0.35, 0.0001),
+      'Text spacing properties did not apply the values');
+    Require((TextLayer.Bounds.Width > TextBounds.Width) and
+      (TextLayer.Bounds.Height > TextBounds.Height),
+      'Text spacing properties did not update the intrinsic bounds');
+    History.Undo;
+    Require(SameValue(TextLayer.LetterSpacingRatio, 0.0) and
+      SameValue(TextLayer.LineSpacingRatio, 0.0) and
+      SameValue(TextLayer.Bounds.Width, TextBounds.Width, 0.01) and
+      SameValue(TextLayer.Bounds.Height, TextBounds.Height, 0.01),
+      'Text spacing properties undo differs');
     Writeln('Path style properties tests: PASS');
   finally
     HostForm.Free;

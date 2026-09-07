@@ -53,7 +53,7 @@ uses
   Vcl.Graphics, Vcl.Imaging.pngimage, Winapi.Windows,
   VectArtDesignerBezierGeometry, VectArtDesignerDocumentJson,
   VectArtDesignerGeometry, VectArtDesignerRoundedRectangleGeometry,
-  VectArtDesignerRenderer;
+  VectArtDesignerRenderer, VectArtDesignerTextGeometry;
 
 const
   // 旧版が埋め込んだ編集情報は読み込みだけを継続し、互換保存には出力しない。
@@ -435,6 +435,22 @@ begin
   InsertPngMetadataChunk(Png, 'waDA', WadaStringData(Key, Value));
 end;
 
+procedure AddWadaBytes(var Png: TBytes; const Key: string;
+  const Value: TBytes);
+var
+  Data: TBytes;
+  KeyBytes: TBytes;
+begin
+  KeyBytes := TEncoding.ASCII.GetBytes(Key);
+  SetLength(Data, Length(KeyBytes) + Length(Value) + 1);
+  if Length(KeyBytes) > 0 then
+    Move(KeyBytes[0], Data[0], Length(KeyBytes));
+  Data[Length(KeyBytes)] := 0;
+  if Length(Value) > 0 then
+    Move(Value[0], Data[Length(KeyBytes) + 1], Length(Value));
+  InsertPngMetadataChunk(Png, 'waDA', Data);
+end;
+
 procedure UpdateWadaInteger(var Png: TBytes; const Key: string;
   Value: Int32);
 var
@@ -575,6 +591,108 @@ begin
   end;
   Result := EncodeRgba(@Pixels[0], Width, Height);
   AddPhysicalDimensions(Result);
+end;
+
+function MifAlpha(Opacity: Single): Integer; forward;
+procedure AddImagePlacementMetadata(var Png: TBytes;
+  const Quad: TVectArtQuad; Alpha: Integer; Hidden: Boolean); overload;
+  forward;
+
+function CreateTextImagePng(TextLayer: TVectArtTextLayer): TBytes;
+var
+  Canvas: ISkCanvas;
+  Font: ISkFont;
+  I: Integer;
+  ImageInfo: TSkImageInfo;
+  Layout: TVectArtTextLayout;
+  Paint: ISkPaint;
+  Pixels: TArray<TVectArtRgbaPixel>;
+  Quad: TVectArtQuad;
+  RGBColor: TColor;
+  ShiftJis: TEncoding;
+  ShiftJisBytes: TBytes;
+  Surface: ISkSurface;
+  TextScaleX: Single;
+  TextScaleY: Single;
+  UnicodeBytes: TBytes;
+  Width: Integer;
+  Height: Integer;
+begin
+  Width := EnsureRange(Ceil(Max(TextLayer.Bounds.Width, 1.0)), 1, 16384);
+  Height := EnsureRange(Ceil(Max(TextLayer.Bounds.Height, 1.0)), 1, 16384);
+  SetLength(Pixels, Width * Height);
+  ImageInfo := TSkImageInfo.Create(Width, Height, TSkColorType.RGBA8888,
+    TSkAlphaType.Unpremul);
+  Surface := TSkSurface.MakeRasterDirect(ImageInfo, @Pixels[0],
+    NativeUInt(Width) * SizeOf(TVectArtRgbaPixel));
+  if Surface = nil then
+    raise EWriteError.Create('Cannot create text PNG surface');
+  Canvas := Surface.Canvas;
+  Canvas.Clear(TAlphaColorRec.Null);
+  Font := CreateVectArtTextFont(TextLayer.FontFamily, TextLayer.FontSize,
+    TextLayer.FontStyle);
+  Layout := BuildVectArtTextLayout(TextLayer.Text, TextLayer.FontFamily,
+    TextLayer.FontSize, TextLayer.FontStyle, TextLayer.LetterSpacingRatio,
+    TextLayer.LineSpacingRatio);
+  Paint := TSkPaint.Create(TSkPaintStyle.Fill);
+  Paint.AntiAlias := True;
+  RGBColor := ColorToRGB(TextLayer.TextColor);
+  Paint.Color := TAlphaColor($FF000000 or
+    (Cardinal(GetRValue(RGBColor)) shl 16) or
+    (Cardinal(GetGValue(RGBColor)) shl 8) or
+    Cardinal(GetBValue(RGBColor)));
+  TextScaleX := Width / Max(Layout.Width, 1.0);
+  TextScaleY := Height / Max(Layout.Height, 1.0);
+  Canvas.Scale(TextScaleX, TextScaleY);
+  for I := 0 to High(Layout.Lines) do
+    DrawVectArtTextLine(Canvas, Layout.Lines[I], 0,
+      Layout.Ascent + I * Layout.LineHeight, Font, Paint,
+      TextLayer.FontSize * TextLayer.LetterSpacingRatio);
+  Surface.Flush;
+  Result := EncodeRgba(@Pixels[0], Width, Height);
+  AddPhysicalDimensions(Result);
+  AddText(Result, 'object type', 'logo');
+  Quad := RectangleCorners(TextLayer.Bounds, TextLayer.RotationDegrees);
+  AddImagePlacementMetadata(Result, Quad, MifAlpha(TextLayer.Opacity),
+    not TextLayer.Visible);
+  AddWadaInteger(Result, 'logo fs auto', 1);
+  AddWadaInteger(Result, 'logo smooth', 0);
+  AddWadaInteger(Result, 'logo pad x', 2);
+  AddWadaInteger(Result, 'logo pad y', 2);
+  AddWadaInteger(Result, 'logo margin x', 10);
+  AddWadaInteger(Result, 'logo margin y', 10);
+  AddWadaInteger(Result, 'logo format', 2);
+  UnicodeBytes := TEncoding.Unicode.GetBytes(TextLayer.Text);
+  AddWadaBytes(Result, 'logo text unicode', UnicodeBytes);
+  ShiftJis := TEncoding.GetEncoding(932);
+  try
+    ShiftJisBytes := ShiftJis.GetBytes(TextLayer.Text);
+  finally
+    ShiftJis.Free;
+  end;
+  AddWadaBytes(Result, 'logo text', ShiftJisBytes);
+  AddWadaInteger(Result, 'font height', -Max(Round(TextLayer.FontSize), 1));
+  AddWadaInteger(Result, 'font width', Round(Font.MeasureText('0')));
+  if fsBold in TextLayer.FontStyle then
+    AddWadaInteger(Result, 'font weight', 700)
+  else
+    AddWadaInteger(Result, 'font weight', 400);
+  AddWadaInteger(Result, 'font escapement', 0);
+  AddWadaInteger(Result, 'font orientation', 0);
+  AddWadaInteger(Result, 'font italic', Ord(fsItalic in TextLayer.FontStyle));
+  AddWadaInteger(Result, 'font underline',
+    Ord(fsUnderline in TextLayer.FontStyle));
+  AddWadaInteger(Result, 'font strikeout',
+    Ord(fsStrikeOut in TextLayer.FontStyle));
+  AddWadaInteger(Result, 'font charset', 128);
+  AddWadaInteger(Result, 'font outprecision', 3);
+  AddWadaInteger(Result, 'font clipprecision', 2);
+  AddWadaInteger(Result, 'font quality', 1);
+  AddWadaInteger(Result, 'font pitchandfamily', 0);
+  AddWadaString(Result, 'font facename', TextLayer.FontFamily);
+  AddWadaInteger(Result, 'logo writing mode', 0);
+  AddWadaString(Result, 'logo outline object type', 'none');
+  AddWadaString(Result, 'logo effect object type', 'none');
 end;
 
 function CreateRectangleRasterPng(Rectangle: TVectArtRectangleLayer;
@@ -1687,6 +1805,23 @@ begin
   end;
 end;
 
+function TryReadPngUtf16LeString(const Png: TBytes; const Key: string;
+  out Value: string): Boolean;
+var
+  Bytes: TBytes;
+begin
+  Result := TryReadPngMetadata(Png, 'waDA', Key, Bytes) and
+    ((Length(Bytes) mod SizeOf(Char)) = 0);
+  if not Result then
+  begin
+    Value := '';
+    Exit;
+  end;
+  Value := TEncoding.Unicode.GetString(Bytes);
+  while (Value <> '') and (Value[Length(Value)] = #0) do
+    Delete(Value, Length(Value), 1);
+end;
+
 function TryReadPngInteger(const Png: TBytes; const Key: string;
   out Value: Int32): Boolean;
 var
@@ -1967,11 +2102,18 @@ var
   DiscardedLine: TVectArtLineData;
   DiscardedPath: TVectArtPathData;
   DiscardedImage: TVectArtImageData;
+  DiscardedText: TVectArtTextData;
   ElementType: Int32;
   EndMarker: Int32;
   EndMarkerSize: Int32;
   FillColor: Int32;
   FillEnabled: Int32;
+  FontFace: string;
+  FontHeight: Int32;
+  FontItalic: Int32;
+  FontStrikeOut: Int32;
+  FontUnderline: Int32;
+  FontWeight: Int32;
   Hidden: Int32;
   I: Integer;
   ImageData: TVectArtImageData;
@@ -2010,6 +2152,9 @@ var
   StrokeStyle: Int32;
   StrokeWidth: Double;
   Top: Int32;
+  TextData: TVectArtTextData;
+  Texts: TList<TVectArtTextData>;
+  TextValue: string;
   VectorPoints: TArray<TPointF>;
   VectorQuality: Int32;
 begin
@@ -2031,6 +2176,7 @@ begin
   Lines := TList<TVectArtLineData>.Create;
   Paths := TList<TVectArtPathData>.Create;
   Images := TList<TVectArtImageData>.Create;
+  Texts := TList<TVectArtTextData>.Create;
   LayerOrder := TList<Integer>.Create;
   try
     for I := 2 to Container.ChunkCount - 2 do
@@ -2060,6 +2206,70 @@ begin
         Hidden := 0;
         TryReadPngInteger(Container[I].Data, 'image alpha', Alpha);
         TryReadPngInteger(Container[I].Data, 'image hidden', Hidden);
+        if SameText(ObjectType, 'logo') and
+          TryReadPngUtf16LeString(Container[I].Data, 'logo text unicode',
+            TextValue) then
+        begin
+          TextData := Default(TVectArtTextData);
+          TextData.Name := Format('Text %d', [Texts.Count + 1]);
+          if (Position2Y = Top) and (Position4X = Left) then
+            TextData.Bounds := RectF(Min(Left, Right), Min(Top, Bottom),
+              Max(Left, Right) + 1, Max(Top, Bottom) + 1)
+          else
+            TextData.Bounds := RectF(
+              (Left + Position2X + Right + Position4X) * 0.25 -
+                (Hypot(Position2X - Left, Position2Y - Top) + 1) * 0.5,
+              (Top + Position2Y + Bottom + Position4Y) * 0.25 -
+                (Hypot(Position4X - Left, Position4Y - Top) + 1) * 0.5,
+              (Left + Position2X + Right + Position4X) * 0.25 +
+                (Hypot(Position2X - Left, Position2Y - Top) + 1) * 0.5,
+              (Top + Position2Y + Bottom + Position4Y) * 0.25 +
+                (Hypot(Position4X - Left, Position4Y - Top) + 1) * 0.5);
+          FontFace := 'MS UI Gothic';
+          TryReadPngString(Container[I].Data, 'waDA', 'font facename',
+            FontFace);
+          FontHeight := -16;
+          FontItalic := 0;
+          FontStrikeOut := 0;
+          FontUnderline := 0;
+          FontWeight := 400;
+          TryReadPngInteger(Container[I].Data, 'font height', FontHeight);
+          TryReadPngInteger(Container[I].Data, 'font italic', FontItalic);
+          TryReadPngInteger(Container[I].Data, 'font strikeout',
+            FontStrikeOut);
+          TryReadPngInteger(Container[I].Data, 'font underline',
+            FontUnderline);
+          TryReadPngInteger(Container[I].Data, 'font weight', FontWeight);
+          TextData.FontFamily := FontFace;
+          TextData.FontSize := Max(Abs(FontHeight), 1);
+          TextData.FontStyle := [];
+          if FontWeight >= 600 then
+            Include(TextData.FontStyle, fsBold);
+          if FontItalic <> 0 then
+            Include(TextData.FontStyle, fsItalic);
+          if FontUnderline <> 0 then
+            Include(TextData.FontStyle, fsUnderline);
+          if FontStrikeOut <> 0 then
+            Include(TextData.FontStyle, fsStrikeOut);
+          TextData.Text := TextValue;
+          TextData.TextColor := clBlack;
+          FillColor := ColorToRGB(clBlack);
+          if (I + 1 < Container.ChunkCount) and
+            (Container[I + 1].Tag = 'IPNG') then
+            TryReadPngInteger(Container[I + 1].Data, 'texture color1',
+              FillColor);
+          if (I + 1 < Container.ChunkCount) and
+            (Container[I + 1].Tag = 'IPNG') then
+            TextData.TextColor := TColor(FillColor);
+          TextData.Opacity := EnsureRange(Alpha / 255.0, 0.0, 1.0);
+          TextData.RotationDegrees := RadToDeg(ArcTan2(Position2Y - Top,
+            Position2X - Left));
+          TextData.Visible := Hidden = 0;
+          TextData.Locked := False;
+          Texts.Add(TextData);
+          LayerOrder.Add(-(3000000 + Texts.Count));
+          Continue;
+        end;
         if SameText(ObjectType, 'logo') then
         begin
           ImageData.Name := Format('Logo %d', [Images.Count + 1]);
@@ -2315,6 +2525,8 @@ begin
         Document.RemovePath(Document.LayerCount - 1, DiscardedPath)
       else if Document[Document.LayerCount - 1] is TVectArtImageLayer then
         Document.RemoveImage(Document.LayerCount - 1, DiscardedImage)
+      else if Document[Document.LayerCount - 1] is TVectArtTextLayer then
+        Document.RemoveText(Document.LayerCount - 1, DiscardedText)
       else
         raise EInvalidOp.Create('Document contains an unsupported layer');
     Document.CanvasLayer.Width := CanvasWidth;
@@ -2324,6 +2536,9 @@ begin
     for I in LayerOrder do
       if I > 0 then
         Document.InsertRectangle(Document.LayerCount, Rectangles[I - 1])
+      else if I <= -3000000 then
+        Document.InsertText(Document.LayerCount,
+          Texts[-I - 3000001])
       else if I <= -2000000 then
         Document.InsertImage(Document.LayerCount,
           Images[-I - 2000001])
@@ -2337,6 +2552,7 @@ begin
     Result := True;
   finally
     LayerOrder.Free;
+    Texts.Free;
     Lines.Free;
     Paths.Free;
     Images.Free;
@@ -2386,6 +2602,7 @@ var
   PathExportShape: TMifPathExportShape;
   PathIndex: Integer;
   RectangleIndex: Integer;
+  TextIndex: Integer;
 begin
   Result := False;
   Report.Clear;
@@ -2405,9 +2622,27 @@ begin
     LineIndex := 0;
     PathIndex := 0;
     RectangleIndex := 0;
+    TextIndex := 0;
     for I := 1 to Document.LayerCount - 1 do
     begin
       Layer := Document[I];
+      if Layer is TVectArtTextLayer then
+      begin
+        Inc(TextIndex);
+        if Layer.Name <> Format('Text %d', [TextIndex]) then
+          Report.AddIssue(meikConversion, I, Layer.Name,
+            Format('レイヤー名はMIFへ保持されず、再読込時に「Text %d」になります。',
+              [TextIndex]));
+        if Layer.Locked then
+          Report.AddIssue(meikConversion, I, Layer.Name,
+            '編集ロックはMIFへ保持されません。');
+        if not SameValue(TVectArtTextLayer(Layer).LetterSpacingRatio,
+          0.0) or not SameValue(
+          TVectArtTextLayer(Layer).LineSpacingRatio, 0.0) then
+          Report.AddIssue(meikConversion, I, Layer.Name,
+            '字間と行間の割合はMIF文字属性へ保持されず、表示PNGへ反映して保存されます。');
+        Continue;
+      end;
       if Layer is TVectArtImageLayer then
       begin
         Inc(ImageIndex);
@@ -2496,6 +2731,7 @@ var
   RectangleIndex: Integer;
   RectangleSource: TRectangleMifSource;
   RectangleSources: TList<TRectangleMifSource>;
+  TextLayer: TVectArtTextLayer;
 begin
   Result := False;
   Container := nil;
@@ -2520,6 +2756,8 @@ begin
       begin
         if Document[I] is TVectArtImageLayer then
           Inc(ContentChunkCount, 2)
+        else if Document[I] is TVectArtTextLayer then
+          Inc(ContentChunkCount, 2)
         else if (Document[I] is TVectArtRectangleLayer) or
           (Document[I] is TVectArtLineLayer) or
           ((Document[I] is TVectArtPathLayer) and
@@ -2537,6 +2775,13 @@ begin
       for I := 1 to Document.LayerCount - 1 do
       begin
         Layer := Document[I];
+        if Layer is TVectArtTextLayer then
+        begin
+          TextLayer := TVectArtTextLayer(Layer);
+          Candidate.AddChunk('IPNG', CreateTextImagePng(TextLayer));
+          Candidate.AddChunk('IPNG', CreateTexturePng(TextLayer.TextColor));
+          Continue;
+        end;
         if Layer is TVectArtImageLayer then
         begin
           ImagePng := Copy(PreparedImagePngs[I]);

@@ -10,7 +10,7 @@ uses
 type
   TVectArtEditorTool = (vetSelect, vetRectangle, vetEllipse,
     vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine, vetPath,
-    vetBezier, vetFreehandLine, vetFreehandBezier);
+    vetBezier, vetFreehandLine, vetFreehandBezier, vetText);
   TVectArtRectangleMode = (vrmOutline, vrmFill, vrmFillAndOutline);
 
   TVectArtEditorState = class

@@ -595,6 +595,10 @@ begin
     (FEditorState.CurrentTool = vetFreehandBezier) then
     lblStatus.Caption := 'Freehand Bezier: drag to draw, release to smooth ' +
       'and finish   Canvas: ' + CanvasSize
+  else if (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetText) then
+    lblStatus.Caption := 'Text: click the input position, Enter inserts a ' +
+      'line break   Canvas: ' + CanvasSize
   else
     lblStatus.Caption := 'Ready   Tool: Select   Canvas: ' + CanvasSize;
   if ConstraintStatus <> '' then
@@ -809,6 +813,15 @@ begin
     procedure
     begin
       FEditorState.SelectClosedBezierToolGroup;
+    end,
+    function: Boolean
+    begin
+      Result := CanUseToolShortcut;
+    end);
+  FShortcuts.Add(Ord('T'), [],
+    procedure
+    begin
+      FEditorState.CurrentTool := vetText;
     end,
     function: Boolean
     begin

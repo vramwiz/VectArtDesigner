@@ -53,6 +53,20 @@ begin
     TJSONNumber)).AsDouble;
 end;
 
+function ReadOptionalSingle(Parent: TJSONObject; const Name: string;
+  DefaultValue: Single): Single;
+var
+  Value: TJSONValue;
+begin
+  Value := Parent.GetValue(Name);
+  if Value = nil then
+    Exit(DefaultValue);
+  if not (Value is TJSONNumber) then
+    raise EConvertError.CreateFmt('JSON field "%s" has an invalid type',
+      [Name]);
+  Result := TJSONNumber(Value).AsDouble;
+end;
+
 function ReadString(Parent: TJSONObject; const Name: string): string;
 begin
   Result := TJSONString(RequireValue(Parent, Name, TJSONString)).Value;
@@ -77,6 +91,8 @@ var
   Rectangle: TVectArtRectangleLayer;
   RectangleJson: TJSONObject;
   Root: TJSONObject;
+  TextLayer: TVectArtTextLayer;
+  TextJson: TJSONObject;
 begin
   if Document = nil then
     raise EArgumentNilException.Create('Document');
@@ -100,6 +116,35 @@ begin
     for I := 1 to Document.LayerCount - 1 do
     begin
       Layer := Document.Layers[I];
+      if Layer is TVectArtTextLayer then
+      begin
+        TextLayer := TVectArtTextLayer(Layer);
+        TextJson := TJSONObject.Create;
+        TextJson.AddPair('type', 'text');
+        TextJson.AddPair('name', TextLayer.Name);
+        TextJson.AddPair('left', TJSONNumber.Create(TextLayer.Bounds.Left));
+        TextJson.AddPair('top', TJSONNumber.Create(TextLayer.Bounds.Top));
+        TextJson.AddPair('right', TJSONNumber.Create(TextLayer.Bounds.Right));
+        TextJson.AddPair('bottom', TJSONNumber.Create(TextLayer.Bounds.Bottom));
+        TextJson.AddPair('text', TextLayer.Text);
+        TextJson.AddPair('fontFamily', TextLayer.FontFamily);
+        TextJson.AddPair('fontSize', TJSONNumber.Create(TextLayer.FontSize));
+        TextJson.AddPair('fontStyle',
+          TJSONNumber.Create(Byte(TextLayer.FontStyle)));
+        TextJson.AddPair('letterSpacingRatio',
+          TJSONNumber.Create(TextLayer.LetterSpacingRatio));
+        TextJson.AddPair('lineSpacingRatio',
+          TJSONNumber.Create(TextLayer.LineSpacingRatio));
+        TextJson.AddPair('textColor',
+          TJSONNumber.Create(Integer(TextLayer.TextColor)));
+        TextJson.AddPair('rotation',
+          TJSONNumber.Create(TextLayer.RotationDegrees));
+        TextJson.AddPair('opacity', TJSONNumber.Create(TextLayer.Opacity));
+        TextJson.AddPair('visible', TJSONBool.Create(TextLayer.Visible));
+        TextJson.AddPair('locked', TJSONBool.Create(TextLayer.Locked));
+        LayersJson.AddElement(TextJson);
+        Continue;
+      end;
       if Layer is TVectArtImageLayer then
       begin
         Image := TVectArtImageLayer(Layer);
@@ -260,6 +305,7 @@ var
   DiscardedLine: TVectArtLineData;
   DiscardedPath: TVectArtPathData;
   DiscardedImage: TVectArtImageData;
+  DiscardedText: TVectArtTextData;
   I: Integer;
   ImageData: TArray<TVectArtImageData>;
   ImageValue: TVectArtImageData;
@@ -282,6 +328,8 @@ var
   LineJoinValue: Integer;
   LineMarkerValue: Integer;
   StrokeStyleValue: Integer;
+  TextData: TArray<TVectArtTextData>;
+  TextValue: TVectArtTextData;
   Version: Integer;
 begin
   Result := False;
@@ -316,6 +364,7 @@ begin
       SetLength(LineData, LayersJson.Count);
       SetLength(PathData, LayersJson.Count);
       SetLength(ImageData, LayersJson.Count);
+      SetLength(TextData, LayersJson.Count);
       SetLength(LayerTypes, LayersJson.Count);
       for I := 0 to LayersJson.Count - 1 do
       begin
@@ -323,6 +372,30 @@ begin
           raise EConvertError.CreateFmt('Layer %d is not a JSON object', [I]);
         LayerJson := TJSONObject(LayersJson.Items[I]);
         LayerTypes[I] := ReadString(LayerJson, 'type');
+        if LayerTypes[I] = 'text' then
+        begin
+          TextValue := Default(TVectArtTextData);
+          TextValue.Name := ReadString(LayerJson, 'name');
+          TextValue.Bounds := TRectF.Create(ReadSingle(LayerJson, 'left'),
+            ReadSingle(LayerJson, 'top'), ReadSingle(LayerJson, 'right'),
+            ReadSingle(LayerJson, 'bottom'));
+          TextValue.Text := ReadString(LayerJson, 'text');
+          TextValue.FontFamily := ReadString(LayerJson, 'fontFamily');
+          TextValue.FontSize := ReadSingle(LayerJson, 'fontSize');
+          TextValue.FontStyle := TFontStyles(
+            Byte(ReadInteger(LayerJson, 'fontStyle')));
+          TextValue.LetterSpacingRatio := ReadOptionalSingle(LayerJson,
+            'letterSpacingRatio', 0.0);
+          TextValue.LineSpacingRatio := ReadOptionalSingle(LayerJson,
+            'lineSpacingRatio', 0.0);
+          TextValue.TextColor := TColor(ReadInteger(LayerJson, 'textColor'));
+          TextValue.RotationDegrees := ReadSingle(LayerJson, 'rotation');
+          TextValue.Opacity := ReadSingle(LayerJson, 'opacity');
+          TextValue.Visible := ReadBoolean(LayerJson, 'visible');
+          TextValue.Locked := ReadBoolean(LayerJson, 'locked');
+          TextData[I] := TextValue;
+          Continue;
+        end;
         if LayerTypes[I] = 'image' then
         begin
           ImageValue.Name := ReadString(LayerJson, 'name');
@@ -574,6 +647,8 @@ begin
           Document.RemovePath(Document.LayerCount - 1, DiscardedPath)
         else if Document[Document.LayerCount - 1] is TVectArtImageLayer then
           Document.RemoveImage(Document.LayerCount - 1, DiscardedImage)
+        else if Document[Document.LayerCount - 1] is TVectArtTextLayer then
+          Document.RemoveText(Document.LayerCount - 1, DiscardedText)
         else
           raise EInvalidOp.Create('Document contains an unsupported layer');
       Canvas.Width := CanvasWidth;
@@ -587,6 +662,8 @@ begin
           Document.InsertLine(Document.LayerCount, LineData[I])
         else if LayerTypes[I] = 'image' then
           Document.InsertImage(Document.LayerCount, ImageData[I])
+        else if LayerTypes[I] = 'text' then
+          Document.InsertText(Document.LayerCount, TextData[I])
         else
           Document.InsertPath(Document.LayerCount, PathData[I]);
       Document.SelectedIndex := SelectedIndex;

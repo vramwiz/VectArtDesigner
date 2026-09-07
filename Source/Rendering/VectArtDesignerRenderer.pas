@@ -49,7 +49,8 @@ implementation
 uses
   System.Math, System.Skia, System.Types, System.UITypes,
   TextRendererSkiaRuntime, Vcl.Graphics, Winapi.Windows,
-  VectArtDesignerBezierGeometry, VectArtDesignerGeometry;
+  VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
+  VectArtDesignerTextGeometry;
 
 const
   MAX_RENDER_DIMENSION = 16384;
@@ -125,6 +126,7 @@ var
   ImagePaint: ISkPaint;
   RasterImage: ISkImage;
   EdgeWidth: Single;
+  Font: ISkFont;
   MarkerGeometry: TVectArtMarkerGeometry;
   SignedHeight: Single;
   RotationDegrees: Single;
@@ -140,6 +142,10 @@ var
   StrokeWidth: Single;
   StrokePaint: ISkPaint;
   Surface: ISkSurface;
+  TextLayer: TVectArtTextLayer;
+  TextLayout: TVectArtTextLayout;
+  TextScaleX: Single;
+  TextScaleY: Single;
 
   procedure DrawMarker(Marker: TVectArtLineMarker; const Tip,
     InsidePoint: TPointF; StrokeWidth, MarkerSize: Single;
@@ -210,6 +216,39 @@ begin
     Layer := Document[I];
     if not Layer.Visible then
       Continue;
+    if Layer is TVectArtTextLayer then
+    begin
+      TextLayer := TVectArtTextLayer(Layer);
+      if TextLayer.Text = '' then
+        Continue;
+      TextLayout := BuildVectArtTextLayout(TextLayer.Text,
+        TextLayer.FontFamily, TextLayer.FontSize, TextLayer.FontStyle,
+        TextLayer.LetterSpacingRatio, TextLayer.LineSpacingRatio);
+      Font := CreateVectArtTextFont(TextLayer.FontFamily,
+        TextLayer.FontSize, TextLayer.FontStyle);
+      Paint.Style := TSkPaintStyle.Fill;
+      Paint.Color := VclColorToAlphaColor(TextLayer.TextColor,
+        TextLayer.Opacity);
+      Canvas.Save;
+      try
+        Canvas.Translate(TextLayer.Bounds.CenterPoint.X,
+          TextLayer.Bounds.CenterPoint.Y);
+        Canvas.Rotate(TextLayer.RotationDegrees);
+        Canvas.Translate(-TextLayer.Bounds.CenterPoint.X,
+          -TextLayer.Bounds.CenterPoint.Y);
+        TextScaleX := TextLayer.Bounds.Width / Max(TextLayout.Width, 1.0);
+        TextScaleY := TextLayer.Bounds.Height / Max(TextLayout.Height, 1.0);
+        Canvas.Translate(TextLayer.Bounds.Left, TextLayer.Bounds.Top);
+        Canvas.Scale(TextScaleX, TextScaleY);
+        for J := 0 to High(TextLayout.Lines) do
+          DrawVectArtTextLine(Canvas, TextLayout.Lines[J], 0,
+            TextLayout.Ascent + J * TextLayout.LineHeight, Font, Paint,
+            TextLayer.FontSize * TextLayer.LetterSpacingRatio);
+      finally
+        Canvas.Restore;
+      end;
+      Continue;
+    end;
     if Layer is TVectArtImageLayer then
     begin
       ImageLayer := TVectArtImageLayer(Layer);

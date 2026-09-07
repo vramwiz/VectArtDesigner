@@ -147,6 +147,7 @@ var
   LineData: TVectArtLineData;
   ImageData: TVectArtImageData;
   PathData: TVectArtPathData;
+  TextData: TVectArtTextData;
   I: Integer;
   SelectedIndices: TArray<Integer>;
   SelectionIndex: Integer;
@@ -201,6 +202,16 @@ begin
           if Command <> nil then
             Command.Add(TVectArtDeleteImageCommand.Create(FDocument, I,
               ImageData, BeforeSelection, AfterSelection));
+        end;
+      end
+      else if FDocument[I] is TVectArtTextLayer then
+      begin
+        if FDocument.RemoveText(I, TextData) then
+        begin
+          AfterSelection := FDocument.GetSelectedLayerIndices;
+          if Command <> nil then
+            Command.Add(TVectArtDeleteTextCommand.Create(FDocument, I,
+              TextData, BeforeSelection, AfterSelection));
         end;
       end;
     end;
@@ -303,7 +314,8 @@ begin
        not ((FDocument[I] is TVectArtRectangleLayer) or
          (FDocument[I] is TVectArtLineLayer) or
          (FDocument[I] is TVectArtPathLayer) or
-         (FDocument[I] is TVectArtImageLayer))) then
+         (FDocument[I] is TVectArtImageLayer) or
+         (FDocument[I] is TVectArtTextLayer))) then
       Exit(False);
 end;
 

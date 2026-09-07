@@ -391,6 +391,7 @@ var
   RectangleRect: TRect;
   Row: Integer;
   SavedDC: Integer;
+  TextLayer: TVectArtTextLayer;
   TextX: Integer;
   ThumbnailArea: TRect;
   ThumbnailRect: TRect;
@@ -594,6 +595,18 @@ begin
   if Layer is TVectArtImageLayer then
     DrawImageThumbnail(ACanvas, ThumbnailRect,
       TVectArtImageLayer(Layer));
+  if Layer is TVectArtTextLayer then
+  begin
+    TextLayer := TVectArtTextLayer(Layer);
+    ACanvas.Font.Name := TextLayer.FontFamily;
+    ACanvas.Font.Height := -18;
+    ACanvas.Font.Style := TextLayer.FontStyle;
+    ACanvas.Font.Color := BlendThumbnailColor(TextLayer.TextColor,
+      TextLayer.Opacity);
+    ACanvas.Brush.Style := bsClear;
+    ACanvas.TextOut(ThumbnailRect.Left + 3, ThumbnailRect.Top + 8,
+      Copy(TextLayer.Text, 1, 8));
+  end;
   ACanvas.Brush.Style := bsClear;
   ACanvas.Pen.Color := COLOR_THUMB_BORDER;
   ACanvas.FrameRect(ThumbnailRect);
@@ -618,6 +631,9 @@ begin
       DetailText := Format('Image  %d%%', [Round(Layer.Opacity * 100)])
   else if Layer is TVectArtPathLayer then
     DetailText := Format('Path  %d%%', [Round(Layer.Opacity * 100)])
+  else if Layer is TVectArtTextLayer then
+    DetailText := Format('Text  %s  %d%%',
+      [TVectArtTextLayer(Layer).FontFamily, Round(Layer.Opacity * 100)])
   else
     DetailText := Format('Line  %spx  %d%%',
       [FormatFloat('0.##', TVectArtLineLayer(Layer).StrokeWidth),
@@ -667,6 +683,7 @@ var
   RectangleLayer: TVectArtRectangleLayer;
   RectangleRect: TRect;
   Row: Integer;
+  TextLayer: TVectArtTextLayer;
   TextX: Integer;
   ThumbnailArea: TRect;
   ThumbnailRect: TRect;
@@ -873,6 +890,18 @@ begin
   if Layer is TVectArtImageLayer then
     DrawImageThumbnail(ACanvas, ThumbnailRect,
       TVectArtImageLayer(Layer));
+  if Layer is TVectArtTextLayer then
+  begin
+    TextLayer := TVectArtTextLayer(Layer);
+    ACanvas.Font.Name := TextLayer.FontFamily;
+    ACanvas.Font.Height := -18;
+    ACanvas.Font.Style := TextLayer.FontStyle;
+    ACanvas.Font.Color := BlendThumbnailColor(TextLayer.TextColor,
+      TextLayer.Opacity);
+    ACanvas.Brush.Style := bsClear;
+    ACanvas.TextOut(ThumbnailRect.Left + 3, ThumbnailRect.Top + 8,
+      Copy(TextLayer.Text, 1, 8));
+  end;
   ACanvas.Brush.Style := bsClear;
   ACanvas.Pen.Color := COLOR_THUMB_BORDER;
   ACanvas.FrameRect(ThumbnailRect);
@@ -897,6 +926,9 @@ begin
       DetailText := Format('Image  %d%%', [Round(Layer.Opacity * 100)])
   else if Layer is TVectArtPathLayer then
     DetailText := Format('Path  %d%%', [Round(Layer.Opacity * 100)])
+  else if Layer is TVectArtTextLayer then
+    DetailText := Format('Text  %s  %d%%',
+      [TVectArtTextLayer(Layer).FontFamily, Round(Layer.Opacity * 100)])
   else
     DetailText := Format('Line  %spx  %d%%',
       [FormatFloat('0.##', TVectArtLineLayer(Layer).StrokeWidth),

@@ -6,10 +6,12 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Types, Vcl.Controls, Vcl.Graphics,
+  Vcl.StdCtrls,
   VectArtDesignerCanvasInteraction,
   VectArtDesignerDocument, VectArtDesignerEditHistory,
   VectArtDesignerEditorState, VectArtDesignerSelectionGeometry,
-  VectArtDesignerShapeCreation, VectArtDesignerRenderer;
+  VectArtDesignerShapeCreation, VectArtDesignerRenderer,
+  VectArtDesignerTextEditing, WindowsImeController;
 
 type
   TVectArtCanvasControl = class(TCustomControl)
@@ -31,6 +33,31 @@ type
     FPanStartOffset: TPointF;
     FViewZoom: Single;
     FZoom: Single;
+    FImeState: TWindowsImeState;
+    FTextBeforeSelection: TArray<Integer>;
+    FTextBuffer: string;
+    FTextCaretIndex: Integer;
+    FTextCompositionActive: Boolean;
+    FTextCompositionText: string;
+    FTextEditing: Boolean;
+    FTextEditor: TVectArtImeEdit;
+    FTextEnding: Boolean;
+    FTextLayerIndex: Integer;
+    FTextNewLayer: Boolean;
+    FTextOriginalData: TVectArtTextData;
+    procedure BeginExistingTextEdit(Index, X, Y: Integer);
+    procedure BeginNewTextEdit(X, Y: Integer);
+    procedure FinishTextEdit(Cancel: Boolean;
+      RestoreCanvasFocus: Boolean = True);
+    function TextLayerAt(X, Y: Integer): Integer;
+    procedure TextEditorCommittedText(Sender: TObject; const Text: string);
+    procedure TextEditorComposition(Sender: TObject; const Text: string;
+      CursorPosition: Integer; Active: Boolean);
+    procedure TextEditorExit(Sender: TObject);
+    procedure TextEditorKeyDown(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
+    procedure UpdateTextEditorBounds;
+    procedure UpdateTextLayerFromBuffer;
     procedure CalculateCanvasBounds;
     procedure EndPan;
     procedure PaintDirect2D;
@@ -73,8 +100,11 @@ const
 implementation
 
 uses
-  System.Math, Winapi.D2D1, Winapi.Windows, Vcl.Direct2D,
-  VectArtDesignerBezierGeometry, VectArtDesignerGeometry;
+  System.Math, System.Skia, Winapi.D2D1, Winapi.Windows, Vcl.Direct2D,
+  Vcl.Forms,
+  VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
+  VectArtDesignerEditCommands, VectArtDesignerLayerStructureCommands,
+  VectArtDesignerTextGeometry;
 
 const
   CANVAS_MARGIN         = 32;
@@ -91,6 +121,9 @@ const
   // Falseにすると編集ビューの細線補正を一括で無効化する。
   ENABLE_THIN_STROKE_PREVIEW = True;
   MIN_PREVIEW_STROKE_WIDTH_PIXELS = 1.0;
+  DEFAULT_TEXT_FONT_FAMILY = 'Yu Gothic UI';
+  DEFAULT_TEXT_FONT_SIZE = 32.0;
+  TEXT_INPUT_EDIT_WIDTH = 4;
 
 procedure DrawPremultipliedBitmap(Target: TCanvas; const Bounds: TRect;
   Bitmap: Vcl.Graphics.TBitmap);
@@ -357,6 +390,18 @@ begin
   FRenderedPreviewStrokeWidth := -1.0;
   FRenderedRevision := -1;
   FShapeCreation := TVectArtShapeCreation.Create;
+  FTextLayerIndex := -1;
+  FTextEditor := TVectArtImeEdit.Create(Self);
+  FTextEditor.Parent := Self;
+  FTextEditor.BorderStyle := bsNone;
+  FTextEditor.Ctl3D := False;
+  FTextEditor.TabStop := True;
+  FTextEditor.Visible := False;
+  FTextEditor.SetBounds(0, 0, 1, 1);
+  FTextEditor.OnCommittedText := TextEditorCommittedText;
+  FTextEditor.OnComposition := TextEditorComposition;
+  FTextEditor.OnExit := TextEditorExit;
+  FTextEditor.OnKeyDown := TextEditorKeyDown;
   FPanOffset := TPointF.Zero;
   FViewZoom := 1.0;
   CalculateCanvasBounds;
@@ -364,12 +409,392 @@ end;
 
 destructor TVectArtCanvasControl.Destroy;
 begin
+  FTextEditor.Free;
   FRenderBuffer.Free;
   FRenderedDocument.Free;
   FReferenceBackground.Free;
   FShapeCreation.Free;
   FInteraction.Free;
   inherited Destroy;
+end;
+
+procedure TVectArtCanvasControl.BeginNewTextEdit(X, Y: Integer);
+var
+  Data: TVectArtTextData;
+  LogicalX: Single;
+  LogicalY: Single;
+begin
+  if (FDocument = nil) or (FDocument.CanvasLayer = nil) or (FZoom <= 0) then
+    Exit;
+  LogicalX := EnsureRange((X - FCanvasBounds.Left) / FZoom, 0.0,
+    FDocument.CanvasLayer.Width * 1.0);
+  LogicalY := EnsureRange((Y - FCanvasBounds.Top) / FZoom, 0.0,
+    FDocument.CanvasLayer.Height * 1.0);
+  FTextBeforeSelection := FDocument.GetSelectedLayerIndices;
+  Data := Default(TVectArtTextData);
+  Data.Bounds := TRectF.Create(LogicalX, LogicalY,
+    LogicalX + 1, LogicalY + DEFAULT_TEXT_FONT_SIZE);
+  Data.FontFamily := DEFAULT_TEXT_FONT_FAMILY;
+  Data.FontSize := DEFAULT_TEXT_FONT_SIZE;
+  Data.Name := Format('Text %d', [FDocument.LayerCount]);
+  Data.Opacity := 1.0;
+  Data.Text := '';
+  if FEditorState <> nil then
+    Data.TextColor := FEditorState.RectangleFillColor
+  else
+    Data.TextColor := clBlack;
+  Data.Visible := True;
+  FTextLayerIndex := FDocument.InsertText(FDocument.LayerCount, Data);
+  FDocument.SetSelectedLayers([FTextLayerIndex]);
+  FTextBuffer := '';
+  FTextCaretIndex := 0;
+  FTextCompositionActive := False;
+  FTextCompositionText := '';
+  FTextNewLayer := True;
+  FTextEditing := True;
+  FTextEditor.Text := '';
+  FTextEditor.Font.Name := Data.FontFamily;
+  FTextEditor.Font.Size := Round(Data.FontSize);
+  FTextEditor.Font.Color := Data.TextColor;
+  UpdateTextEditorBounds;
+  FTextEditor.Visible := True;
+  FTextEditor.BringToFront;
+  FTextEditor.SetFocus;
+  RestoreWindowsIme(FTextEditor.Handle, FImeState);
+end;
+
+procedure TVectArtCanvasControl.BeginExistingTextEdit(Index, X, Y: Integer);
+var
+  Layer: TVectArtTextLayer;
+  Layout: TVectArtTextLayout;
+  LogicalPoint: TPointF;
+  TextScaleX: Single;
+  TextScaleY: Single;
+begin
+  if (FDocument = nil) or (Index <= 0) or
+    (Index >= FDocument.LayerCount) or
+    not (FDocument[Index] is TVectArtTextLayer) or FDocument[Index].Locked then
+    Exit;
+  Layer := TVectArtTextLayer(FDocument[Index]);
+  FTextBeforeSelection := FDocument.GetSelectedLayerIndices;
+  FDocument.SetSelectedLayers([Index]);
+  FTextLayerIndex := Index;
+  FTextOriginalData := CaptureVectArtTextData(Layer);
+  FTextBuffer := Layer.Text;
+  LogicalPoint := PointF((X - FCanvasBounds.Left) / FZoom,
+    (Y - FCanvasBounds.Top) / FZoom);
+  LogicalPoint := RotatePointAround(LogicalPoint, Layer.Bounds.CenterPoint,
+    -Layer.RotationDegrees);
+  Layout := BuildVectArtTextLayout(Layer.Text, Layer.FontFamily,
+    Layer.FontSize, Layer.FontStyle, Layer.LetterSpacingRatio,
+    Layer.LineSpacingRatio);
+  TextScaleX := Layer.Bounds.Width / Max(Layout.Width, 1.0);
+  TextScaleY := Layer.Bounds.Height / Max(Layout.Height, 1.0);
+  FTextCaretIndex := VectArtTextCaretIndexAtPoint(FTextBuffer,
+    Layer.FontFamily, Layer.FontSize,
+    (LogicalPoint.X - Layer.Bounds.Left) / Max(TextScaleX, 0.000001),
+    (LogicalPoint.Y - Layer.Bounds.Top) / Max(TextScaleY, 0.000001),
+    Layer.FontStyle, Layer.LetterSpacingRatio, Layer.LineSpacingRatio);
+  FTextCompositionActive := False;
+  FTextCompositionText := '';
+  FTextNewLayer := False;
+  FTextEditing := True;
+  FTextEditor.Text := '';
+  UpdateTextEditorBounds;
+  FTextEditor.Visible := True;
+  FTextEditor.BringToFront;
+  FTextEditor.SetFocus;
+  RestoreWindowsIme(FTextEditor.Handle, FImeState);
+end;
+
+procedure TVectArtCanvasControl.FinishTextEdit(Cancel,
+  RestoreCanvasFocus: Boolean);
+var
+  AfterSelection: TArray<Integer>;
+  CurrentData: TVectArtTextData;
+  RemovedData: TVectArtTextData;
+begin
+  if not FTextEditing or FTextEnding then
+    Exit;
+  FTextEnding := True;
+  try
+    SuspendWindowsIme(FTextEditor.Handle, FImeState);
+    FTextEditor.Visible := False;
+    if (FDocument <> nil) and (FTextLayerIndex > 0) and
+      (FTextLayerIndex < FDocument.LayerCount) and
+      (FDocument[FTextLayerIndex] is TVectArtTextLayer) then
+    begin
+      CurrentData := CaptureVectArtTextData(
+        TVectArtTextLayer(FDocument[FTextLayerIndex]));
+      if FTextNewLayer then
+      begin
+        if Cancel or (CurrentData.Text = '') then
+        begin
+          FDocument.RemoveText(FTextLayerIndex, RemovedData);
+          FDocument.SetSelectedLayers(FTextBeforeSelection);
+        end
+        else if EditHistory <> nil then
+        begin
+          AfterSelection := FDocument.GetSelectedLayerIndices;
+          EditHistory.AddApplied(TVectArtInsertTextCommand.Create(FDocument,
+            FTextLayerIndex, CurrentData, FTextBeforeSelection,
+            AfterSelection));
+        end;
+      end
+      else if Cancel then
+        FDocument.SetTextData(FTextLayerIndex, FTextOriginalData)
+      else if CurrentData.Text = '' then
+        FDocument.SetTextData(FTextLayerIndex, FTextOriginalData)
+      else if EditHistory <> nil then
+        EditHistory.AddApplied(TVectArtTextDataCommand.Create(FDocument,
+          FTextLayerIndex, FTextOriginalData, CurrentData));
+    end;
+    FTextEditing := False;
+    FTextLayerIndex := -1;
+    FTextNewLayer := False;
+    FTextBuffer := '';
+    FTextCaretIndex := 0;
+    FTextCompositionActive := False;
+    FTextCompositionText := '';
+    FTextEditor.Text := '';
+    if RestoreCanvasFocus and CanFocus then
+      SetFocus;
+    Invalidate;
+  finally
+    FTextEnding := False;
+  end;
+end;
+
+function TVectArtCanvasControl.TextLayerAt(X, Y: Integer): Integer;
+var
+  I: Integer;
+  Layer: TVectArtTextLayer;
+  LogicalPoint: TPointF;
+begin
+  Result := -1;
+  if (FDocument = nil) or (FZoom <= 0) then
+    Exit;
+  LogicalPoint := TPointF.Create((X - FCanvasBounds.Left) / FZoom,
+    (Y - FCanvasBounds.Top) / FZoom);
+  for I := FDocument.LayerCount - 1 downto 1 do
+    if FDocument[I].Visible and (FDocument[I] is TVectArtTextLayer) then
+    begin
+      Layer := TVectArtTextLayer(FDocument[I]);
+      if PointInRotatedRectangle(LogicalPoint, Layer.Bounds,
+        Layer.RotationDegrees) then
+        Exit(I);
+    end;
+end;
+
+procedure TVectArtCanvasControl.TextEditorCommittedText(Sender: TObject;
+  const Text: string);
+begin
+  if not FTextEditing or FTextEnding or (Text = '') then
+    Exit;
+  FTextCompositionActive := False;
+  FTextCompositionText := '';
+  InsertVectArtTextAtCaret(FTextBuffer, FTextCaretIndex, Text);
+  UpdateTextLayerFromBuffer;
+end;
+
+procedure TVectArtCanvasControl.TextEditorComposition(Sender: TObject;
+  const Text: string; CursorPosition: Integer; Active: Boolean);
+begin
+  if not FTextEditing or FTextEnding then
+    Exit;
+  FTextCompositionActive := Active;
+  FTextCompositionText := Text;
+  UpdateTextEditorBounds;
+end;
+
+procedure TVectArtCanvasControl.TextEditorExit(Sender: TObject);
+begin
+  if FTextEditing and not FTextEnding then
+    FinishTextEdit(False, False);
+end;
+
+procedure TVectArtCanvasControl.TextEditorKeyDown(Sender: TObject;
+  var Key: Word; Shift: TShiftState);
+var
+  DeleteCount: Integer;
+begin
+  if not FTextEditing or FTextEnding or FTextCompositionActive then
+    Exit;
+  case Key of
+    VK_ESCAPE:
+      begin
+        Key := 0;
+        FinishTextEdit(True);
+      end;
+    VK_RETURN:
+      begin
+        Key := 0;
+        InsertVectArtTextAtCaret(FTextBuffer, FTextCaretIndex, sLineBreak);
+        UpdateTextLayerFromBuffer;
+      end;
+    VK_BACK:
+      begin
+        Key := 0;
+        if FTextCaretIndex <= 0 then
+          Exit;
+        DeleteCount := 1;
+        if (FTextCaretIndex >= 2) and
+          (FTextBuffer[FTextCaretIndex - 1] = #13) and
+          (FTextBuffer[FTextCaretIndex] = #10) then
+          DeleteCount := 2
+        else if (FTextCaretIndex >= 2) and
+          (Ord(FTextBuffer[FTextCaretIndex - 1]) >= $D800) and
+          (Ord(FTextBuffer[FTextCaretIndex - 1]) <= $DBFF) then
+          DeleteCount := 2;
+        Delete(FTextBuffer, FTextCaretIndex - DeleteCount + 1, DeleteCount);
+        Dec(FTextCaretIndex, DeleteCount);
+        UpdateTextLayerFromBuffer;
+      end;
+    VK_DELETE:
+      begin
+        Key := 0;
+        if FTextCaretIndex >= Length(FTextBuffer) then
+          Exit;
+        DeleteCount := VectArtTextUnitLengthAt(FTextBuffer,
+          FTextCaretIndex + 1);
+        if (FTextBuffer[FTextCaretIndex + 1] = #13) and
+          (FTextCaretIndex + 2 <= Length(FTextBuffer)) and
+          (FTextBuffer[FTextCaretIndex + 2] = #10) then
+          DeleteCount := 2;
+        Delete(FTextBuffer, FTextCaretIndex + 1, DeleteCount);
+        UpdateTextLayerFromBuffer;
+      end;
+    VK_LEFT:
+      begin
+        Key := 0;
+        if FTextCaretIndex > 0 then
+          Dec(FTextCaretIndex);
+        if (FTextCaretIndex > 0) and
+          (Ord(FTextBuffer[FTextCaretIndex]) >= $D800) and
+          (Ord(FTextBuffer[FTextCaretIndex]) <= $DBFF) then
+          Dec(FTextCaretIndex);
+        if (FTextCaretIndex > 0) and
+          (FTextBuffer[FTextCaretIndex] = #13) and
+          (FTextBuffer[FTextCaretIndex + 1] = #10) then
+          Dec(FTextCaretIndex);
+        UpdateTextEditorBounds;
+      end;
+    VK_RIGHT:
+      begin
+        Key := 0;
+        if FTextCaretIndex < Length(FTextBuffer) then
+          Inc(FTextCaretIndex);
+        if (FTextCaretIndex < Length(FTextBuffer)) and
+          (Ord(FTextBuffer[FTextCaretIndex]) >= $D800) and
+          (Ord(FTextBuffer[FTextCaretIndex]) <= $DBFF) then
+          Inc(FTextCaretIndex);
+        if (FTextCaretIndex < Length(FTextBuffer)) and
+          (FTextBuffer[FTextCaretIndex] = #13) and
+          (FTextBuffer[FTextCaretIndex + 1] = #10) then
+          Inc(FTextCaretIndex);
+        UpdateTextEditorBounds;
+      end;
+  end;
+end;
+
+procedure TVectArtCanvasControl.UpdateTextLayerFromBuffer;
+var
+  Data: TVectArtTextData;
+  NewLayout: TVectArtTextLayout;
+  OldLayout: TVectArtTextLayout;
+  TextScaleX: Single;
+  TextScaleY: Single;
+begin
+  if not FTextEditing or (FDocument = nil) or
+    (FTextLayerIndex <= 0) or (FTextLayerIndex >= FDocument.LayerCount) or
+    not (FDocument[FTextLayerIndex] is TVectArtTextLayer) then
+    Exit;
+  Data := CaptureVectArtTextData(TVectArtTextLayer(
+    FDocument[FTextLayerIndex]));
+  OldLayout := BuildVectArtTextLayout(Data.Text, Data.FontFamily,
+    Data.FontSize, Data.FontStyle, Data.LetterSpacingRatio,
+    Data.LineSpacingRatio);
+  if FTextNewLayer or (Data.Text = '') then
+  begin
+    TextScaleX := 1.0;
+    TextScaleY := 1.0;
+  end
+  else
+  begin
+    TextScaleX := Data.Bounds.Width / Max(OldLayout.Width, 1.0);
+    TextScaleY := Data.Bounds.Height / Max(OldLayout.Height, 1.0);
+  end;
+  Data.Text := FTextBuffer;
+  NewLayout := BuildVectArtTextLayout(Data.Text, Data.FontFamily,
+    Data.FontSize, Data.FontStyle, Data.LetterSpacingRatio,
+    Data.LineSpacingRatio);
+  Data.Bounds.Right := Data.Bounds.Left +
+    Max(NewLayout.Width * TextScaleX, 1.0);
+  Data.Bounds.Bottom := Data.Bounds.Top +
+    Max(NewLayout.Height * TextScaleY, 1.0);
+  FDocument.SetTextData(FTextLayerIndex, Data);
+  UpdateTextEditorBounds;
+  Invalidate;
+end;
+
+procedure TVectArtCanvasControl.UpdateTextEditorBounds;
+var
+  LastBreak: Integer;
+  Layout: TVectArtTextLayout;
+  Layer: TVectArtTextLayer;
+  Prefix: string;
+  CurrentLine: string;
+  CaretPoint: TPointF;
+  EditWidth: Integer;
+  Font: ISkFont;
+  TextLayout: TVectArtTextLayout;
+  TextScaleX: Single;
+  TextScaleY: Single;
+  X: Integer;
+  Y: Integer;
+begin
+  if not FTextEditing or (FDocument = nil) or
+    (FTextLayerIndex <= 0) or (FTextLayerIndex >= FDocument.LayerCount) or
+    not (FDocument[FTextLayerIndex] is TVectArtTextLayer) then
+    Exit;
+  Layer := TVectArtTextLayer(FDocument[FTextLayerIndex]);
+  Prefix := Copy(FTextBuffer, 1, FTextCaretIndex);
+  Layout := BuildVectArtTextLayout(Prefix, Layer.FontFamily,
+    Layer.FontSize, Layer.FontStyle, Layer.LetterSpacingRatio,
+    Layer.LineSpacingRatio);
+  TextLayout := BuildVectArtTextLayout(Layer.Text, Layer.FontFamily,
+    Layer.FontSize, Layer.FontStyle, Layer.LetterSpacingRatio,
+    Layer.LineSpacingRatio);
+  TextScaleX := Layer.Bounds.Width / Max(TextLayout.Width, 1.0);
+  TextScaleY := Layer.Bounds.Height / Max(TextLayout.Height, 1.0);
+  LastBreak := LastDelimiter(#13#10, Prefix);
+  if LastBreak > 0 then
+    CurrentLine := Copy(Prefix, LastBreak + 1, MaxInt)
+  else
+    CurrentLine := Prefix;
+  Font := CreateVectArtTextFont(Layer.FontFamily, Layer.FontSize,
+    Layer.FontStyle);
+  CaretPoint := PointF(Layer.Bounds.Left + MeasureVectArtText(CurrentLine,
+    Font, Layer.FontSize * Layer.LetterSpacingRatio) * TextScaleX,
+    Layer.Bounds.Top + (Length(Layout.Lines) - 1) * Layout.LineHeight *
+      TextScaleY);
+  CaretPoint := RotatePointAround(CaretPoint, Layer.Bounds.CenterPoint,
+    Layer.RotationDegrees);
+  X := FCanvasBounds.Left + Round(CaretPoint.X * FZoom);
+  Y := FCanvasBounds.Top + Round(CaretPoint.Y * FZoom);
+  FTextEditor.Font.Name := Layer.FontFamily;
+  FTextEditor.Font.Height := -Max(Round(Layer.FontSize * TextScaleY *
+    FZoom), 1);
+  FTextEditor.Font.Style := Layer.FontStyle;
+  FTextEditor.Font.Color := Layer.TextColor;
+  EditWidth := TEXT_INPUT_EDIT_WIDTH;
+  if FTextCompositionText <> '' then
+    EditWidth := Max(EditWidth,
+      Ceil(MeasureVectArtText(FTextCompositionText, Font,
+        Layer.FontSize * Layer.LetterSpacingRatio) * TextScaleX *
+        FZoom) + 8);
+  FTextEditor.SetBounds(X, Y, EditWidth,
+    Max(Round(Layout.LineHeight * TextScaleY * FZoom), 1));
 end;
 
 function TVectArtCanvasControl.HasReferenceBackground: Boolean;
@@ -461,6 +886,7 @@ begin
   FPanOffset.X := ClientPoint.X - CanvasX * FZoom - FCanvasBounds.Left;
   FPanOffset.Y := ClientPoint.Y - CanvasY * FZoom - FCanvasBounds.Top;
   CalculateCanvasBounds;
+  UpdateTextEditorBounds;
   Invalidate;
 end;
 
@@ -480,7 +906,15 @@ end;
 
 procedure TVectArtCanvasControl.MouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
+var
+  TextIndex: Integer;
 begin
+  if (Button = mbLeft) and FTextEditing then
+  begin
+    FinishTextEdit(False);
+    if FEditorState <> nil then
+      FEditorState.CurrentTool := vetSelect;
+  end;
   FShapeCreation.Configure(FDocument, EditHistory, FEditorState,
     FCanvasBounds, FZoom);
   if (Button = mbRight) and (FEditorState <> nil) and
@@ -507,6 +941,18 @@ begin
     if CanFocus then
       SetFocus;
     CalculateCanvasBounds;
+    if (FEditorState <> nil) and (FEditorState.CurrentTool = vetText) and
+      PtInRect(FCanvasBounds, Point(X, Y)) then
+    begin
+      TextIndex := TextLayerAt(X, Y);
+      if TextIndex > 0 then
+        BeginExistingTextEdit(TextIndex, X, Y)
+      else
+        BeginNewTextEdit(X, Y);
+      Cursor := crIBeam;
+      Invalidate;
+      Exit;
+    end;
     FShapeCreation.Configure(FDocument, EditHistory, FEditorState,
       FCanvasBounds, FZoom);
     if FShapeCreation.MouseDown(Button, Shift, X, Y) then
@@ -522,9 +968,12 @@ begin
     if (FEditorState <> nil) and
       (FEditorState.CurrentTool in [vetRectangle, vetEllipse,
         vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine,
-        vetPath, vetBezier, vetFreehandLine, vetFreehandBezier]) then
+        vetPath, vetBezier, vetFreehandLine, vetFreehandBezier, vetText]) then
     begin
-      Cursor := crCross;
+      if FEditorState.CurrentTool = vetText then
+        Cursor := crIBeam
+      else
+        Cursor := crCross;
       Exit;
     end;
     FInteraction.Configure(FDocument, FCanvasBounds, FZoom);
@@ -552,6 +1001,7 @@ begin
     FPanOffset.X := FPanStartOffset.X + X - FPanStartMouse.X;
     FPanOffset.Y := FPanStartOffset.Y + Y - FPanStartMouse.Y;
     CalculateCanvasBounds;
+    UpdateTextEditorBounds;
     Invalidate;
     Exit;
   end;
@@ -569,9 +1019,12 @@ begin
   if (FEditorState <> nil) and
     (FEditorState.CurrentTool in [vetRectangle, vetEllipse,
       vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine,
-      vetPath, vetBezier, vetFreehandLine, vetFreehandBezier]) then
+      vetPath, vetBezier, vetFreehandLine, vetFreehandBezier, vetText]) then
   begin
-    Cursor := crCross;
+    if FEditorState.CurrentTool = vetText then
+      Cursor := crIBeam
+    else
+      Cursor := crCross;
     Exit;
   end;
   FInteraction.Configure(FDocument, FCanvasBounds, FZoom);
@@ -716,6 +1169,7 @@ var
   LogicalQuad: TVectArtQuad;
   PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
+  TextLayer: TVectArtTextLayer;
   RotatedBounds: TRectF;
   RangeRect: TRect;
   Row: Integer;
@@ -815,7 +1269,8 @@ begin
             not ((Layer is TVectArtRectangleLayer) or
               (Layer is TVectArtLineLayer) or
               (Layer is TVectArtPathLayer) or
-              (Layer is TVectArtImageLayer)) then
+              (Layer is TVectArtImageLayer) or
+              (Layer is TVectArtTextLayer)) then
             Continue;
           if Layer is TVectArtRectangleLayer then
           begin
@@ -844,6 +1299,12 @@ begin
               PathLayer.Points, PathLayer.Bezier, PathLayer.Closed, 16));
             SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
               SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
+          end
+          else if Layer is TVectArtTextLayer then
+          begin
+            TextLayer := TVectArtTextLayer(Layer);
+            RotatedBounds := QuadBounds(RectangleCorners(TextLayer.Bounds,
+              TextLayer.RotationDegrees));
           end
           else
           begin
@@ -1049,6 +1510,7 @@ var
   LogicalQuad: TVectArtQuad;
   PathLayer: TVectArtPathLayer;
   RectangleLayer: TVectArtRectangleLayer;
+  TextLayer: TVectArtTextLayer;
   RotatedBounds: TRectF;
   RangeRect: TRect;
   Row: Integer;
@@ -1127,7 +1589,8 @@ begin
         not ((Layer is TVectArtRectangleLayer) or
           (Layer is TVectArtLineLayer) or
           (Layer is TVectArtPathLayer) or
-          (Layer is TVectArtImageLayer)) then
+          (Layer is TVectArtImageLayer) or
+          (Layer is TVectArtTextLayer)) then
         Continue;
       if Layer is TVectArtRectangleLayer then
       begin
@@ -1156,6 +1619,12 @@ begin
           PathLayer.Points, PathLayer.Bezier, PathLayer.Closed, 16));
         SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
           SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
+      end
+      else if Layer is TVectArtTextLayer then
+      begin
+        TextLayer := TVectArtTextLayer(Layer);
+        RotatedBounds := QuadBounds(RectangleCorners(TextLayer.Bounds,
+          TextLayer.RotationDegrees));
       end
       else
       begin
@@ -1368,6 +1837,7 @@ procedure TVectArtCanvasControl.Resize;
 begin
   inherited Resize;
   CalculateCanvasBounds;
+  UpdateTextEditorBounds;
   Invalidate;
 end;
 
@@ -1375,6 +1845,8 @@ procedure TVectArtCanvasControl.SetDocument(const Value: TVectArtDocument);
 begin
   if FDocument = Value then
     Exit;
+  if FTextEditing then
+    FinishTextEdit(False, False);
   FDocument := Value;
   FRenderedRevision := -1;
   FRenderedPreviewStrokeWidth := -1.0;

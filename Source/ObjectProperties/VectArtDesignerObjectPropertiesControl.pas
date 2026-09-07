@@ -18,6 +18,8 @@ type
     FEditHistory: TVectArtEditHistory;
     FEditorState: TVectArtEditorState;
     FHeightEdit: TEdit;
+    FLetterSpacingEdit: TEdit;
+    FLineSpacingEdit: TEdit;
     FOpacityEdit: TEdit;
     FStrokeColorEdit: TEdit;
     FStrokeStyleCombo: TVectArtStrokeStyleCombo;
@@ -45,6 +47,7 @@ type
     procedure ApplyPathMarkerSize(StartMarker: Boolean);
     procedure ApplyPathStartMarker(Sender: TObject);
     procedure ApplyStrokeWidth;
+    procedure ApplyTextSpacing;
     procedure ClearEditValue(Edit: TEdit);
     procedure EditExit(Sender: TObject);
     procedure EditKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -59,6 +62,7 @@ type
     procedure SetDocument(const Value: TVectArtDocument);
     procedure SetEditorsEnabled(Value: Boolean);
     procedure SetPathStyleControlsVisible(Value: Boolean);
+    procedure SetTextSpacingControlsVisible(Value: Boolean);
   protected
     procedure Paint; override;
     procedure Resize; override;
@@ -76,13 +80,16 @@ type
     property PathStartMarkerCombo: TVectArtLineMarkerCombo
       read FPathStartMarkerCombo;
     property PathStartMarkerSizeEdit: TEdit read FPathStartMarkerSizeEdit;
+    property TextLetterSpacingEdit: TEdit read FLetterSpacingEdit;
+    property TextLineSpacingEdit: TEdit read FLineSpacingEdit;
   end;
 
 implementation
 
 uses
   System.Generics.Collections, System.Math, System.SysUtils, Winapi.Windows,
-  Vcl.Graphics, VectArtDesignerBezierGeometry, VectArtDesignerGeometry;
+  Vcl.Graphics, VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
+  VectArtDesignerTextGeometry;
 
 const
   COLOR_BACKGROUND = TColor($00212121);
@@ -110,6 +117,8 @@ begin
   FStrokeWidthEdit := NewDarkEdit;
   FStrokeStyleCombo := NewDarkCombo;
   FOpacityEdit := NewDarkEdit;
+  FLetterSpacingEdit := NewDarkEdit;
+  FLineSpacingEdit := NewDarkEdit;
   for LineCap := Low(TVectArtLineCap) to High(TVectArtLineCap) do
   begin
     FPathLineCapButtons[LineCap] := TVectArtLineCapButton.Create(Self);
@@ -148,6 +157,7 @@ begin
   FPathEndMarkerSizeEdit := NewDarkEdit;
   SetEditorsEnabled(False);
   SetPathStyleControlsVisible(False);
+  SetTextSpacingControlsVisible(False);
 end;
 
 procedure TVectArtObjectPropertiesControl.ApplyPathEndMarker(Sender: TObject);
@@ -606,6 +616,8 @@ var
   NewColor: TColor;
   OldColor: TColor;
   PathLayer: TVectArtPathLayer;
+  NewTextData: TVectArtTextData;
+  OldTextData: TVectArtTextData;
   Value: Integer;
 begin
   if FUpdating or (FDocument = nil) or
@@ -628,7 +640,20 @@ begin
   for I := 0 to High(LayerIndices) do
   begin
     LayerIndex := LayerIndices[I];
-    if FDocument[LayerIndex] is TVectArtPathLayer then
+    if FDocument[LayerIndex] is TVectArtTextLayer then
+    begin
+      OldTextData := CaptureVectArtTextData(
+        TVectArtTextLayer(FDocument[LayerIndex]));
+      NewTextData := OldTextData;
+      NewTextData.TextColor := NewColor;
+      FDocument.SetTextData(LayerIndex, NewTextData);
+      OldColor := OldTextData.TextColor;
+      if (Command <> nil) and (OldColor <> NewColor) then
+        Command.Add(TVectArtTextDataCommand.Create(FDocument, LayerIndex,
+          OldTextData, NewTextData));
+      Continue;
+    end
+    else if FDocument[LayerIndex] is TVectArtPathLayer then
     begin
       PathLayer := TVectArtPathLayer(FDocument[LayerIndex]);
       OldColor := PathLayer.FillColor;
@@ -665,6 +690,8 @@ var
   OldImagePoints: TVectArtImagePoints;
   OldSelectionBounds: TRectF;
   PathLayer: TVectArtPathLayer;
+  NewTextData: TVectArtTextData;
+  OldTextData: TVectArtTextData;
   ImageLayer: TVectArtImageLayer;
   PathPoints: TArray<TPointF>;
   PointIndex: Integer;
@@ -689,6 +716,20 @@ begin
   end;
   WidthValue := Max(WidthValue, MIN_OBJECT_SIZE);
   HeightValue := Max(HeightValue, MIN_OBJECT_SIZE);
+  if (FDocument.SelectionCount = 1) and
+    (FDocument[FDocument.SelectedIndex] is TVectArtTextLayer) then
+  begin
+    OldTextData := CaptureVectArtTextData(
+      TVectArtTextLayer(FDocument[FDocument.SelectedIndex]));
+    NewTextData := OldTextData;
+    NewTextData.Bounds := RectF(XValue, YValue, XValue + WidthValue,
+      YValue + HeightValue);
+    FDocument.SetTextData(FDocument.SelectedIndex, NewTextData);
+    if FEditHistory <> nil then
+      FEditHistory.AddApplied(TVectArtTextDataCommand.Create(FDocument,
+        FDocument.SelectedIndex, OldTextData, NewTextData));
+    Exit;
+  end;
   if (FDocument.SelectionCount = 1) and
     (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer) then
   begin
@@ -791,7 +832,8 @@ begin
       for I := 1 to FDocument.LayerCount - 1 do
         if FDocument.IsLayerSelected(I) and
           ((FDocument[I] is TVectArtRectangleLayer) or
-           (FDocument[I] is TVectArtPathLayer)) then
+           (FDocument[I] is TVectArtPathLayer) or
+           (FDocument[I] is TVectArtTextLayer)) then
           Indices.Add(I);
     Result := Indices.ToArray;
   finally
@@ -813,12 +855,62 @@ begin
           ((FDocument[I] is TVectArtRectangleLayer) or
            (FDocument[I] is TVectArtLineLayer) or
            (FDocument[I] is TVectArtPathLayer) or
-           (FDocument[I] is TVectArtImageLayer)) then
+           (FDocument[I] is TVectArtImageLayer) or
+           (FDocument[I] is TVectArtTextLayer)) then
           Indices.Add(I);
     Result := Indices.ToArray;
   finally
     Indices.Free;
   end;
+end;
+
+procedure TVectArtObjectPropertiesControl.ApplyTextSpacing;
+var
+  LetterPercent: Double;
+  LinePercent: Double;
+  NewData: TVectArtTextData;
+  NewLayout: TVectArtTextLayout;
+  OldData: TVectArtTextData;
+  OldLayout: TVectArtTextLayout;
+  ScaleX: Single;
+  ScaleY: Single;
+begin
+  if FUpdating or (FDocument = nil) or
+    (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
+    not (FDocument[FDocument.SelectedIndex] is TVectArtTextLayer) then
+    Exit;
+  if not TryStrToFloat(Trim(FLetterSpacingEdit.Text), LetterPercent) or
+    not TryStrToFloat(Trim(FLineSpacingEdit.Text), LinePercent) then
+  begin
+    RefreshFromDocument;
+    Exit;
+  end;
+  LetterPercent := EnsureRange(LetterPercent, -100.0, 1000.0);
+  LinePercent := EnsureRange(LinePercent, -100.0, 1000.0);
+  OldData := CaptureVectArtTextData(
+    TVectArtTextLayer(FDocument[FDocument.SelectedIndex]));
+  NewData := OldData;
+  NewData.LetterSpacingRatio := LetterPercent / 100.0;
+  NewData.LineSpacingRatio := LinePercent / 100.0;
+  if SameValue(OldData.LetterSpacingRatio, NewData.LetterSpacingRatio) and
+    SameValue(OldData.LineSpacingRatio, NewData.LineSpacingRatio) then
+    Exit;
+  OldLayout := BuildVectArtTextLayout(OldData.Text, OldData.FontFamily,
+    OldData.FontSize, OldData.FontStyle, OldData.LetterSpacingRatio,
+    OldData.LineSpacingRatio);
+  ScaleX := OldData.Bounds.Width / Max(OldLayout.Width, 1.0);
+  ScaleY := OldData.Bounds.Height / Max(OldLayout.Height, 1.0);
+  NewLayout := BuildVectArtTextLayout(NewData.Text, NewData.FontFamily,
+    NewData.FontSize, NewData.FontStyle, NewData.LetterSpacingRatio,
+    NewData.LineSpacingRatio);
+  NewData.Bounds.Right := NewData.Bounds.Left +
+    Max(NewLayout.Width * ScaleX, 1.0);
+  NewData.Bounds.Bottom := NewData.Bounds.Top +
+    Max(NewLayout.Height * ScaleY, 1.0);
+  FDocument.SetTextData(FDocument.SelectedIndex, NewData);
+  if FEditHistory <> nil then
+    FEditHistory.AddApplied(TVectArtTextDataCommand.Create(FDocument,
+      FDocument.SelectedIndex, OldData, NewData));
 end;
 
 procedure TVectArtObjectPropertiesControl.ApplyOpacity;
@@ -874,6 +966,9 @@ begin
     ApplyStrokeWidth
   else if Sender = FOpacityEdit then
     ApplyOpacity
+  else if (Sender = FLetterSpacingEdit) or
+    (Sender = FLineSpacingEdit) then
+    ApplyTextSpacing
   else
     ApplyGeometry;
 end;
@@ -1017,6 +1112,11 @@ begin
     Canvas.TextOut(ClientWidth - 68, 425, 'Size');
     Canvas.TextOut(ClientWidth - 68, 471, 'Size');
   end;
+  if FLetterSpacingEdit.Visible then
+  begin
+    Canvas.TextOut(12, 333, 'Letter spacing (%)');
+    Canvas.TextOut(12, 379, 'Line spacing (%)');
+  end;
   SwatchRect := Rect(ClientWidth - 42, 158, ClientWidth - 12, 183);
   ColorValue := COLOR_EDIT;
   if TryStrToInt('$' + StringReplace(Trim(FColorEdit.Text), '#', '', []),
@@ -1058,10 +1158,12 @@ var
   StrokeColorValue: TColor;
   StrokeStyleValue: TVectArtStrokeStyle;
   StrokeWidthValue: Single;
+  TextLayer: TVectArtTextLayer;
 begin
   FUpdating := True;
   try
     SetPathStyleControlsVisible(False);
+    SetTextSpacingControlsVisible(False);
     if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
       (FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) then
     begin
@@ -1094,6 +1196,43 @@ begin
         FStrokeColorEdit.Enabled := False;
         FStrokeWidthEdit.Enabled := False;
         FStrokeStyleCombo.Enabled := False;
+      end;
+    end
+    else if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
+      (FDocument[FDocument.SelectedIndex] is TVectArtTextLayer) then
+    begin
+      TextLayer := TVectArtTextLayer(FDocument[FDocument.SelectedIndex]);
+      Bounds := TextLayer.Bounds;
+      FXEdit.Text := FormatFloat('0.##', Bounds.Left);
+      FYEdit.Text := FormatFloat('0.##', Bounds.Top);
+      FWidthEdit.Text := FormatFloat('0.##', Bounds.Width);
+      FHeightEdit.Text := FormatFloat('0.##', Bounds.Height);
+      ColorValue := ColorToRGB(TextLayer.TextColor);
+      FColorEdit.Text := Format('#%.2x%.2x%.2x', [GetRValue(ColorValue),
+        GetGValue(ColorValue), GetBValue(ColorValue)]);
+      FOpacityEdit.Text := FormatFloat('0.##', TextLayer.Opacity * 100);
+      ClearEditValue(FStrokeColorEdit);
+      ClearEditValue(FStrokeWidthEdit);
+      FStrokeStyleCombo.SetPendingItemIndex(-1);
+      SetEditorsEnabled(True);
+      FStrokeColorEdit.Enabled := False;
+      FStrokeWidthEdit.Enabled := False;
+      FStrokeStyleCombo.Enabled := False;
+      FLetterSpacingEdit.Text := FormatFloat('0.##',
+        TextLayer.LetterSpacingRatio * 100);
+      FLineSpacingEdit.Text := FormatFloat('0.##',
+        TextLayer.LineSpacingRatio * 100);
+      SetTextSpacingControlsVisible(True);
+      if TextLayer.Locked then
+      begin
+        FXEdit.Enabled := False;
+        FYEdit.Enabled := False;
+        FWidthEdit.Enabled := False;
+        FHeightEdit.Enabled := False;
+        FColorEdit.Enabled := False;
+        FOpacityEdit.Enabled := False;
+        FLetterSpacingEdit.Enabled := False;
+        FLineSpacingEdit.Enabled := False;
       end;
     end
     else if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
@@ -1366,6 +1505,10 @@ begin
   FStrokeStyleCombo.SetBounds((ClientWidth div 2) + 4, 256, ColumnWidth,
     EDIT_HEIGHT);
   FOpacityEdit.SetBounds(12, 305, Max(ClientWidth - 24, 48), EDIT_HEIGHT);
+  FLetterSpacingEdit.SetBounds(12, 348, Max(ClientWidth - 24, 48),
+    EDIT_HEIGHT);
+  FLineSpacingEdit.SetBounds(12, 394, Max(ClientWidth - 24, 48),
+    EDIT_HEIGHT);
   ButtonWidth := Max((ClientWidth - 40) div 3, 32);
   FPathLineCapButtons[vlcButt].SetBounds(12, 348, ButtonWidth, 28);
   FPathLineCapButtons[vlcSquare].SetBounds(16 + ButtonWidth, 348,
@@ -1437,6 +1580,15 @@ begin
   FPathEndMarkerCombo.Enabled := Value;
   FPathEndMarkerSizeEdit.Visible := Value;
   FPathEndMarkerSizeEdit.Enabled := Value;
+end;
+
+procedure TVectArtObjectPropertiesControl.SetTextSpacingControlsVisible(
+  Value: Boolean);
+begin
+  FLetterSpacingEdit.Visible := Value;
+  FLetterSpacingEdit.Enabled := Value;
+  FLineSpacingEdit.Visible := Value;
+  FLineSpacingEdit.Enabled := Value;
 end;
 
 end.

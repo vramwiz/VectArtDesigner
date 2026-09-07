@@ -9,7 +9,8 @@ uses
   Vcl.Graphics;
 
 type
-  TVectArtLayerKind = (vlkCanvas, vlkRectangle, vlkLine, vlkPath, vlkImage);
+  TVectArtLayerKind = (vlkCanvas, vlkRectangle, vlkLine, vlkPath, vlkImage,
+    vlkText);
   TVectArtPrimitiveShape = (vpsRectangle, vpsEllipse);
   TVectArtImageSourceKind = (visImage, visLogo);
   TVectArtImagePoints = array[0..3] of TPointF;
@@ -239,6 +240,51 @@ type
     Visible: Boolean;                    // 描画対象に含める状態。
   end;
 
+  TVectArtTextLayer = class(TVectArtLayer)
+  private
+    FBounds: TRectF;
+    FFontFamily: string;
+    FFontSize: Single;
+    FFontStyle: TFontStyles;
+    FLetterSpacingRatio: Single;
+    FLineSpacingRatio: Single;
+    FRotationDegrees: Single;
+    FText: string;
+    FTextColor: TColor;
+  public
+    constructor Create(const AName: string; const ABounds: TRectF;
+      const AText, AFontFamily: string; AFontSize: Single;
+      ATextColor: TColor);
+    property Bounds: TRectF read FBounds write FBounds;
+    property FontFamily: string read FFontFamily write FFontFamily;
+    property FontSize: Single read FFontSize write FFontSize;
+    property FontStyle: TFontStyles read FFontStyle write FFontStyle;
+    property LetterSpacingRatio: Single read FLetterSpacingRatio
+      write FLetterSpacingRatio;
+    property LineSpacingRatio: Single read FLineSpacingRatio
+      write FLineSpacingRatio;
+    property RotationDegrees: Single read FRotationDegrees
+      write FRotationDegrees;
+    property Text: string read FText write FText;
+    property TextColor: TColor read FTextColor write FTextColor;
+  end;
+
+  TVectArtTextData = record
+    Bounds: TRectF;             // Unrotated text layout bounds.
+    FontFamily: string;
+    FontSize: Single;
+    FontStyle: TFontStyles;
+    LetterSpacingRatio: Single; // FontSizeに対する字間の割合。0が標準。
+    LineSpacingRatio: Single;   // FontSizeに対する追加行間の割合。0が標準。
+    Locked: Boolean;
+    Name: string;
+    Opacity: Single;
+    RotationDegrees: Single;
+    Text: string;               // Explicit line breaks are stored in-band.
+    TextColor: TColor;
+    Visible: Boolean;
+  end;
+
   TVectArtDocument = class
   private
     FLayers: TObjectList<TVectArtLayer>;
@@ -273,6 +319,7 @@ type
     function InsertLine(Index: Integer; const Data: TVectArtLineData): Integer;
     function InsertPath(Index: Integer; const Data: TVectArtPathData): Integer;
     function InsertImage(Index: Integer; const Data: TVectArtImageData): Integer;
+    function InsertText(Index: Integer; const Data: TVectArtTextData): Integer;
     function IsLayerSelected(Index: Integer): Boolean;
     procedure SetCanvasSize(AWidth, AHeight: Integer);
     procedure SetRectangleBounds(Index: Integer; const Value: TRectF);
@@ -310,6 +357,8 @@ type
     function RemoveLine(Index: Integer; out Data: TVectArtLineData): Boolean;
     function RemovePath(Index: Integer; out Data: TVectArtPathData): Boolean;
     function RemoveImage(Index: Integer; out Data: TVectArtImageData): Boolean;
+    function RemoveText(Index: Integer; out Data: TVectArtTextData): Boolean;
+    procedure SetTextData(Index: Integer; const Data: TVectArtTextData);
     procedure SetPathPoints(Index: Integer; const Points: TArray<TPointF>);
     procedure SetPathStroke(Index: Integer; Color: TColor; Width: Single;
       Style: TVectArtStrokeStyle);
@@ -336,6 +385,7 @@ const
 function VectArtStrokeDashIntervals(Style: TVectArtStrokeStyle;
   Width: Single): TArray<Single>;
 function VectArtStrokeUsesRoundCaps(Style: TVectArtStrokeStyle): Boolean;
+function CaptureVectArtTextData(Layer: TVectArtTextLayer): TVectArtTextData;
 
 implementation
 
@@ -470,6 +520,44 @@ begin
   FPngData := Copy(APngData);
   FPoints := APoints;
   FSourceKind := ASourceKind;
+end;
+
+{ TVectArtTextLayer }
+
+constructor TVectArtTextLayer.Create(const AName: string;
+  const ABounds: TRectF; const AText, AFontFamily: string;
+  AFontSize: Single; ATextColor: TColor);
+begin
+  inherited Create(vlkText, AName);
+  FBounds := ABounds;
+  FText := AText;
+  FFontFamily := AFontFamily;
+  FFontSize := Max(AFontSize, 1.0);
+  FFontStyle := [];
+  FLetterSpacingRatio := 0.0;
+  FLineSpacingRatio := 0.0;
+  FTextColor := ATextColor;
+  FRotationDegrees := 0.0;
+end;
+
+function CaptureVectArtTextData(Layer: TVectArtTextLayer): TVectArtTextData;
+begin
+  Result := Default(TVectArtTextData);
+  if Layer = nil then
+    Exit;
+  Result.Bounds := Layer.Bounds;
+  Result.FontFamily := Layer.FontFamily;
+  Result.FontSize := Layer.FontSize;
+  Result.FontStyle := Layer.FontStyle;
+  Result.LetterSpacingRatio := Layer.LetterSpacingRatio;
+  Result.LineSpacingRatio := Layer.LineSpacingRatio;
+  Result.Locked := Layer.Locked;
+  Result.Name := Layer.Name;
+  Result.Opacity := Layer.Opacity;
+  Result.RotationDegrees := Layer.RotationDegrees;
+  Result.Text := Layer.Text;
+  Result.TextColor := Layer.TextColor;
+  Result.Visible := Layer.Visible;
 end;
 
 { TVectArtDocument }
@@ -665,6 +753,31 @@ begin
   ImageLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
   ImageLayer.Visible := Data.Visible;
   FLayers.Insert(Result, ImageLayer);
+  for I := 0 to FSelectedLayers.Count - 1 do
+    if FSelectedLayers[I] >= Result then
+      FSelectedLayers[I] := FSelectedLayers[I] + 1;
+  if FSelectedIndex >= Result then
+    Inc(FSelectedIndex);
+  Changed;
+end;
+
+function TVectArtDocument.InsertText(Index: Integer;
+  const Data: TVectArtTextData): Integer;
+var
+  I: Integer;
+  TextLayer: TVectArtTextLayer;
+begin
+  Result := EnsureRange(Index, 1, FLayers.Count);
+  TextLayer := TVectArtTextLayer.Create(Data.Name, Data.Bounds, Data.Text,
+    Data.FontFamily, Data.FontSize, Data.TextColor);
+  TextLayer.FontStyle := Data.FontStyle;
+  TextLayer.LetterSpacingRatio := Data.LetterSpacingRatio;
+  TextLayer.LineSpacingRatio := Data.LineSpacingRatio;
+  TextLayer.Locked := Data.Locked;
+  TextLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
+  TextLayer.RotationDegrees := NormalizeAngleDegrees(Data.RotationDegrees);
+  TextLayer.Visible := Data.Visible;
+  FLayers.Insert(Result, TextLayer);
   for I := 0 to FSelectedLayers.Count - 1 do
     if FSelectedLayers[I] >= Result then
       FSelectedLayers[I] := FSelectedLayers[I] + 1;
@@ -871,6 +984,59 @@ begin
   Changed;
 end;
 
+function TVectArtDocument.RemoveText(Index: Integer;
+  out Data: TVectArtTextData): Boolean;
+var
+  I: Integer;
+  Selection: TList<Integer>;
+begin
+  Result := (Index > 0) and (Index < FLayers.Count) and
+    (FLayers[Index] is TVectArtTextLayer);
+  if not Result then
+    Exit;
+  Data := CaptureVectArtTextData(TVectArtTextLayer(FLayers[Index]));
+  FLayers.Delete(Index);
+  Selection := TList<Integer>.Create;
+  try
+    for I := 0 to FSelectedLayers.Count - 1 do
+      if FSelectedLayers[I] < Index then
+        Selection.Add(FSelectedLayers[I])
+      else if FSelectedLayers[I] > Index then
+        Selection.Add(FSelectedLayers[I] - 1);
+    if (Selection.Count = 0) and (FLayers.Count > 1) then
+      Selection.Add(Min(Index, FLayers.Count - 1));
+    SetSelectedLayersCore(Selection.ToArray, False);
+  finally
+    Selection.Free;
+  end;
+  Changed;
+end;
+
+procedure TVectArtDocument.SetTextData(Index: Integer;
+  const Data: TVectArtTextData);
+var
+  Layer: TVectArtTextLayer;
+begin
+  if (Index <= 0) or (Index >= FLayers.Count) or
+    not (FLayers[Index] is TVectArtTextLayer) then
+    Exit;
+  Layer := TVectArtTextLayer(FLayers[Index]);
+  Layer.Bounds := Data.Bounds;
+  Layer.FontFamily := Data.FontFamily;
+  Layer.FontSize := Max(Data.FontSize, 1.0);
+  Layer.FontStyle := Data.FontStyle;
+  Layer.LetterSpacingRatio := Data.LetterSpacingRatio;
+  Layer.LineSpacingRatio := Data.LineSpacingRatio;
+  Layer.Locked := Data.Locked;
+  Layer.Name := Data.Name;
+  Layer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
+  Layer.RotationDegrees := NormalizeAngleDegrees(Data.RotationDegrees);
+  Layer.Text := Data.Text;
+  Layer.TextColor := Data.TextColor;
+  Layer.Visible := Data.Visible;
+  Changed;
+end;
+
 function TVectArtDocument.GetCanvasLayer: TVectArtCanvasLayer;
 begin
   if (FLayers.Count > 0) and (FLayers[0] is TVectArtCanvasLayer) then
@@ -1026,18 +1192,33 @@ procedure TVectArtDocument.SetRectangleBounds(Index: Integer;
 var
   CurrentBounds: TRectF;
   RectangleLayer: TVectArtRectangleLayer;
+  TextLayer: TVectArtTextLayer;
 begin
+  RectangleLayer := nil;
+  TextLayer := nil;
   if (Index <= 0) or (Index >= FLayers.Count) or
-    not (FLayers[Index] is TVectArtRectangleLayer) then
+    not ((FLayers[Index] is TVectArtRectangleLayer) or
+      (FLayers[Index] is TVectArtTextLayer)) then
     Exit;
-  RectangleLayer := TVectArtRectangleLayer(FLayers[Index]);
-  CurrentBounds := RectangleLayer.Bounds;
+  if FLayers[Index] is TVectArtTextLayer then
+  begin
+    TextLayer := TVectArtTextLayer(FLayers[Index]);
+    CurrentBounds := TextLayer.Bounds;
+  end
+  else
+  begin
+    RectangleLayer := TVectArtRectangleLayer(FLayers[Index]);
+    CurrentBounds := RectangleLayer.Bounds;
+  end;
   if SameValue(CurrentBounds.Left, Value.Left) and
     SameValue(CurrentBounds.Top, Value.Top) and
     SameValue(CurrentBounds.Right, Value.Right) and
     SameValue(CurrentBounds.Bottom, Value.Bottom) then
     Exit;
-  RectangleLayer.Bounds := Value;
+  if FLayers[Index] is TVectArtTextLayer then
+    TextLayer.Bounds := Value
+  else
+    RectangleLayer.Bounds := Value;
   Changed;
 end;
 

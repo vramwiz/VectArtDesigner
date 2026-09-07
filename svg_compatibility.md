@@ -27,9 +27,10 @@
 | `polygon` | 閉じたPath | 2頂点以上。fillまたはstrokeの少なくとも一方が必要。 |
 | `path` | Path | 単一サブパスの直線命令`M/m`、`L/l`、`H/h`、`V/v`、`Z/z`だけを扱う。 |
 | `image` | Image | 自己完結した`data:image/png;base64`だけを扱う。画像側の`preserveAspectRatio`は保持せず、4頂点のアフィン配置へ変換して通知する。 |
+| `text` | Text | 単色の横書き文字を扱う。直下の`tspan`を明示改行として連結し、フォント名・サイズ・太字・斜体・字間・行間・回転を保持する。せん断と反転は無視して通知する。 |
 
 曲線命令、複数サブパス、外部参照画像、不正PNG、描画不能な要素はその要素だけを無視して通知する。
-`circle`、`text`、`use`など上表にない描画要素も無視して通知する。
+`circle`、`use`など上表にない描画要素も無視して通知する。
 
 ## 対応属性
 
@@ -40,6 +41,9 @@
   塗りと線の不透明度が異なる図形は、単一のレイヤー不透明度へ統合して通知する。
 - 品質: `shape-rendering="crispEdges"`をアンチエイリアス無効として扱う。
 - 変換: `matrix`、`translate`、`scale`、`rotate`、`skewX`、`skewY`を座標へ適用する。
+- 文字: `font-family`、`font-size`、`font-weight`、`font-style`、`letter-spacing`。外部SVGに文字幅・高さがない場合は
+  フォントサイズと文字数から編集外接寸法を算出し、アプリ自身の出力では`vad:width`／`vad:height`、
+  `vad:letter-spacing-ratio`／`vad:line-spacing-ratio`で正確に往復する。
 - マーカー: アプリ自身が出力した`vad:start-marker`、`vad:end-marker`と各サイズをLineおよび開いたPathで保持する。
   任意のSVG `marker-start`／`marker-end`定義は編集モデルへ推測変換しない。
 - アプリ固有値: 名前、ロック、選択、元のVCL色値、画像種別など、標準SVGだけでは可逆でない値は
@@ -51,7 +55,7 @@
 
 ## 保存
 
-DocumentのRectangle、Ellipse、Line、Path、PNG Imageだけを出力する。Documentは常にMIF対象型で構成されるため、
+DocumentのRectangle、Ellipse、Line、Path、PNG Image、Textだけを出力する。Documentは常にMIF対象型で構成されるため、
 SVG保存によってSVG専用の内部データが増えることはない。開いたPathとLineのマーカーは標準SVGの
 `marker`表示と`vad`属性を併記し、再読込時は`vad`属性を編集値の正本とする。
 
