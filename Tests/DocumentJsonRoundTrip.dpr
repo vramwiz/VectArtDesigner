@@ -111,10 +111,13 @@ begin
     ImageData.Points[1] := PointF(500, 100);
     ImageData.Points[2] := PointF(500, 180);
     ImageData.Points[3] := PointF(600, 180);
+    ImageData.SourceFileName := 'D:\images\source.png';
     ImageData.SourceKind := visLogo;
     ImageData.Visible := True;
     SourceDocument.InsertImage(SourceDocument.LayerCount, ImageData);
     TextData.Bounds := TRectF.Create(80, 240, 420, 340);
+    TextData.FlipHorizontal := True;
+    TextData.FlipVertical := False;
     TextData.FontFamily := 'Yu Gothic UI';
     TextData.FontSize := 36;
     TextData.FontStyle := [fsBold, fsItalic];
@@ -126,6 +129,7 @@ begin
     TextData.RotationDegrees := -12.5;
     TextData.Text := '1行目' + sLineBreak + 'second line';
     TextData.TextColor := clFuchsia;
+    TextData.Vertical := True;
     TextData.Visible := True;
     SourceDocument.InsertText(SourceDocument.LayerCount, TextData);
     SourceDocument.CanvasLayer.Transparent := True;
@@ -198,6 +202,7 @@ begin
     TargetImage := TVectArtImageLayer(TargetDocument[4]);
     Require((TargetImage.Name = ImageData.Name) and
       (TargetImage.SourceKind = visLogo) and
+      (TargetImage.SourceFileName = ImageData.SourceFileName) and
       SameValue(TargetImage.Opacity, ImageData.Opacity),
       'Image properties differ');
     Require((Length(TargetImage.PngData) = Length(ImageData.PngData)) and
@@ -215,6 +220,9 @@ begin
       SameValue(TargetText.LetterSpacingRatio,
         TextData.LetterSpacingRatio) and
       SameValue(TargetText.LineSpacingRatio, TextData.LineSpacingRatio) and
+      (TargetText.FlipHorizontal = TextData.FlipHorizontal) and
+      (TargetText.FlipVertical = TextData.FlipVertical) and
+      (TargetText.Vertical = TextData.Vertical) and
       (TargetText.TextColor = TextData.TextColor) and
       SameValue(TargetText.RotationDegrees, TextData.RotationDegrees) and
       SameValue(TargetText.Opacity, TextData.Opacity),

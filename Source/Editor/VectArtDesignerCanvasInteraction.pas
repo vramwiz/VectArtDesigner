@@ -900,8 +900,9 @@ begin
   Found := False;
   if FDocument = nil then
     Exit;
+  // 非表示でも明示選択中の外形は維持し、一覧から選んだ対象を枠で操作できるようにする。
   for I := 1 to FDocument.LayerCount - 1 do
-    if FDocument.IsLayerSelected(I) and FDocument[I].Visible and
+    if FDocument.IsLayerSelected(I) and
       ((FDocument[I] is TVectArtRectangleLayer) or
        (FDocument[I] is TVectArtLineLayer) or
        (FDocument[I] is TVectArtPathLayer) or

@@ -75,11 +75,11 @@ type
   TSvgInheritedStyles = TDictionary<string, string>;
 
 const
-  SVG_INHERITED_STYLE_NAMES: array[0..13] of string = (
+  SVG_INHERITED_STYLE_NAMES: array[0..14] of string = (
     'fill', 'stroke', 'stroke-width', 'stroke-dasharray',
     'stroke-linecap', 'stroke-linejoin', 'fill-opacity',
     'stroke-opacity', 'shape-rendering', 'font-family', 'font-size',
-    'font-style', 'font-weight', 'letter-spacing');
+    'font-style', 'font-weight', 'letter-spacing', 'writing-mode');
 
 { TSvgImportReport }
 
@@ -336,8 +336,17 @@ end;
 function TryCreateVectArtSvg(Document: TVectArtDocument; out SvgText,
   ErrorMessage: string): Boolean;
 var
+  A: Single;
+  B: Single;
   Builder: TStringBuilder;
+  C: Single;
   Canvas: TVectArtCanvasLayer;
+  Cosine: Extended;
+  D: Single;
+  E: Single;
+  F: Single;
+  FlipX: Single;
+  FlipY: Single;
   I: Integer;
   Image: TVectArtImageLayer;
   Layer: TVectArtLayer;
@@ -346,6 +355,8 @@ var
   PathDisplayPoints: TArray<TPointF>;
   PointIndex: Integer;
   Rectangle: TVectArtRectangleLayer;
+  Radians: Extended;
+  Sine: Extended;
   TextLayer: TVectArtTextLayer;
   TextLines: TArray<string>;
   TextLineIndex: Integer;
@@ -446,7 +457,31 @@ begin
             Builder.Append(' font-weight="bold"');
           if fsItalic in TextLayer.FontStyle then
             Builder.Append(' font-style="italic"');
-          if not SameValue(TextLayer.RotationDegrees, 0.0) then
+          if TextLayer.Vertical then
+            Builder.Append(' writing-mode="vertical-rl"');
+          if TextLayer.FlipHorizontal or TextLayer.FlipVertical then
+          begin
+            Radians := DegToRad(TextLayer.RotationDegrees);
+            SinCos(Radians, Sine, Cosine);
+            if TextLayer.FlipHorizontal then FlipX := -1 else FlipX := 1;
+            if TextLayer.FlipVertical then FlipY := -1 else FlipY := 1;
+            A := Cosine * FlipX;
+            B := Sine * FlipX;
+            C := -Sine * FlipY;
+            D := Cosine * FlipY;
+            E := TextLayer.Bounds.CenterPoint.X -
+              A * TextLayer.Bounds.CenterPoint.X -
+              C * TextLayer.Bounds.CenterPoint.Y;
+            F := TextLayer.Bounds.CenterPoint.Y -
+              B * TextLayer.Bounds.CenterPoint.X -
+              D * TextLayer.Bounds.CenterPoint.Y;
+            Builder.Append(' transform="matrix(').Append(SvgNumber(A))
+              .Append(' ').Append(SvgNumber(B)).Append(' ')
+              .Append(SvgNumber(C)).Append(' ').Append(SvgNumber(D))
+              .Append(' ').Append(SvgNumber(E)).Append(' ')
+              .Append(SvgNumber(F)).Append(')"');
+          end
+          else if not SameValue(TextLayer.RotationDegrees, 0.0) then
             Builder.Append(' transform="rotate(')
               .Append(SvgNumber(TextLayer.RotationDegrees)).Append(' ')
               .Append(SvgNumber(TextLayer.Bounds.CenterPoint.X)).Append(' ')
@@ -497,6 +532,9 @@ begin
           else
             Builder.Append('image');
           Builder.Append('"');
+          if Image.SourceFileName <> '' then
+            Builder.Append(' vad:source-file="')
+              .Append(XmlEscape(Image.SourceFileName)).Append('"');
           if not Image.Visible then
             Builder.Append(' display="none"');
           Builder.Append('><title>').Append(XmlEscape(Image.Name))
@@ -1016,6 +1054,9 @@ begin
   Data.Points[3] := TransformSvgPoint(PointF(X, Y + Height),
     A, B, C, D, E, F);
   Data.Name := ImageName(Node, Index);
+  Data.SourceFileName := '';
+  if TryGetAttribute(Node, 'vad:source-file', ValueText) then
+    Data.SourceFileName := ValueText;
   Data.SourceKind := visImage;
   if TryGetAttribute(Node, 'vad:source-kind', SourceKindText) and
     SameText(Trim(SourceKindText), 'logo') then
@@ -1124,6 +1165,10 @@ begin
   if TryGetAttribute(Node, 'vad:line-spacing-ratio', ValueText) and
     not TryParseSvgNumber(ValueText, Data.LineSpacingRatio) then
     Exit;
+  Data.Vertical := False;
+  if TryGetPresentationValueOrInherited(Node, InheritedStyles,
+    'writing-mode', ValueText) then
+    Data.Vertical := Trim(ValueText).StartsWith('vertical', True);
   if TryGetPresentationValueOrInherited(Node, InheritedStyles,
     'font-weight', FontWeightText) and
     (SameText(Trim(FontWeightText), 'bold') or
@@ -1174,15 +1219,17 @@ function TransformSvgText(const Matrix: TSvgAffineMatrix;
   var Data: TVectArtTextData): Boolean;
 var
   Center: TPointF;
+  Determinant: Single;
   ScaleX: Single;
   ScaleY: Single;
   TransformedCenter: TPointF;
 begin
   ScaleX := Hypot(Matrix.A, Matrix.B);
   ScaleY := Hypot(Matrix.C, Matrix.D);
+  Determinant := Matrix.A * Matrix.D - Matrix.B * Matrix.C;
   Result := (ScaleX > 0.000001) and (ScaleY > 0.000001) and
     SameValue(Matrix.A * Matrix.C + Matrix.B * Matrix.D, 0, 0.0001) and
-    ((Matrix.A * Matrix.D - Matrix.B * Matrix.C) > 0);
+    not SameValue(Determinant, 0.0, 0.000001);
   if not Result then
     Exit;
   Center := Data.Bounds.CenterPoint;
@@ -1192,6 +1239,8 @@ begin
     TransformedCenter.X + Data.Bounds.Width * ScaleX / 2,
     TransformedCenter.Y + Data.Bounds.Height * ScaleY / 2);
   Data.RotationDegrees := RadToDeg(ArcTan2(Matrix.B, Matrix.A));
+  Data.FlipHorizontal := False;
+  Data.FlipVertical := Determinant < 0;
 end;
 
 function TryParseRectangle(const Node: IXMLNode;

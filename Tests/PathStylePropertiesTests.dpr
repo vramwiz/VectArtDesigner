@@ -14,7 +14,7 @@ uses
   VectArtDesignerTextGeometry in
     'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerBezierGeometry in
-    'Source\Editor\VectArtDesignerBezierGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerEditorState in
     'Source\Core\VectArtDesignerEditorState.pas',
   VectArtDesignerEditCommands in
@@ -84,6 +84,7 @@ var
   TextData: TVectArtTextData;
   TextLayer: TVectArtTextLayer;
   TextLayout: TVectArtTextLayout;
+  VerticalLayout: TVectArtTextLayout;
 begin
   Application.Initialize;
   HostForm := TForm.Create(nil);
@@ -203,6 +204,21 @@ begin
       SameValue(TextLayer.Bounds.Width, TextBounds.Width, 0.01) and
       SameValue(TextLayer.Bounds.Height, TextBounds.Height, 0.01),
       'Text spacing properties undo differs');
+    PropertiesControl.VerticalTextCheck.Checked := True;
+    PropertiesControl.VerticalTextCheck.OnClick(
+      PropertiesControl.VerticalTextCheck);
+    VerticalLayout := BuildVectArtTextLayout(TextData.Text,
+      TextData.FontFamily, TextData.FontSize, TextData.FontStyle,
+      TextData.LetterSpacingRatio, TextData.LineSpacingRatio, True);
+    Require(TextLayer.Vertical and
+      SameValue(TextLayer.Bounds.Width, VerticalLayout.Width, 0.01) and
+      SameValue(TextLayer.Bounds.Height, VerticalLayout.Height, 0.01),
+      'Vertical writing did not rebuild the text bounds');
+    History.Undo;
+    Require(not TextLayer.Vertical and
+      SameValue(TextLayer.Bounds.Width, TextBounds.Width, 0.01) and
+      SameValue(TextLayer.Bounds.Height, TextBounds.Height, 0.01),
+      'Vertical writing undo differs');
     Writeln('Path style properties tests: PASS');
   finally
     HostForm.Free;

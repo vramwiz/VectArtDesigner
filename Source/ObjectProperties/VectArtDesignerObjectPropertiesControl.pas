@@ -20,6 +20,7 @@ type
     FHeightEdit: TEdit;
     FLetterSpacingEdit: TEdit;
     FLineSpacingEdit: TEdit;
+    FVerticalTextCheck: TCheckBox;
     FOpacityEdit: TEdit;
     FStrokeColorEdit: TEdit;
     FStrokeStyleCombo: TVectArtStrokeStyleCombo;
@@ -48,6 +49,7 @@ type
     procedure ApplyPathStartMarker(Sender: TObject);
     procedure ApplyStrokeWidth;
     procedure ApplyTextSpacing;
+    procedure ApplyVerticalText(Sender: TObject);
     procedure ClearEditValue(Edit: TEdit);
     procedure EditExit(Sender: TObject);
     procedure EditKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -82,6 +84,7 @@ type
     property PathStartMarkerSizeEdit: TEdit read FPathStartMarkerSizeEdit;
     property TextLetterSpacingEdit: TEdit read FLetterSpacingEdit;
     property TextLineSpacingEdit: TEdit read FLineSpacingEdit;
+    property VerticalTextCheck: TCheckBox read FVerticalTextCheck;
   end;
 
 implementation
@@ -119,6 +122,12 @@ begin
   FOpacityEdit := NewDarkEdit;
   FLetterSpacingEdit := NewDarkEdit;
   FLineSpacingEdit := NewDarkEdit;
+  FVerticalTextCheck := TCheckBox.Create(Self);
+  FVerticalTextCheck.Parent := Self;
+  FVerticalTextCheck.Caption := 'Vertical writing';
+  FVerticalTextCheck.Font.Color := COLOR_TEXT;
+  FVerticalTextCheck.ParentColor := True;
+  FVerticalTextCheck.OnClick := ApplyVerticalText;
   for LineCap := Low(TVectArtLineCap) to High(TVectArtLineCap) do
   begin
     FPathLineCapButtons[LineCap] := TVectArtLineCapButton.Create(Self);
@@ -897,12 +906,49 @@ begin
     Exit;
   OldLayout := BuildVectArtTextLayout(OldData.Text, OldData.FontFamily,
     OldData.FontSize, OldData.FontStyle, OldData.LetterSpacingRatio,
-    OldData.LineSpacingRatio);
+    OldData.LineSpacingRatio, OldData.Vertical);
   ScaleX := OldData.Bounds.Width / Max(OldLayout.Width, 1.0);
   ScaleY := OldData.Bounds.Height / Max(OldLayout.Height, 1.0);
   NewLayout := BuildVectArtTextLayout(NewData.Text, NewData.FontFamily,
     NewData.FontSize, NewData.FontStyle, NewData.LetterSpacingRatio,
-    NewData.LineSpacingRatio);
+    NewData.LineSpacingRatio, NewData.Vertical);
+  NewData.Bounds.Right := NewData.Bounds.Left +
+    Max(NewLayout.Width * ScaleX, 1.0);
+  NewData.Bounds.Bottom := NewData.Bounds.Top +
+    Max(NewLayout.Height * ScaleY, 1.0);
+  FDocument.SetTextData(FDocument.SelectedIndex, NewData);
+  if FEditHistory <> nil then
+    FEditHistory.AddApplied(TVectArtTextDataCommand.Create(FDocument,
+      FDocument.SelectedIndex, OldData, NewData));
+end;
+
+procedure TVectArtObjectPropertiesControl.ApplyVerticalText(Sender: TObject);
+var
+  NewData: TVectArtTextData;
+  NewLayout: TVectArtTextLayout;
+  OldData: TVectArtTextData;
+  OldLayout: TVectArtTextLayout;
+  ScaleX: Single;
+  ScaleY: Single;
+begin
+  if FUpdating or (FDocument = nil) or
+    (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
+    not (FDocument[FDocument.SelectedIndex] is TVectArtTextLayer) then
+    Exit;
+  OldData := CaptureVectArtTextData(
+    TVectArtTextLayer(FDocument[FDocument.SelectedIndex]));
+  if OldData.Vertical = FVerticalTextCheck.Checked then
+    Exit;
+  OldLayout := BuildVectArtTextLayout(OldData.Text, OldData.FontFamily,
+    OldData.FontSize, OldData.FontStyle, OldData.LetterSpacingRatio,
+    OldData.LineSpacingRatio, OldData.Vertical);
+  ScaleX := OldData.Bounds.Width / Max(OldLayout.Width, 1.0);
+  ScaleY := OldData.Bounds.Height / Max(OldLayout.Height, 1.0);
+  NewData := OldData;
+  NewData.Vertical := FVerticalTextCheck.Checked;
+  NewLayout := BuildVectArtTextLayout(NewData.Text, NewData.FontFamily,
+    NewData.FontSize, NewData.FontStyle, NewData.LetterSpacingRatio,
+    NewData.LineSpacingRatio, NewData.Vertical);
   NewData.Bounds.Right := NewData.Bounds.Left +
     Max(NewLayout.Width * ScaleX, 1.0);
   NewData.Bounds.Bottom := NewData.Bounds.Top +
@@ -1222,6 +1268,7 @@ begin
         TextLayer.LetterSpacingRatio * 100);
       FLineSpacingEdit.Text := FormatFloat('0.##',
         TextLayer.LineSpacingRatio * 100);
+      FVerticalTextCheck.Checked := TextLayer.Vertical;
       SetTextSpacingControlsVisible(True);
       if TextLayer.Locked then
       begin
@@ -1233,6 +1280,7 @@ begin
         FOpacityEdit.Enabled := False;
         FLetterSpacingEdit.Enabled := False;
         FLineSpacingEdit.Enabled := False;
+        FVerticalTextCheck.Enabled := False;
       end;
     end
     else if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
@@ -1509,6 +1557,8 @@ begin
     EDIT_HEIGHT);
   FLineSpacingEdit.SetBounds(12, 394, Max(ClientWidth - 24, 48),
     EDIT_HEIGHT);
+  FVerticalTextCheck.SetBounds(12, 430, Max(ClientWidth - 24, 48),
+    EDIT_HEIGHT);
   ButtonWidth := Max((ClientWidth - 40) div 3, 32);
   FPathLineCapButtons[vlcButt].SetBounds(12, 348, ButtonWidth, 28);
   FPathLineCapButtons[vlcSquare].SetBounds(16 + ButtonWidth, 348,
@@ -1589,6 +1639,8 @@ begin
   FLetterSpacingEdit.Enabled := Value;
   FLineSpacingEdit.Visible := Value;
   FLineSpacingEdit.Enabled := Value;
+  FVerticalTextCheck.Visible := Value;
+  FVerticalTextCheck.Enabled := Value;
 end;
 
 end.

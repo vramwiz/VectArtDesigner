@@ -39,6 +39,20 @@ begin
   Result := TJSONBool(RequireValue(Parent, Name, TJSONBool)).AsBoolean;
 end;
 
+function ReadOptionalBoolean(Parent: TJSONObject; const Name: string;
+  DefaultValue: Boolean): Boolean;
+var
+  Value: TJSONValue;
+begin
+  Value := Parent.GetValue(Name);
+  if Value = nil then
+    Exit(DefaultValue);
+  if not (Value is TJSONBool) then
+    raise EConvertError.CreateFmt('JSON field "%s" has an invalid type',
+      [Name]);
+  Result := TJSONBool(Value).AsBoolean;
+end;
+
 function ReadInteger(Parent: TJSONObject; const Name: string): Integer;
 begin
   if not TryStrToInt(RequireValue(Parent, Name, TJSONNumber).Value,
@@ -70,6 +84,20 @@ end;
 function ReadString(Parent: TJSONObject; const Name: string): string;
 begin
   Result := TJSONString(RequireValue(Parent, Name, TJSONString)).Value;
+end;
+
+function ReadOptionalString(Parent: TJSONObject; const Name,
+  DefaultValue: string): string;
+var
+  Value: TJSONValue;
+begin
+  Value := Parent.GetValue(Name);
+  if Value = nil then
+    Exit(DefaultValue);
+  if not (Value is TJSONString) then
+    raise EConvertError.CreateFmt('JSON field "%s" has an invalid type',
+      [Name]);
+  Result := TJSONString(Value).Value;
 end;
 
 function SerializeVectArtDocument(Document: TVectArtDocument): string;
@@ -126,6 +154,10 @@ begin
         TextJson.AddPair('top', TJSONNumber.Create(TextLayer.Bounds.Top));
         TextJson.AddPair('right', TJSONNumber.Create(TextLayer.Bounds.Right));
         TextJson.AddPair('bottom', TJSONNumber.Create(TextLayer.Bounds.Bottom));
+        TextJson.AddPair('flipHorizontal',
+          TJSONBool.Create(TextLayer.FlipHorizontal));
+        TextJson.AddPair('flipVertical',
+          TJSONBool.Create(TextLayer.FlipVertical));
         TextJson.AddPair('text', TextLayer.Text);
         TextJson.AddPair('fontFamily', TextLayer.FontFamily);
         TextJson.AddPair('fontSize', TJSONNumber.Create(TextLayer.FontSize));
@@ -137,6 +169,7 @@ begin
           TJSONNumber.Create(TextLayer.LineSpacingRatio));
         TextJson.AddPair('textColor',
           TJSONNumber.Create(Integer(TextLayer.TextColor)));
+        TextJson.AddPair('vertical', TJSONBool.Create(TextLayer.Vertical));
         TextJson.AddPair('rotation',
           TJSONNumber.Create(TextLayer.RotationDegrees));
         TextJson.AddPair('opacity', TJSONNumber.Create(TextLayer.Opacity));
@@ -157,6 +190,7 @@ begin
           ImageJson.AddPair('sourceKind', 'image');
         ImageJson.AddPair('pngBase64',
           TNetEncoding.Base64.EncodeBytesToString(Image.PngData));
+        ImageJson.AddPair('sourceFileName', Image.SourceFileName);
         ImageJson.AddPair('opacity', TJSONNumber.Create(Image.Opacity));
         ImageJson.AddPair('visible', TJSONBool.Create(Image.Visible));
         ImageJson.AddPair('locked', TJSONBool.Create(Image.Locked));
@@ -379,6 +413,10 @@ begin
           TextValue.Bounds := TRectF.Create(ReadSingle(LayerJson, 'left'),
             ReadSingle(LayerJson, 'top'), ReadSingle(LayerJson, 'right'),
             ReadSingle(LayerJson, 'bottom'));
+          TextValue.FlipHorizontal := ReadOptionalBoolean(LayerJson,
+            'flipHorizontal', False);
+          TextValue.FlipVertical := ReadOptionalBoolean(LayerJson,
+            'flipVertical', False);
           TextValue.Text := ReadString(LayerJson, 'text');
           TextValue.FontFamily := ReadString(LayerJson, 'fontFamily');
           TextValue.FontSize := ReadSingle(LayerJson, 'fontSize');
@@ -389,6 +427,8 @@ begin
           TextValue.LineSpacingRatio := ReadOptionalSingle(LayerJson,
             'lineSpacingRatio', 0.0);
           TextValue.TextColor := TColor(ReadInteger(LayerJson, 'textColor'));
+          TextValue.Vertical := ReadOptionalBoolean(LayerJson, 'vertical',
+            False);
           TextValue.RotationDegrees := ReadSingle(LayerJson, 'rotation');
           TextValue.Opacity := ReadSingle(LayerJson, 'opacity');
           TextValue.Visible := ReadBoolean(LayerJson, 'visible');
@@ -409,6 +449,8 @@ begin
               'Image layer %d has an invalid source kind', [I]);
           ImageValue.PngData := TNetEncoding.Base64.DecodeStringToBytes(
             ReadString(LayerJson, 'pngBase64'));
+          ImageValue.SourceFileName := ReadOptionalString(LayerJson,
+            'sourceFileName', '');
           ImageValue.Opacity := ReadSingle(LayerJson, 'opacity');
           ImageValue.Visible := ReadBoolean(LayerJson, 'visible');
           ImageValue.Locked := ReadBoolean(LayerJson, 'locked');

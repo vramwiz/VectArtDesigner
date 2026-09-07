@@ -9,28 +9,36 @@ uses
 type
   TVectArtTextLayout = record
     Ascent: Single;
+    BaseLineHeight: Single;
+    CharacterAdvance: Single;
     Height: Single;
     Lines: TArray<string>;
     LineHeight: Single;
+    Vertical: Boolean;
     Width: Single;
   end;
 
 function CreateVectArtTextFont(const FontFamily: string; FontSize: Single;
-  FontStyle: TFontStyles = []): ISkFont;
+  FontStyle: TFontStyles = []; Vertical: Boolean = False): ISkFont;
 function BuildVectArtTextLayout(const Text, FontFamily: string;
   FontSize: Single; FontStyle: TFontStyles = [];
-  LetterSpacingRatio: Single = 0; LineSpacingRatio: Single = 0):
+  LetterSpacingRatio: Single = 0; LineSpacingRatio: Single = 0;
+  Vertical: Boolean = False):
   TVectArtTextLayout;
 function VectArtTextCaretIndexAtPoint(const Text, FontFamily: string;
   FontSize, TargetX, TargetY: Single;
   FontStyle: TFontStyles = []; LetterSpacingRatio: Single = 0;
-  LineSpacingRatio: Single = 0): Integer;
+  LineSpacingRatio: Single = 0; Vertical: Boolean = False): Integer;
 function MeasureVectArtText(const Text: string; Font: ISkFont;
   LetterSpacing: Single): Single;
 procedure DrawVectArtTextLine(Canvas: ISkCanvas; const Text: string;
   X, Baseline: Single; Font: ISkFont; Paint: ISkPaint;
   LetterSpacing: Single);
+procedure DrawVectArtTextColumn(Canvas: ISkCanvas; const Text: string;
+  X, Y, CellWidth, Ascent, CharacterAdvance: Single; Font: ISkFont;
+  Paint: ISkPaint);
 function VectArtTextUnitLengthAt(const Text: string; Index: Integer): Integer;
+function VectArtTextUnitCount(const Text: string): Integer;
 
 implementation
 
@@ -46,10 +54,25 @@ begin
     Result := 2;
 end;
 
-function CreateVectArtTextFont(const FontFamily: string; FontSize: Single;
-  FontStyle: TFontStyles): ISkFont;
+function VectArtTextUnitCount(const Text: string): Integer;
 var
+  I: Integer;
+begin
+  Result := 0;
+  I := 1;
+  while I <= Length(Text) do
+  begin
+    Inc(I, VectArtTextUnitLengthAt(Text, I));
+    Inc(Result);
+  end;
+end;
+
+function CreateVectArtTextFont(const FontFamily: string; FontSize: Single;
+  FontStyle: TFontStyles; Vertical: Boolean): ISkFont;
+var
+  CandidateFamily: string;
   Slant: TSkFontSlant;
+  Style: TSkFontStyle;
   Typeface: ISkTypeface;
   Weight: TSkFontWeight;
 begin
@@ -61,13 +84,21 @@ begin
     Slant := TSkFontSlant.Italic
   else
     Slant := TSkFontSlant.Upright;
+  Style := TSkFontStyle.Create(Weight, TSkFontWidth.Normal, Slant);
   Typeface := nil;
+  if Vertical and (FontFamily <> '') and not FontFamily.StartsWith('@') then
+  begin
+    CandidateFamily := '@' + FontFamily;
+    Typeface := TSkTypeface.MakeFromName(CandidateFamily, Style);
+    if (Typeface <> nil) and
+      not SameText(Typeface.FamilyName, CandidateFamily) then
+      Typeface := nil;
+  end;
   if FontFamily <> '' then
-    Typeface := TSkTypeface.MakeFromName(FontFamily,
-      TSkFontStyle.Create(Weight, TSkFontWidth.Normal, Slant));
+    if Typeface = nil then
+      Typeface := TSkTypeface.MakeFromName(FontFamily, Style);
   if Typeface = nil then
-    Typeface := TSkTypeface.MakeFromName('Yu Gothic UI',
-      TSkFontStyle.Create(Weight, TSkFontWidth.Normal, Slant));
+    Typeface := TSkTypeface.MakeFromName('Yu Gothic UI', Style);
   if Typeface = nil then
     Typeface := TSkTypeface.MakeDefault;
   Result := TSkFont.Create(Typeface, Max(FontSize, 1.0));
@@ -76,9 +107,10 @@ end;
 
 function BuildVectArtTextLayout(const Text, FontFamily: string;
   FontSize: Single; FontStyle: TFontStyles; LetterSpacingRatio,
-  LineSpacingRatio: Single): TVectArtTextLayout;
+  LineSpacingRatio: Single; Vertical: Boolean): TVectArtTextLayout;
 var
   BaseLineHeight: Single;
+  CharacterCount: Integer;
   Font: ISkFont;
   Metrics: TSkFontMetrics;
   Normalized: string;
@@ -86,11 +118,15 @@ var
   LetterSpacing: Single;
 begin
   Result := Default(TVectArtTextLayout);
-  Font := CreateVectArtTextFont(FontFamily, FontSize, FontStyle);
+  Font := CreateVectArtTextFont(FontFamily, FontSize, FontStyle, Vertical);
   Font.GetMetrics(Metrics);
   Result.Ascent := Max(-Metrics.Ascent, 1.0);
   LetterSpacing := FontSize * LetterSpacingRatio;
   BaseLineHeight := Max(Font.Spacing, 1.0);
+  Result.BaseLineHeight := BaseLineHeight;
+  Result.CharacterAdvance := Max(BaseLineHeight +
+    FontSize * LetterSpacingRatio, 1.0);
+  Result.Vertical := Vertical;
   // 行間は行と行の間だけに加え、最終行の下には加えない。
   Result.LineHeight := Max(BaseLineHeight + FontSize * LineSpacingRatio, 1.0);
   Normalized := StringReplace(Text, #13#10, #10, [rfReplaceAll]);
@@ -98,16 +134,32 @@ begin
   Result.Lines := Normalized.Split([#10], TStringSplitOptions.None);
   if Length(Result.Lines) = 0 then
     Result.Lines := [''];
-  for I := 0 to High(Result.Lines) do
-    Result.Width := Max(Result.Width, MeasureVectArtText(Result.Lines[I],
-      Font, LetterSpacing));
-  Result.Height := BaseLineHeight +
-    Max(Length(Result.Lines) - 1, 0) * Result.LineHeight;
+  if Vertical then
+  begin
+    Result.Width := BaseLineHeight +
+      Max(Length(Result.Lines) - 1, 0) * Result.LineHeight;
+    Result.Height := BaseLineHeight;
+    for I := 0 to High(Result.Lines) do
+    begin
+      CharacterCount := VectArtTextUnitCount(Result.Lines[I]);
+      if CharacterCount > 0 then
+        Result.Height := Max(Result.Height, BaseLineHeight +
+          (CharacterCount - 1) * Result.CharacterAdvance);
+    end;
+  end
+  else
+  begin
+    for I := 0 to High(Result.Lines) do
+      Result.Width := Max(Result.Width, MeasureVectArtText(Result.Lines[I],
+        Font, LetterSpacing));
+    Result.Height := BaseLineHeight +
+      Max(Length(Result.Lines) - 1, 0) * Result.LineHeight;
+  end;
 end;
 
 function VectArtTextCaretIndexAtPoint(const Text, FontFamily: string;
   FontSize, TargetX, TargetY: Single; FontStyle: TFontStyles;
-  LetterSpacingRatio, LineSpacingRatio: Single): Integer;
+  LetterSpacingRatio, LineSpacingRatio: Single; Vertical: Boolean): Integer;
 var
   CharacterLength: Integer;
   Font: ISkFont;
@@ -115,12 +167,19 @@ var
   LineEnd: Integer;
   LineIndex: Integer;
   LineStart: Integer;
+  Layout: TVectArtTextLayout;
+  Position: Single;
   PreviousWidth: Single;
   Width: Single;
 begin
-  Font := CreateVectArtTextFont(FontFamily, FontSize, FontStyle);
-  LineIndex := Max(Floor(TargetY / Max(Font.Spacing +
-    FontSize * LineSpacingRatio, 1.0)), 0);
+  Font := CreateVectArtTextFont(FontFamily, FontSize, FontStyle, Vertical);
+  Layout := BuildVectArtTextLayout(Text, FontFamily, FontSize, FontStyle,
+    LetterSpacingRatio, LineSpacingRatio, Vertical);
+  if Vertical then
+    LineIndex := EnsureRange(Floor((Layout.Width - TargetX) /
+      Max(Layout.LineHeight, 1.0)), 0, High(Layout.Lines))
+  else
+    LineIndex := Max(Floor(TargetY / Max(Layout.LineHeight, 1.0)), 0);
   LineStart := 1;
   while (LineIndex > 0) and (LineStart <= Length(Text)) do
   begin
@@ -146,6 +205,21 @@ begin
     not CharInSet(Text[LineEnd], [#10, #13]) do
     Inc(LineEnd, VectArtTextUnitLengthAt(Text, LineEnd));
   Result := LineStart - 1;
+  if Vertical then
+  begin
+    Position := 0;
+    I := LineStart;
+    while I < LineEnd do
+    begin
+      CharacterLength := VectArtTextUnitLengthAt(Text, I);
+      if TargetY < Position + Layout.CharacterAdvance * 0.5 then
+        Exit;
+      Inc(Result, CharacterLength);
+      Position := Position + Layout.CharacterAdvance;
+      Inc(I, CharacterLength);
+    end;
+    Exit;
+  end;
   PreviousWidth := 0;
   I := LineStart;
   while I < LineEnd do
@@ -158,6 +232,49 @@ begin
       Exit;
     Inc(Result, CharacterLength);
     PreviousWidth := Width;
+    Inc(I, CharacterLength);
+  end;
+end;
+
+procedure DrawVectArtTextColumn(Canvas: ISkCanvas; const Text: string;
+  X, Y, CellWidth, Ascent, CharacterAdvance: Single; Font: ISkFont;
+  Paint: ISkPaint);
+var
+  CharacterLength: Integer;
+  CharacterText: string;
+  CharacterWidth: Single;
+  I: Integer;
+  UseVerticalTypeface: Boolean;
+begin
+  if (Canvas = nil) or (Font = nil) or (Paint = nil) then
+    Exit;
+  I := 1;
+  UseVerticalTypeface := (Font.Typeface <> nil) and
+    Font.Typeface.FamilyName.StartsWith('@');
+  while I <= Length(Text) do
+  begin
+    CharacterLength := VectArtTextUnitLengthAt(Text, I);
+    CharacterText := Copy(Text, I, CharacterLength);
+    CharacterWidth := Font.MeasureText(CharacterText);
+    if UseVerticalTypeface then
+    begin
+      // @フォントの縦字形は横向きなので、縦方向のセル内へ90度戻して描く。
+      Canvas.Save;
+      try
+        Canvas.Translate(X + CellWidth * 0.5, Y + CellWidth * 0.5);
+        Canvas.Rotate(90);
+        Canvas.Translate(-(X + CellWidth * 0.5),
+          -(Y + CellWidth * 0.5));
+        Canvas.DrawSimpleText(CharacterText,
+          X + (CellWidth - CharacterWidth) * 0.5, Y + Ascent, Font, Paint);
+      finally
+        Canvas.Restore;
+      end;
+    end
+    else
+      Canvas.DrawSimpleText(CharacterText,
+        X + (CellWidth - CharacterWidth) * 0.5, Y + Ascent, Font, Paint);
+    Y := Y + CharacterAdvance;
     Inc(I, CharacterLength);
   end;
 end;

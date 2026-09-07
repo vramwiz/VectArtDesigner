@@ -19,9 +19,9 @@ uses
   VectArtDesignerTextGeometry in
     'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerBezierGeometry in
-    'Source\Editor\VectArtDesignerBezierGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerRoundedRectangleGeometry in
-    'Source\Editor\VectArtDesignerRoundedRectangleGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerRoundedRectangleGeometry.pas',
   VectArtDesignerDocumentJson in
     'Source\Persistence\VectArtDesignerDocumentJson.pas',
   VectArtDesignerRenderer in

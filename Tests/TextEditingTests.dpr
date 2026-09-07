@@ -26,7 +26,7 @@ uses
   VectArtDesignerTextGeometry in
     'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerTextEditing in
-    'Source\Editor\VectArtDesignerTextEditing.pas';
+    'Source\Editor\Input\VectArtDesignerTextEditing.pas';
 
 procedure Require(Condition: Boolean; const MessageText: string);
 begin
@@ -44,6 +44,7 @@ var
   NewData: TVectArtTextData;
   SpacedLayout: TVectArtTextLayout;
   Text: string;
+  VerticalLayout: TVectArtTextLayout;
 begin
   TTextRendererSkiaRuntime.Acquire(BundledSkiaRuntimeFileName);
   Document := TVectArtDocument.Create;
@@ -60,6 +61,18 @@ begin
     Require((SpacedLayout.Width > Layout.Width) and
       (SpacedLayout.LineHeight > Layout.LineHeight),
       'Letter or line spacing did not change intrinsic layout');
+    VerticalLayout := BuildVectArtTextLayout(Text, 'Yu Gothic UI', 24,
+      [], 0.25, 0.5, True);
+    Require(VerticalLayout.Vertical and
+      (VerticalLayout.Width > VerticalLayout.BaseLineHeight) and
+      (VerticalLayout.Height > VerticalLayout.BaseLineHeight),
+      'Vertical text layout differs');
+    Require(VectArtTextCaretIndexAtPoint(Text, 'Yu Gothic UI', 24,
+      VerticalLayout.Width, 10000, [], 0.25, 0.5, True) = 3,
+      'First vertical column trailing caret differs');
+    Require(VectArtTextCaretIndexAtPoint(Text, 'Yu Gothic UI', 24,
+      0, 0, [], 0.25, 0.5, True) = 5,
+      'Second vertical column leading caret differs');
     Require(VectArtTextCaretIndexAtPoint(Text, 'Yu Gothic UI', 24,
       0, 0) = 0, 'First-line leading caret differs');
     Require(VectArtTextCaretIndexAtPoint(Text, 'Yu Gothic UI', 24,

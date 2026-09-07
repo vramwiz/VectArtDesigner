@@ -20,9 +20,9 @@ uses
   VectArtDesignerTextGeometry in
     'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerBezierGeometry in
-    'Source\Editor\VectArtDesignerBezierGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerRoundedRectangleGeometry in
-    'Source\Editor\VectArtDesignerRoundedRectangleGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerRoundedRectangleGeometry.pas',
   VectArtDesignerDocumentJson in
     'Source\Persistence\VectArtDesignerDocumentJson.pas',
   VectArtDesignerRenderer in
@@ -350,6 +350,7 @@ begin
     SourceDocument.InsertPath(3, PathData);
     TextData := Default(TVectArtTextData);
     TextData.Bounds := RectF(180, 210, 480, 290);
+    TextData.FlipVertical := True;
     TextData.FontFamily := 'MS UI Gothic';
     TextData.FontSize := 22;
     TextData.FontStyle := [fsBold, fsItalic];
@@ -358,6 +359,7 @@ begin
     TextData.RotationDegrees := 0;
     TextData.Text := '日本語 abc' + sLineBreak + '2行目';
     TextData.TextColor := TColor($002030D0);
+    TextData.Vertical := True;
     TextData.Visible := True;
     SourceDocument.InsertText(4, TextData);
 
@@ -501,6 +503,8 @@ begin
     Require((TargetText.Text = TextData.Text) and
       (TargetText.FontFamily = TextData.FontFamily) and
       (TargetText.FontStyle = TextData.FontStyle) and
+      (TargetText.FlipVertical = TextData.FlipVertical) and
+      (TargetText.Vertical = TextData.Vertical) and
       (ColorToRGB(TargetText.TextColor) = ColorToRGB(TextData.TextColor)),
       'Text properties differ');
     Require(SameValue(TargetText.FontSize, TextData.FontSize) and

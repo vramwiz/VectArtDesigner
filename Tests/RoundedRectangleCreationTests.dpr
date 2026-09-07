@@ -22,13 +22,13 @@ uses
   VectArtDesignerEditHistory in
     'Source\Core\VectArtDesignerEditHistory.pas',
   VectArtDesignerBezierGeometry in
-    'Source\Editor\VectArtDesignerBezierGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerFreehandGeometry in
-    'Source\Editor\VectArtDesignerFreehandGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerFreehandGeometry.pas',
   VectArtDesignerRoundedRectangleGeometry in
-    'Source\Editor\VectArtDesignerRoundedRectangleGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerRoundedRectangleGeometry.pas',
   VectArtDesignerSelectionGeometry in
-    'Source\Editor\VectArtDesignerSelectionGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerSelectionGeometry.pas',
   VectArtDesignerCanvasInteraction in
     'Source\Editor\VectArtDesignerCanvasInteraction.pas',
   VectArtDesignerShapeCreation in

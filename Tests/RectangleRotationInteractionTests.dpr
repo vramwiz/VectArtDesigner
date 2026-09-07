@@ -14,13 +14,13 @@ uses
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerBezierGeometry in
-    'Source\Editor\VectArtDesignerBezierGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerEditCommands in
     'Source\Core\Commands\VectArtDesignerEditCommands.pas',
   VectArtDesignerEditHistory in
     'Source\Core\VectArtDesignerEditHistory.pas',
   VectArtDesignerSelectionGeometry in
-    'Source\Editor\VectArtDesignerSelectionGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerSelectionGeometry.pas',
   VectArtDesignerCanvasInteraction in
     'Source\Editor\VectArtDesignerCanvasInteraction.pas';
 

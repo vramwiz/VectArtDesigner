@@ -550,6 +550,9 @@ P1=左下 P2=右下 P3=右上 P4=左上
 
 ## 10.5 入力画像形式
 JPEG / PNG / GIF / BMP 等を配置して確認した結果、MIF内の画像ブロックはPNGシグネチャだった。
+VectArtDesignerもファイルドロップ時にWindows Imaging ComponentでPNGへ変換し、画像データ本体を
+Documentへ複製する。取込元フルパスは参照情報であり、描画時に元ファイルを開き直さない。
+MIFには取込元パスを格納せず、埋め込みPNGだけを保存して変換レポートへ通知する。
 
 ```text
 JPEG ┐
@@ -592,9 +595,13 @@ texture = テクスチャ系
 実装では通常`image`のPNG本体、alpha、hidden、配置4頂点を画像レイヤーへ取り込む。`logo`は
 `logo text unicode`をUTF-16LEとして読み、フォント名、高さ、weight、italic、underline、strikeout、
 色、alpha、hidden、配置4頂点を編集可能なTextへ復元する。新規Textも同じ`logo`メタデータと
-ラスタライズ済みPNGを生成する。outline、effect、writing modeは今後の分類対象とする。
+ラスタライズ済みPNGを生成する。`logo writing mode=0`を横書き、0以外を縦書きとして復元し、
+書出し時も同じフラグと縦組み済み表示PNGを生成する。outlineとeffectは今後の分類対象とする。
 字間率・行間率は編集モデルと表示PNGへ反映する。対応するMIFの編集可能属性は未確定のため、
 0以外を保存した場合はMIF変換レポートへ通知し、再読込時の率そのものは0へ戻る。
+文字の左右／上下反転も画像と同じく`image position1..4`の頂点順へ反映する。読込時は第1→第2辺と
+第1→第4辺の外積が負なら反転配置として復元する。左右反転は同じ見た目の「180度回転＋上下反転」へ
+正規化される場合があるが、表示と続く反転操作は維持される。
 1. `waDAimage alpha` とGUI透明度の正確な対応
 2. `waDAimage hidden` のON時の値
 3. 縦横比保持チェック状態そのものがMIF保存されるか

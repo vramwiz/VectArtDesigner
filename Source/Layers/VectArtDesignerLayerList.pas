@@ -6,7 +6,7 @@ interface
 uses
   System.Classes, Vcl.Controls, Vcl.Direct2D, VectArtDesignerDocument,
   VectArtDesignerEditCommands, VectArtDesignerEditHistory,
-  VectArtDesignerLayerRenderer;
+  VectArtDesignerLayerRenderer, VectArtDesignerObjectContextMenu;
 
 type
   TVectArtLayerListControl = class(TCustomControl)
@@ -14,12 +14,15 @@ type
     FDirect2DEnabled: Boolean;
     FDocument: TVectArtDocument;
     FEditHistory: TVectArtEditHistory;
+    FObjectPopup: TVectArtObjectContextMenu;
     FRenderer: TVectArtLayerRenderer;
     FSelectionAnchorIndex: Integer;
     procedure PaintDirect2D;
     procedure PaintGDI;
+    procedure ObjectMenuExecuted(Sender: TObject);
     procedure SetDocument(const Value: TVectArtDocument);
   protected
+    function PrepareObjectContextSelection(Index: Integer): Boolean;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer); override;
     procedure Paint; override;
@@ -48,6 +51,8 @@ begin
   TabStop := True;
   FDirect2DEnabled := TDirect2DCanvas.Supported;
   FRenderer := TVectArtLayerRenderer.Create;
+  FObjectPopup := TVectArtObjectContextMenu.Create(Self);
+  FObjectPopup.OnExecuted := ObjectMenuExecuted;
   FSelectionAnchorIndex := -1;
 end;
 
@@ -64,14 +69,25 @@ var
   ItemRect: TRect;
   Layer: TVectArtLayer;
   NewValue: Boolean;
+  ScreenPoint: TPoint;
 begin
-  if (Button = mbLeft) and (FDocument <> nil) then
+  if (Button in [mbLeft, mbRight]) and (FDocument <> nil) then
   begin
     if CanFocus then
       SetFocus;
     Index := FRenderer.LayerIndexAt(ClientRect, Y);
     if Index >= 0 then
     begin
+      if Button = mbRight then
+      begin
+        if not PrepareObjectContextSelection(Index) then
+          Exit;
+        FObjectPopup.Document := FDocument;
+        FObjectPopup.EditHistory := FEditHistory;
+        ScreenPoint := ClientToScreen(Point(X, Y));
+        FObjectPopup.Popup(ScreenPoint.X, ScreenPoint.Y);
+        Exit;
+      end;
       ItemRect := FRenderer.LayerItemRect(ClientRect, Index);
       Layer := FDocument[Index];
       if PtInRect(FRenderer.VisibilityButtonRect(ItemRect), Point(X, Y)) then
@@ -116,6 +132,24 @@ begin
     end;
   end;
   inherited MouseDown(Button, Shift, X, Y);
+end;
+
+function TVectArtLayerListControl.PrepareObjectContextSelection(
+  Index: Integer): Boolean;
+begin
+  Result := (FDocument <> nil) and (Index > 0) and
+    (Index < FDocument.LayerCount);
+  if not Result then
+    Exit;
+  // 選択済み行では複数選択を保ち、未選択行だけを右クリック対象へ切り替える。
+  if not FDocument.IsLayerSelected(Index) then
+    FDocument.SelectedIndex := Index;
+  FSelectionAnchorIndex := Index;
+end;
+
+procedure TVectArtLayerListControl.ObjectMenuExecuted(Sender: TObject);
+begin
+  Invalidate;
 end;
 
 procedure TVectArtLayerListControl.Paint;

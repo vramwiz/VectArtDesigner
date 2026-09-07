@@ -1,4 +1,5 @@
 // 選択枠、8個のリサイズマーカー、四隅外側の回転マーカーを計算する。
+// Document座標は扱わず、描画と当たり判定で共有する画面座標だけを返す。
 unit VectArtDesignerSelectionGeometry;
 
 interface

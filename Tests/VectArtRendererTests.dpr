@@ -16,7 +16,7 @@ uses
   VectArtDesignerTextGeometry in
     'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerBezierGeometry in
-    'Source\Editor\VectArtDesignerBezierGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerRenderer in
     'Source\Rendering\VectArtDesignerRenderer.pas';
 
@@ -307,6 +307,19 @@ begin
       'Scaled text was not rendered');
     Require(WideTextBounds.Width > TextBounds.Width * 1.7,
       'Text glyphs did not follow horizontal bounds scaling');
+    TextData.Text := '縦書き文字列';
+    TextData.Vertical := True;
+    TextLayout := BuildVectArtTextLayout(TextData.Text, TextData.FontFamily,
+      TextData.FontSize, TextData.FontStyle, TextData.LetterSpacingRatio,
+      TextData.LineSpacingRatio, True);
+    TextData.Bounds := RectF(20, 20, 20 + TextLayout.Width,
+      20 + TextLayout.Height);
+    Document.SetTextData(4, TextData);
+    RenderVectArtDocument(Document, Rendered, 400, 200);
+    Require(AlphaBounds(Rendered, TextBounds),
+      'Vertical text was not rendered');
+    Require(TextBounds.Height > TextBounds.Width * 2,
+      'Vertical text glyphs were not arranged from top to bottom');
     Writeln('VectArt shared renderer: PASS');
   finally
     Destination.Free;

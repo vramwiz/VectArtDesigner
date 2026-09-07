@@ -1,4 +1,5 @@
 // Receives committed Windows/IME text while the canvas owns the editable text buffer.
+// IMEの未確定文字列はDocumentへ直接書かず、確定通知だけを編集処理へ渡す。
 unit VectArtDesignerTextEditing;
 
 interface

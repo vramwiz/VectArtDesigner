@@ -1,4 +1,5 @@
 // 選択図形のキーボード微移動とUndo履歴への登録を担当する。
+// ロックを含む選択は変更せず、複数移動も1件の履歴へまとめる。
 unit VectArtDesignerKeyboardMovement;
 
 interface

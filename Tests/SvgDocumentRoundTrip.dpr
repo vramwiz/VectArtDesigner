@@ -17,7 +17,7 @@ uses
     'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerBezierGeometry in
-    'Source\Editor\VectArtDesignerBezierGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerSvgDocument in
     'Source\Persistence\Svg\VectArtDesignerSvgDocument.pas';
 
@@ -163,10 +163,12 @@ begin
     ImageData.Points[1] := PointF(580, 280);
     ImageData.Points[2] := PointF(565, 370);
     ImageData.Points[3] := PointF(685, 390);
+    ImageData.SourceFileName := 'D:\images\source image.png';
     ImageData.SourceKind := visLogo;
     ImageData.Visible := False;
     SourceDocument.InsertImage(5, ImageData);
     TextData.Bounds := RectF(120, 340, 500, 430);
+    TextData.FlipVertical := True;
     TextData.FontFamily := 'Yu Gothic UI';
     TextData.FontSize := 28;
     TextData.FontStyle := [fsBold, fsItalic];
@@ -178,6 +180,7 @@ begin
     TextData.RotationDegrees := 15;
     TextData.Text := '一行目' + sLineBreak + 'second line';
     TextData.TextColor := TColor($00123456);
+    TextData.Vertical := True;
     TextData.Visible := True;
     SourceDocument.InsertText(6, TextData);
     SourceDocument.SelectedIndex := 6;
@@ -278,7 +281,8 @@ begin
       'Path style differs');
     Image := TVectArtImageLayer(TargetDocument[5]);
     Require((Image.Name = ImageData.Name) and Image.Locked and
-      not Image.Visible and (Image.SourceKind = visLogo),
+      not Image.Visible and (Image.SourceKind = visLogo) and
+      (Image.SourceFileName = ImageData.SourceFileName),
       'Image properties differ');
     RequireSameSingle(ImageData.Opacity, Image.Opacity,
       'Image opacity differs');
@@ -299,6 +303,9 @@ begin
       (Text.FontStyle = TextData.FontStyle) and
       SameValue(Text.LetterSpacingRatio, TextData.LetterSpacingRatio) and
       SameValue(Text.LineSpacingRatio, TextData.LineSpacingRatio) and
+      (Text.FlipHorizontal = TextData.FlipHorizontal) and
+      (Text.FlipVertical = TextData.FlipVertical) and
+      (Text.Vertical = TextData.Vertical) and
       (Text.TextColor = TextData.TextColor) and Text.Visible and
       not Text.Locked, 'Text properties differ');
     RequireSameSingle(TextData.FontSize, Text.FontSize,

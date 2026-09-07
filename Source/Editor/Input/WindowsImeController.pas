@@ -1,4 +1,5 @@
 // Preserves the Windows IME open state across canvas text-edit sessions.
+// ユーザーのIME状態を編集終了後に戻し、アプリ操作で恒久的に変更しない。
 unit WindowsImeController;
 
 interface

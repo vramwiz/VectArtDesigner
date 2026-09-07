@@ -12,11 +12,25 @@ uses
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerBezierGeometry in
-    'Source\Editor\VectArtDesignerBezierGeometry.pas',
+    'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
+  VectArtDesignerSelectionGeometry in
+    'Source\Editor\Geometry\VectArtDesignerSelectionGeometry.pas',
+  VectArtDesignerCanvasInteraction in
+    'Source\Editor\VectArtDesignerCanvasInteraction.pas',
+  VectArtDesignerSelectionOverlay in
+    'Source\Editor\Rendering\VectArtDesignerSelectionOverlay.pas',
   VectArtDesignerEditCommands in
     'Source\Core\Commands\VectArtDesignerEditCommands.pas',
   VectArtDesignerEditHistory in
     'Source\Core\VectArtDesignerEditHistory.pas',
+  VectArtDesignerLayerFlipOperations in
+    'Source\Core\Commands\VectArtDesignerLayerFlipOperations.pas',
+  VectArtDesignerLayerRotationOperations in
+    'Source\Core\Commands\VectArtDesignerLayerRotationOperations.pas',
+  VectArtDesignerLayerVisibilityOperations in
+    'Source\Core\Commands\VectArtDesignerLayerVisibilityOperations.pas',
+  VectArtDesignerObjectContextMenu in
+    'Source\Editor\Menus\VectArtDesignerObjectContextMenu.pas',
   VectArtDesignerLayerRenderer in
     'Source\Layers\VectArtDesignerLayerRenderer.pas',
   VectArtDesignerLayerList in
@@ -26,6 +40,7 @@ type
   TTestLayerList = class(TVectArtLayerListControl)
   public
     procedure ClickLayer(Index: Integer; Shift: TShiftState);
+    function PrepareRightClick(Index: Integer): Boolean;
   end;
 
 procedure TTestLayerList.ClickLayer(Index: Integer; Shift: TShiftState);
@@ -39,6 +54,11 @@ begin
   ItemBottom := ClientHeight - LAYER_LIST_PADDING -
     (Index - 1) * (LAYER_ROW_HEIGHT + LAYER_GAP);
   MouseDown(mbLeft, Shift, 150, ItemBottom - LAYER_ROW_HEIGHT div 2);
+end;
+
+function TTestLayerList.PrepareRightClick(Index: Integer): Boolean;
+begin
+  Result := PrepareObjectContextSelection(Index);
 end;
 
 procedure Require(Condition: Boolean; const MessageText: string);
@@ -65,10 +85,16 @@ end;
 var
   Document: TVectArtDocument;
   Form: TForm;
+  Geometry: TVectArtSelectionGeometry;
+  HandlePoint: TPoint;
+  Interaction: TVectArtCanvasInteraction;
   LayerList: TTestLayerList;
+  ScreenQuad: TVectArtScreenQuad;
+  SelectionOverlay: TVectArtSelectionOverlay;
 begin
   Document := TVectArtDocument.Create;
   Form := TForm.CreateNew(nil);
+  Interaction := TVectArtCanvasInteraction.Create;
   LayerList := TTestLayerList.Create(Form);
   try
     Document.InsertRectangle(1, RectangleData('One'));
@@ -96,8 +122,41 @@ begin
       Document.IsLayerSelected(1) and Document.IsLayerSelected(2) and
       Document.IsLayerSelected(3),
       'Ctrl+Shift-click did not add the anchored range');
+    Require(LayerList.PrepareRightClick(2),
+      'Selected layer rejected the context menu');
+    Require(Document.SelectionCount = 3,
+      'Right-click preparation discarded the existing multi-selection');
+    Require(LayerList.PrepareRightClick(1),
+      'Selected layer did not retain context-menu selection');
+    Document.SetSelectedLayers([1, 2]);
+    Require(LayerList.PrepareRightClick(3),
+      'Unselected layer rejected the context menu');
+    Require((Document.SelectionCount = 1) and
+      Document.IsLayerSelected(3),
+      'Right-click preparation did not select the clicked layer');
+    Document.SetLayerVisible(3, False);
+    Interaction.Configure(Document, Rect(100, 100, 300, 300), 1.0);
+    ScreenQuad[0] := Point(100, 100);
+    ScreenQuad[1] := Point(120, 100);
+    ScreenQuad[2] := Point(120, 120);
+    ScreenQuad[3] := Point(100, 120);
+    Geometry := BuildRotatedSelectionGeometry(ScreenQuad,
+      SelectionFrameOffset(0, 1.0));
+    HandlePoint := Point(
+      (Geometry.Handles[vshTopLeft].Left +
+       Geometry.Handles[vshTopLeft].Right) div 2,
+      (Geometry.Handles[vshTopLeft].Top +
+       Geometry.Handles[vshTopLeft].Bottom) div 2);
+    Require(Interaction.CursorAt(HandlePoint.X, HandlePoint.Y) =
+      SelectionHandleCursor(vshTopLeft),
+      'Hidden selected layer did not retain its selection frame');
+    SelectionOverlay := BuildVectArtSelectionOverlay(Document, Interaction,
+      Rect(100, 100, 300, 300), 1.0);
+    Require(SelectionOverlay.Visible,
+      'Hidden selected layer did not produce a canvas overlay');
     Writeln('Layer selection interaction tests: PASS');
   finally
+    Interaction.Free;
     Form.Free;
     Document.Free;
   end;

@@ -221,12 +221,15 @@ type
   private
     FPngData: TBytes;
     FPoints: TVectArtImagePoints;
+    FSourceFileName: string;
     FSourceKind: TVectArtImageSourceKind;
   public
     constructor Create(const AName: string; const APngData: TBytes;
-      const APoints: TVectArtImagePoints; ASourceKind: TVectArtImageSourceKind);
+      const APoints: TVectArtImagePoints; ASourceKind: TVectArtImageSourceKind;
+      const ASourceFileName: string = '');
     property PngData: TBytes read FPngData;
     property Points: TVectArtImagePoints read FPoints write FPoints;
+    property SourceFileName: string read FSourceFileName;
     property SourceKind: TVectArtImageSourceKind read FSourceKind;
   end;
 
@@ -236,6 +239,7 @@ type
     Opacity: Single;                     // 0.0..1.0のレイヤー不透明度。
     PngData: TBytes;                     // 埋め込みPNGの全バイト。
     Points: TVectArtImagePoints;         // 左上から時計回りの配置4頂点。
+    SourceFileName: string;              // 取込元のフルパス。描画時は参照しない。
     SourceKind: TVectArtImageSourceKind; // MIF由来のimage／logo区分。
     Visible: Boolean;                    // 描画対象に含める状態。
   end;
@@ -243,6 +247,8 @@ type
   TVectArtTextLayer = class(TVectArtLayer)
   private
     FBounds: TRectF;
+    FFlipHorizontal: Boolean;
+    FFlipVertical: Boolean;
     FFontFamily: string;
     FFontSize: Single;
     FFontStyle: TFontStyles;
@@ -251,11 +257,15 @@ type
     FRotationDegrees: Single;
     FText: string;
     FTextColor: TColor;
+    FVertical: Boolean;
   public
     constructor Create(const AName: string; const ABounds: TRectF;
       const AText, AFontFamily: string; AFontSize: Single;
       ATextColor: TColor);
     property Bounds: TRectF read FBounds write FBounds;
+    property FlipHorizontal: Boolean read FFlipHorizontal
+      write FFlipHorizontal;
+    property FlipVertical: Boolean read FFlipVertical write FFlipVertical;
     property FontFamily: string read FFontFamily write FFontFamily;
     property FontSize: Single read FFontSize write FFontSize;
     property FontStyle: TFontStyles read FFontStyle write FFontStyle;
@@ -267,10 +277,13 @@ type
       write FRotationDegrees;
     property Text: string read FText write FText;
     property TextColor: TColor read FTextColor write FTextColor;
+    property Vertical: Boolean read FVertical write FVertical;
   end;
 
   TVectArtTextData = record
     Bounds: TRectF;             // Unrotated text layout bounds.
+    FlipHorizontal: Boolean;    // Mirror glyphs around the local vertical axis.
+    FlipVertical: Boolean;      // Mirror glyphs around the local horizontal axis.
     FontFamily: string;
     FontSize: Single;
     FontStyle: TFontStyles;
@@ -282,6 +295,7 @@ type
     RotationDegrees: Single;
     Text: string;               // Explicit line breaks are stored in-band.
     TextColor: TColor;
+    Vertical: Boolean;          // Trueなら改行単位の列を右から左へ縦組みする。
     Visible: Boolean;
   end;
 
@@ -514,11 +528,12 @@ end;
 
 constructor TVectArtImageLayer.Create(const AName: string;
   const APngData: TBytes; const APoints: TVectArtImagePoints;
-  ASourceKind: TVectArtImageSourceKind);
+  ASourceKind: TVectArtImageSourceKind; const ASourceFileName: string);
 begin
   inherited Create(vlkImage, AName);
   FPngData := Copy(APngData);
   FPoints := APoints;
+  FSourceFileName := ASourceFileName;
   FSourceKind := ASourceKind;
 end;
 
@@ -530,6 +545,8 @@ constructor TVectArtTextLayer.Create(const AName: string;
 begin
   inherited Create(vlkText, AName);
   FBounds := ABounds;
+  FFlipHorizontal := False;
+  FFlipVertical := False;
   FText := AText;
   FFontFamily := AFontFamily;
   FFontSize := Max(AFontSize, 1.0);
@@ -538,6 +555,7 @@ begin
   FLineSpacingRatio := 0.0;
   FTextColor := ATextColor;
   FRotationDegrees := 0.0;
+  FVertical := False;
 end;
 
 function CaptureVectArtTextData(Layer: TVectArtTextLayer): TVectArtTextData;
@@ -546,6 +564,8 @@ begin
   if Layer = nil then
     Exit;
   Result.Bounds := Layer.Bounds;
+  Result.FlipHorizontal := Layer.FlipHorizontal;
+  Result.FlipVertical := Layer.FlipVertical;
   Result.FontFamily := Layer.FontFamily;
   Result.FontSize := Layer.FontSize;
   Result.FontStyle := Layer.FontStyle;
@@ -557,6 +577,7 @@ begin
   Result.RotationDegrees := Layer.RotationDegrees;
   Result.Text := Layer.Text;
   Result.TextColor := Layer.TextColor;
+  Result.Vertical := Layer.Vertical;
   Result.Visible := Layer.Visible;
 end;
 
@@ -748,7 +769,7 @@ var
 begin
   Result := EnsureRange(Index, 1, FLayers.Count);
   ImageLayer := TVectArtImageLayer.Create(Data.Name, Data.PngData,
-    Data.Points, Data.SourceKind);
+    Data.Points, Data.SourceKind, Data.SourceFileName);
   ImageLayer.Locked := Data.Locked;
   ImageLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
   ImageLayer.Visible := Data.Visible;
@@ -770,12 +791,15 @@ begin
   Result := EnsureRange(Index, 1, FLayers.Count);
   TextLayer := TVectArtTextLayer.Create(Data.Name, Data.Bounds, Data.Text,
     Data.FontFamily, Data.FontSize, Data.TextColor);
+  TextLayer.FlipHorizontal := Data.FlipHorizontal;
+  TextLayer.FlipVertical := Data.FlipVertical;
   TextLayer.FontStyle := Data.FontStyle;
   TextLayer.LetterSpacingRatio := Data.LetterSpacingRatio;
   TextLayer.LineSpacingRatio := Data.LineSpacingRatio;
   TextLayer.Locked := Data.Locked;
   TextLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
   TextLayer.RotationDegrees := NormalizeAngleDegrees(Data.RotationDegrees);
+  TextLayer.Vertical := Data.Vertical;
   TextLayer.Visible := Data.Visible;
   FLayers.Insert(Result, TextLayer);
   for I := 0 to FSelectedLayers.Count - 1 do
@@ -965,6 +989,7 @@ begin
   Data.Opacity := ImageLayer.Opacity;
   Data.PngData := Copy(ImageLayer.PngData);
   Data.Points := ImageLayer.Points;
+  Data.SourceFileName := ImageLayer.SourceFileName;
   Data.SourceKind := ImageLayer.SourceKind;
   Data.Visible := ImageLayer.Visible;
   FLayers.Delete(Index);
@@ -1022,6 +1047,8 @@ begin
     Exit;
   Layer := TVectArtTextLayer(FLayers[Index]);
   Layer.Bounds := Data.Bounds;
+  Layer.FlipHorizontal := Data.FlipHorizontal;
+  Layer.FlipVertical := Data.FlipVertical;
   Layer.FontFamily := Data.FontFamily;
   Layer.FontSize := Max(Data.FontSize, 1.0);
   Layer.FontStyle := Data.FontStyle;
@@ -1033,6 +1060,7 @@ begin
   Layer.RotationDegrees := NormalizeAngleDegrees(Data.RotationDegrees);
   Layer.Text := Data.Text;
   Layer.TextColor := Data.TextColor;
+  Layer.Vertical := Data.Vertical;
   Layer.Visible := Data.Visible;
   Changed;
 end;

@@ -6,10 +6,11 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Types, Vcl.Controls, Vcl.Graphics,
-  Vcl.StdCtrls,
+  Vcl.StdCtrls, Winapi.Messages,
   VectArtDesignerCanvasInteraction,
   VectArtDesignerDocument, VectArtDesignerEditHistory,
   VectArtDesignerEditorState, VectArtDesignerSelectionGeometry,
+  VectArtDesignerObjectContextMenu,
   VectArtDesignerShapeCreation, VectArtDesignerRenderer,
   VectArtDesignerTextEditing, WindowsImeController;
 
@@ -29,6 +30,7 @@ type
     FShapeCreation: TVectArtShapeCreation;
     FPanning: Boolean;
     FPanOffset: TPointF;
+    FPanMoved: Boolean;
     FPanStartMouse: TPoint;
     FPanStartOffset: TPointF;
     FViewZoom: Single;
@@ -45,6 +47,9 @@ type
     FTextLayerIndex: Integer;
     FTextNewLayer: Boolean;
     FTextOriginalData: TVectArtTextData;
+    FObjectPopup: TVectArtObjectContextMenu;
+    procedure ObjectMenuExecuted(Sender: TObject);
+    procedure ShowObjectContextMenu(X, Y: Integer);
     procedure BeginExistingTextEdit(Index, X, Y: Integer);
     procedure BeginNewTextEdit(X, Y: Integer);
     procedure FinishTextEdit(Cancel: Boolean;
@@ -58,6 +63,7 @@ type
       Shift: TShiftState);
     procedure UpdateTextEditorBounds;
     procedure UpdateTextLayerFromBuffer;
+    procedure WMDropFiles(var Message: TWMDropFiles); message WM_DROPFILES;
     procedure CalculateCanvasBounds;
     procedure EndPan;
     procedure PaintDirect2D;
@@ -69,6 +75,9 @@ type
     procedure UpdateRenderedDocument;
     procedure SetEditHistory(const Value: TVectArtEditHistory);
   protected
+    procedure CreateWnd; override;
+    procedure DestroyWnd; override;
+    function PrepareObjectContextSelection(X, Y: Integer): Boolean;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -81,6 +90,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    function ImportImageFiles(const FileNames: TArray<string>;
+      const DropClientPoint: TPoint; out ErrorMessage: string): Integer;
     // 外部ホストのRGBA8画像をDocumentに含めない参照背景として設定する。
     procedure SetReferenceBackgroundRgba(const Pixels: TBytes;
       Width, Height: Integer);
@@ -100,10 +111,13 @@ const
 implementation
 
 uses
-  System.Math, System.Skia, Winapi.D2D1, Winapi.Windows, Vcl.Direct2D,
-  Vcl.Forms,
+  System.Generics.Collections, System.Math, System.Skia, System.UITypes,
+  Winapi.D2D1,
+  Winapi.ShellAPI, Winapi.Windows, Vcl.Dialogs, Vcl.Direct2D, Vcl.Forms,
   VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
-  VectArtDesignerEditCommands, VectArtDesignerLayerStructureCommands,
+  VectArtDesignerEditCommands, VectArtDesignerImageFileImport,
+  VectArtDesignerLayerBatchCommands,
+  VectArtDesignerLayerStructureCommands, VectArtDesignerSelectionOverlay,
   VectArtDesignerTextGeometry;
 
 const
@@ -124,6 +138,7 @@ const
   DEFAULT_TEXT_FONT_FAMILY = 'Yu Gothic UI';
   DEFAULT_TEXT_FONT_SIZE = 32.0;
   TEXT_INPUT_EDIT_WIDTH = 4;
+  RIGHT_PAN_THRESHOLD = 4;
 
 procedure DrawPremultipliedBitmap(Target: TCanvas; const Bounds: TRect;
   Bitmap: Vcl.Graphics.TBitmap);
@@ -402,6 +417,8 @@ begin
   FTextEditor.OnComposition := TextEditorComposition;
   FTextEditor.OnExit := TextEditorExit;
   FTextEditor.OnKeyDown := TextEditorKeyDown;
+  FObjectPopup := TVectArtObjectContextMenu.Create(Self);
+  FObjectPopup.OnExecuted := ObjectMenuExecuted;
   FPanOffset := TPointF.Zero;
   FViewZoom := 1.0;
   CalculateCanvasBounds;
@@ -416,6 +433,123 @@ begin
   FShapeCreation.Free;
   FInteraction.Free;
   inherited Destroy;
+end;
+
+procedure TVectArtCanvasControl.CreateWnd;
+begin
+  inherited CreateWnd;
+  DragAcceptFiles(Handle, True);
+end;
+
+procedure TVectArtCanvasControl.DestroyWnd;
+begin
+  DragAcceptFiles(Handle, False);
+  inherited DestroyWnd;
+end;
+
+function TVectArtCanvasControl.ImportImageFiles(
+  const FileNames: TArray<string>; const DropClientPoint: TPoint;
+  out ErrorMessage: string): Integer;
+const
+  MULTIPLE_IMAGE_OFFSET = 16.0;
+var
+  AfterSelection: TArray<Integer>;
+  BeforeSelection: TArray<Integer>;
+  Data: TVectArtImageData;
+  DataList: TList<TVectArtImageData>;
+  DropPoint: TPointF;
+  ErrorList: TStringList;
+  FileName: string;
+  ImportError: string;
+  Index: Integer;
+  NewIndices: TList<Integer>;
+  StartIndex: Integer;
+begin
+  Result := 0;
+  ErrorMessage := '';
+  if (FDocument = nil) or (FDocument.CanvasLayer = nil) or
+    (Length(FileNames) = 0) then
+    Exit;
+  if FTextEditing then
+    FinishTextEdit(False);
+  CalculateCanvasBounds;
+  if FZoom <= 0 then
+    Exit;
+  BeforeSelection := FDocument.GetSelectedLayerIndices;
+  DataList := TList<TVectArtImageData>.Create;
+  ErrorList := TStringList.Create;
+  NewIndices := TList<Integer>.Create;
+  try
+    for FileName in FileNames do
+    begin
+      DropPoint := PointF(
+        (DropClientPoint.X - FCanvasBounds.Left) / FZoom +
+          DataList.Count * MULTIPLE_IMAGE_OFFSET,
+        (DropClientPoint.Y - FCanvasBounds.Top) / FZoom +
+          DataList.Count * MULTIPLE_IMAGE_OFFSET);
+      if TryCreateVectArtImageFromFile(FileName, DropPoint,
+        FDocument.CanvasLayer.Width, FDocument.CanvasLayer.Height,
+        Data, ImportError) then
+        DataList.Add(Data)
+      else
+        ErrorList.Add(ExtractFileName(FileName) + ': ' + ImportError);
+    end;
+    if DataList.Count = 0 then
+    begin
+      ErrorMessage := ErrorList.Text.Trim;
+      Exit;
+    end;
+    StartIndex := FDocument.LayerCount;
+    for Data in DataList do
+    begin
+      Index := FDocument.InsertImage(FDocument.LayerCount, Data);
+      NewIndices.Add(Index);
+    end;
+    AfterSelection := NewIndices.ToArray;
+    FDocument.SetSelectedLayers(AfterSelection);
+    if EditHistory <> nil then
+      EditHistory.AddApplied(TVectArtInsertImagesCommand.Create(FDocument,
+        StartIndex, DataList.ToArray, BeforeSelection, AfterSelection));
+    Result := DataList.Count;
+    ErrorMessage := ErrorList.Text.Trim;
+    Invalidate;
+  finally
+    NewIndices.Free;
+    ErrorList.Free;
+    DataList.Free;
+  end;
+end;
+
+procedure TVectArtCanvasControl.WMDropFiles(var Message: TWMDropFiles);
+var
+  Buffer: TArray<Char>;
+  DropPoint: TPoint;
+  ErrorMessage: string;
+  FileCount: Cardinal;
+  FileIndex: Cardinal;
+  FileNameLength: Cardinal;
+  FileNames: TArray<string>;
+begin
+  try
+    FileCount := DragQueryFile(Message.Drop, Cardinal(-1), nil, 0);
+    SetLength(FileNames, FileCount);
+    if FileCount > 0 then
+      for FileIndex := 0 to FileCount - 1 do
+      begin
+        FileNameLength := DragQueryFile(Message.Drop, FileIndex, nil, 0);
+        SetLength(Buffer, FileNameLength + 1);
+        DragQueryFile(Message.Drop, FileIndex, @Buffer[0], Length(Buffer));
+        FileNames[FileIndex] := PChar(@Buffer[0]);
+      end;
+    DragQueryPoint(Message.Drop, DropPoint);
+  finally
+    DragFinish(Message.Drop);
+  end;
+  ImportImageFiles(FileNames, DropPoint, ErrorMessage);
+  if ErrorMessage <> '' then
+    MessageDlg('読み込めなかった画像があります。' + sLineBreak +
+      ErrorMessage, mtWarning, [mbOK], 0);
+  Message.Result := 0;
 end;
 
 procedure TVectArtCanvasControl.BeginNewTextEdit(X, Y: Integer);
@@ -485,16 +619,21 @@ begin
     (Y - FCanvasBounds.Top) / FZoom);
   LogicalPoint := RotatePointAround(LogicalPoint, Layer.Bounds.CenterPoint,
     -Layer.RotationDegrees);
+  if Layer.FlipHorizontal then
+    LogicalPoint.X := 2 * Layer.Bounds.CenterPoint.X - LogicalPoint.X;
+  if Layer.FlipVertical then
+    LogicalPoint.Y := 2 * Layer.Bounds.CenterPoint.Y - LogicalPoint.Y;
   Layout := BuildVectArtTextLayout(Layer.Text, Layer.FontFamily,
     Layer.FontSize, Layer.FontStyle, Layer.LetterSpacingRatio,
-    Layer.LineSpacingRatio);
+    Layer.LineSpacingRatio, Layer.Vertical);
   TextScaleX := Layer.Bounds.Width / Max(Layout.Width, 1.0);
   TextScaleY := Layer.Bounds.Height / Max(Layout.Height, 1.0);
   FTextCaretIndex := VectArtTextCaretIndexAtPoint(FTextBuffer,
     Layer.FontFamily, Layer.FontSize,
     (LogicalPoint.X - Layer.Bounds.Left) / Max(TextScaleX, 0.000001),
     (LogicalPoint.Y - Layer.Bounds.Top) / Max(TextScaleY, 0.000001),
-    Layer.FontStyle, Layer.LetterSpacingRatio, Layer.LineSpacingRatio);
+    Layer.FontStyle, Layer.LetterSpacingRatio, Layer.LineSpacingRatio,
+    Layer.Vertical);
   FTextCompositionActive := False;
   FTextCompositionText := '';
   FTextNewLayer := False;
@@ -713,7 +852,7 @@ begin
     FDocument[FTextLayerIndex]));
   OldLayout := BuildVectArtTextLayout(Data.Text, Data.FontFamily,
     Data.FontSize, Data.FontStyle, Data.LetterSpacingRatio,
-    Data.LineSpacingRatio);
+    Data.LineSpacingRatio, Data.Vertical);
   if FTextNewLayer or (Data.Text = '') then
   begin
     TextScaleX := 1.0;
@@ -727,7 +866,7 @@ begin
   Data.Text := FTextBuffer;
   NewLayout := BuildVectArtTextLayout(Data.Text, Data.FontFamily,
     Data.FontSize, Data.FontStyle, Data.LetterSpacingRatio,
-    Data.LineSpacingRatio);
+    Data.LineSpacingRatio, Data.Vertical);
   Data.Bounds.Right := Data.Bounds.Left +
     Max(NewLayout.Width * TextScaleX, 1.0);
   Data.Bounds.Bottom := Data.Bounds.Top +
@@ -761,10 +900,10 @@ begin
   Prefix := Copy(FTextBuffer, 1, FTextCaretIndex);
   Layout := BuildVectArtTextLayout(Prefix, Layer.FontFamily,
     Layer.FontSize, Layer.FontStyle, Layer.LetterSpacingRatio,
-    Layer.LineSpacingRatio);
+    Layer.LineSpacingRatio, Layer.Vertical);
   TextLayout := BuildVectArtTextLayout(Layer.Text, Layer.FontFamily,
     Layer.FontSize, Layer.FontStyle, Layer.LetterSpacingRatio,
-    Layer.LineSpacingRatio);
+    Layer.LineSpacingRatio, Layer.Vertical);
   TextScaleX := Layer.Bounds.Width / Max(TextLayout.Width, 1.0);
   TextScaleY := Layer.Bounds.Height / Max(TextLayout.Height, 1.0);
   LastBreak := LastDelimiter(#13#10, Prefix);
@@ -773,11 +912,22 @@ begin
   else
     CurrentLine := Prefix;
   Font := CreateVectArtTextFont(Layer.FontFamily, Layer.FontSize,
-    Layer.FontStyle);
-  CaretPoint := PointF(Layer.Bounds.Left + MeasureVectArtText(CurrentLine,
-    Font, Layer.FontSize * Layer.LetterSpacingRatio) * TextScaleX,
-    Layer.Bounds.Top + (Length(Layout.Lines) - 1) * Layout.LineHeight *
-      TextScaleY);
+    Layer.FontStyle, Layer.Vertical);
+  if Layer.Vertical then
+    CaretPoint := PointF(Layer.Bounds.Left +
+      (TextLayout.Width - TextLayout.BaseLineHeight -
+       (Length(Layout.Lines) - 1) * TextLayout.LineHeight) * TextScaleX,
+      Layer.Bounds.Top + Min(VectArtTextUnitCount(CurrentLine) *
+        TextLayout.CharacterAdvance, TextLayout.Height) * TextScaleY)
+  else
+    CaretPoint := PointF(Layer.Bounds.Left + MeasureVectArtText(CurrentLine,
+      Font, Layer.FontSize * Layer.LetterSpacingRatio) * TextScaleX,
+      Layer.Bounds.Top + (Length(Layout.Lines) - 1) * Layout.LineHeight *
+        TextScaleY);
+  if Layer.FlipHorizontal then
+    CaretPoint.X := 2 * Layer.Bounds.CenterPoint.X - CaretPoint.X;
+  if Layer.FlipVertical then
+    CaretPoint.Y := 2 * Layer.Bounds.CenterPoint.Y - CaretPoint.Y;
   CaretPoint := RotatePointAround(CaretPoint, Layer.Bounds.CenterPoint,
     Layer.RotationDegrees);
   X := FCanvasBounds.Left + Round(CaretPoint.X * FZoom);
@@ -787,14 +937,18 @@ begin
     FZoom), 1);
   FTextEditor.Font.Style := Layer.FontStyle;
   FTextEditor.Font.Color := Layer.TextColor;
-  EditWidth := TEXT_INPUT_EDIT_WIDTH;
+  if Layer.Vertical then
+    EditWidth := Max(Round(TextLayout.BaseLineHeight * TextScaleX *
+      FZoom), TEXT_INPUT_EDIT_WIDTH)
+  else
+    EditWidth := TEXT_INPUT_EDIT_WIDTH;
   if FTextCompositionText <> '' then
     EditWidth := Max(EditWidth,
       Ceil(MeasureVectArtText(FTextCompositionText, Font,
         Layer.FontSize * Layer.LetterSpacingRatio) * TextScaleX *
         FZoom) + 8);
   FTextEditor.SetBounds(X, Y, EditWidth,
-    Max(Round(Layout.LineHeight * TextScaleY * FZoom), 1));
+    Max(Round(TextLayout.BaseLineHeight * TextScaleY * FZoom), 1));
 end;
 
 function TVectArtCanvasControl.HasReferenceBackground: Boolean;
@@ -899,6 +1053,38 @@ begin
   Cursor := crDefault;
 end;
 
+procedure TVectArtCanvasControl.ObjectMenuExecuted(Sender: TObject);
+begin
+  Invalidate;
+end;
+
+procedure TVectArtCanvasControl.ShowObjectContextMenu(X, Y: Integer);
+var
+  ScreenPoint: TPoint;
+begin
+  if not PrepareObjectContextSelection(X, Y) then
+    Exit;
+  FObjectPopup.Document := FDocument;
+  FObjectPopup.EditHistory := EditHistory;
+  ScreenPoint := ClientToScreen(Point(X, Y));
+  FObjectPopup.Popup(ScreenPoint.X, ScreenPoint.Y);
+end;
+
+function TVectArtCanvasControl.PrepareObjectContextSelection(
+  X, Y: Integer): Boolean;
+var
+  LayerIndex: Integer;
+begin
+  Result := False;
+  if (FDocument = nil) or (FEditorState = nil) then
+    Exit;
+  FInteraction.Configure(FDocument, FCanvasBounds, FZoom);
+  LayerIndex := FInteraction.LayerAt(X, Y);
+  if (LayerIndex > 0) and not FDocument.IsLayerSelected(LayerIndex) then
+    FDocument.SelectedIndex := LayerIndex;
+  Result := FDocument.SelectionCount > 0;
+end;
+
 function TVectArtCanvasControl.GetEditHistory: TVectArtEditHistory;
 begin
   Result := FInteraction.EditHistory;
@@ -924,12 +1110,17 @@ begin
   begin
     if not FShapeCreation.FinishPath(False) then
       FShapeCreation.CancelPath;
+    FEditorState.CurrentTool := vetSelect;
     Invalidate;
-    Exit;
   end;
   if Button = mbRight then
   begin
+    if FTextEditing then
+      FinishTextEdit(False);
+    if FEditorState <> nil then
+      FEditorState.CurrentTool := vetSelect;
     FPanning := True;
+    FPanMoved := False;
     FPanStartMouse := Point(X, Y);
     FPanStartOffset := FPanOffset;
     MouseCapture := True;
@@ -998,6 +1189,13 @@ begin
       EndPan;
       Exit;
     end;
+    if not FPanMoved then
+    begin
+      FPanMoved := (Abs(X - FPanStartMouse.X) > RIGHT_PAN_THRESHOLD) or
+        (Abs(Y - FPanStartMouse.Y) > RIGHT_PAN_THRESHOLD);
+      if not FPanMoved then
+        Exit;
+    end;
     FPanOffset.X := FPanStartOffset.X + X - FPanStartMouse.X;
     FPanOffset.Y := FPanStartOffset.Y + Y - FPanStartMouse.Y;
     CalculateCanvasBounds;
@@ -1046,6 +1244,8 @@ begin
   if (Button = mbRight) and FPanning then
   begin
     EndPan;
+    if not FPanMoved then
+      ShowObjectContextMenu(X, Y);
     Exit;
   end;
   FShapeCreation.Configure(FDocument, EditHistory, FEditorState,
@@ -1158,28 +1358,17 @@ var
   Handle: TVectArtSelectionHandle;
   RotationHandleIndex: Integer;
   I: Integer;
-  ImageLayer: TVectArtImageLayer;
-  Layer: TVectArtLayer;
-  LayerRect: TRect;
-  LineLayer: TVectArtLineLayer;
   LineEnd: TPoint;
   LineStart: TPoint;
   PathPreview: TArray<TPoint>;
   PathVertexRects: TArray<TRect>;
-  LogicalQuad: TVectArtQuad;
-  PathLayer: TVectArtPathLayer;
-  RectangleLayer: TVectArtRectangleLayer;
-  TextLayer: TVectArtTextLayer;
-  RotatedBounds: TRectF;
   RangeRect: TRect;
   Row: Integer;
   RowEnd: Integer;
   RowStart: Integer;
   SelectionGeometry: TVectArtSelectionGeometry;
-  SelectionFrameOffsetPixels: Integer;
-  SelectionLayerRect: TRect;
   SelectionLocked: Boolean;
-  ScreenQuad: TVectArtScreenQuad;
+  SelectionOverlay: TVectArtSelectionOverlay;
   ShadowBounds: TRect;
   VisibleCanvasBounds: TRect;
 begin
@@ -1187,9 +1376,6 @@ begin
   try
     Direct2DCanvas.BeginDraw;
     try
-      SelectionLayerRect := TRect.Empty;
-      SelectionFrameOffsetPixels := SelectionFrameOffset(0, FZoom);
-      SelectionLocked := False;
       Direct2DCanvas.Brush.Color := COLOR_EDITOR_SURROUND;
       Direct2DCanvas.FillRect(ClientRect);
       ShadowBounds := FCanvasBounds;
@@ -1261,142 +1447,12 @@ begin
         DocumentBitmap := nil;
       end;
 
-      if FDocument <> nil then
-        for I := 1 to FDocument.LayerCount - 1 do
-        begin
-          Layer := FDocument[I];
-          if not Layer.Visible or
-            not ((Layer is TVectArtRectangleLayer) or
-              (Layer is TVectArtLineLayer) or
-              (Layer is TVectArtPathLayer) or
-              (Layer is TVectArtImageLayer) or
-              (Layer is TVectArtTextLayer)) then
-            Continue;
-          if Layer is TVectArtRectangleLayer then
-          begin
-            RectangleLayer := TVectArtRectangleLayer(Layer);
-            RotatedBounds := QuadBounds(RectangleCorners(
-              RectangleLayer.Bounds, RectangleLayer.RotationDegrees));
-            SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
-              SelectionFrameOffset(RectangleLayer.StrokeWidth, FZoom));
-          end
-          else if Layer is TVectArtLineLayer then
-          begin
-            LineLayer := TVectArtLineLayer(Layer);
-            RotatedBounds := TRectF.Create(Min(LineLayer.StartPoint.X,
-              LineLayer.EndPoint.X), Min(LineLayer.StartPoint.Y,
-              LineLayer.EndPoint.Y), Max(LineLayer.StartPoint.X,
-              LineLayer.EndPoint.X), Max(LineLayer.StartPoint.Y,
-              LineLayer.EndPoint.Y));
-            SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
-              SelectionFrameOffset(LineLayer.StrokeWidth, FZoom));
-          end
-          else if Layer is TVectArtPathLayer then
-          begin
-            PathLayer := TVectArtPathLayer(Layer);
-            // 選択枠は頂点編集とリサイズの基準なので、装飾マーカーでは広げない。
-            RotatedBounds := PointsBounds(BuildPathDisplayPolyline(
-              PathLayer.Points, PathLayer.Bezier, PathLayer.Closed, 16));
-            SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
-              SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
-          end
-          else if Layer is TVectArtTextLayer then
-          begin
-            TextLayer := TVectArtTextLayer(Layer);
-            RotatedBounds := QuadBounds(RectangleCorners(TextLayer.Bounds,
-              TextLayer.RotationDegrees));
-          end
-          else
-          begin
-            ImageLayer := TVectArtImageLayer(Layer);
-            RotatedBounds := TRectF.Create(ImageLayer.Points[0],
-              ImageLayer.Points[0]);
-            for RotationHandleIndex := 1 to High(ImageLayer.Points) do
-            begin
-              RotatedBounds.Left := Min(RotatedBounds.Left,
-                ImageLayer.Points[RotationHandleIndex].X);
-              RotatedBounds.Top := Min(RotatedBounds.Top,
-                ImageLayer.Points[RotationHandleIndex].Y);
-              RotatedBounds.Right := Max(RotatedBounds.Right,
-                ImageLayer.Points[RotationHandleIndex].X);
-              RotatedBounds.Bottom := Max(RotatedBounds.Bottom,
-                ImageLayer.Points[RotationHandleIndex].Y);
-            end;
-          end;
-          LayerRect := Rect(FCanvasBounds.Left +
-            Round(RotatedBounds.Left * FZoom), FCanvasBounds.Top +
-            Round(RotatedBounds.Top * FZoom), FCanvasBounds.Left +
-            Round(RotatedBounds.Right * FZoom), FCanvasBounds.Top +
-            Round(RotatedBounds.Bottom * FZoom));
-          if LayerRect.Width = 0 then
-            Inc(LayerRect.Right);
-          if LayerRect.Height = 0 then
-            Inc(LayerRect.Bottom);
-          if FDocument.IsLayerSelected(I) then
-          begin
-            SelectionLocked := SelectionLocked or Layer.Locked;
-            if SelectionLayerRect.IsEmpty then
-              SelectionLayerRect := LayerRect
-            else
-              SelectionLayerRect := Rect(
-                Min(SelectionLayerRect.Left, LayerRect.Left),
-                Min(SelectionLayerRect.Top, LayerRect.Top),
-                Max(SelectionLayerRect.Right, LayerRect.Right),
-                Max(SelectionLayerRect.Bottom, LayerRect.Bottom));
-          end;
-        end;
-      if (SelectionLayerRect.Width > 0) and
-        (SelectionLayerRect.Height > 0) then
+      SelectionOverlay := BuildVectArtSelectionOverlay(FDocument,
+        FInteraction, FCanvasBounds, FZoom);
+      SelectionLocked := SelectionOverlay.Locked;
+      if SelectionOverlay.Visible then
       begin
-        if (FDocument.SelectionCount = 1) and
-          (FDocument.SelectedIndex > 0) and
-          (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
-        begin
-          LineLayer := TVectArtLineLayer(
-            FDocument[FDocument.SelectedIndex]);
-          SelectionGeometry := BuildLineSelectionGeometry(Point(
-            FCanvasBounds.Left + Round(LineLayer.StartPoint.X * FZoom),
-            FCanvasBounds.Top + Round(LineLayer.StartPoint.Y * FZoom)),
-            Point(FCanvasBounds.Left + Round(LineLayer.EndPoint.X * FZoom),
-            FCanvasBounds.Top + Round(LineLayer.EndPoint.Y * FZoom)));
-        end
-        else if (FDocument.SelectionCount = 1) and
-          (FDocument.SelectedIndex > 0) and
-          (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
-          SelectionGeometry := BuildPathSelectionGeometry(
-            SelectionLayerRect, SelectionFrameOffsetPixels)
-        else if (FDocument.SelectionCount = 1) and
-          (FDocument.SelectedIndex > 0) and
-          (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer) then
-        begin
-          ImageLayer := TVectArtImageLayer(
-            FDocument[FDocument.SelectedIndex]);
-          for I := 0 to High(ScreenQuad) do
-            ScreenQuad[I] := Point(FCanvasBounds.Left +
-              Round(ImageLayer.Points[I].X * FZoom), FCanvasBounds.Top +
-              Round(ImageLayer.Points[I].Y * FZoom));
-          SelectionGeometry := BuildRotatedSelectionGeometry(ScreenQuad,
-            SelectionFrameOffsetPixels);
-        end
-        else if not FInteraction.AxisAlignedSelection and
-          (FDocument.SelectionCount = 1) and
-          (FDocument.SelectedIndex > 0) and
-          (FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) then
-        begin
-          RectangleLayer := TVectArtRectangleLayer(
-            FDocument[FDocument.SelectedIndex]);
-          LogicalQuad := RectangleCorners(RectangleLayer.Bounds,
-            RectangleLayer.RotationDegrees);
-          for I := 0 to High(ScreenQuad) do
-            ScreenQuad[I] := Point(FCanvasBounds.Left +
-              Round(LogicalQuad[I].X * FZoom), FCanvasBounds.Top +
-              Round(LogicalQuad[I].Y * FZoom));
-          SelectionGeometry := BuildRotatedSelectionGeometry(ScreenQuad,
-            SelectionFrameOffsetPixels);
-        end
-        else
-          SelectionGeometry := BuildSelectionGeometry(SelectionLayerRect,
-            SelectionFrameOffsetPixels);
+        SelectionGeometry := SelectionOverlay.Geometry;
         Direct2DCanvas.Brush.Style := bsSolid;
         Direct2DCanvas.Brush.Color := COLOR_SELECTION;
         Direct2DCanvas.Pen.Color := COLOR_SELECTION;
@@ -1412,10 +1468,7 @@ begin
               Direct2DCanvas.Brush.Color := COLOR_SELECTION;
               Direct2DCanvas.FrameRect(SelectionGeometry.Handles[Handle]);
             end;
-          if (FDocument.SelectionCount = 1) and
-            ((FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) or
-             (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer)) and
-            not FInteraction.AxisAlignedSelection then
+          if SelectionOverlay.ShowRotationHandles then
             for RotationHandleIndex := 0 to 3 do
             begin
               Direct2DCanvas.Brush.Color := TColor($00F0C060);
@@ -1499,34 +1552,20 @@ var
   Handle: TVectArtSelectionHandle;
   RotationHandleIndex: Integer;
   I: Integer;
-  ImageLayer: TVectArtImageLayer;
-  Layer: TVectArtLayer;
-  LayerRect: TRect;
-  LineLayer: TVectArtLineLayer;
   LineEnd: TPoint;
   LineStart: TPoint;
   PathPreview: TArray<TPoint>;
   PathVertexRects: TArray<TRect>;
-  LogicalQuad: TVectArtQuad;
-  PathLayer: TVectArtPathLayer;
-  RectangleLayer: TVectArtRectangleLayer;
-  TextLayer: TVectArtTextLayer;
-  RotatedBounds: TRectF;
   RangeRect: TRect;
   Row: Integer;
   RowEnd: Integer;
   RowStart: Integer;
   SelectionGeometry: TVectArtSelectionGeometry;
-  SelectionFrameOffsetPixels: Integer;
-  SelectionLayerRect: TRect;
   SelectionLocked: Boolean;
-  ScreenQuad: TVectArtScreenQuad;
+  SelectionOverlay: TVectArtSelectionOverlay;
   ShadowBounds: TRect;
   VisibleCanvasBounds: TRect;
 begin
-  SelectionLayerRect := TRect.Empty;
-  SelectionFrameOffsetPixels := SelectionFrameOffset(0, FZoom);
-  SelectionLocked := False;
   Canvas.Brush.Style := bsSolid;
   Canvas.Brush.Color := COLOR_EDITOR_SURROUND;
   Canvas.FillRect(ClientRect);
@@ -1581,139 +1620,12 @@ begin
 
   DrawPremultipliedBitmap(Canvas, FCanvasBounds, FRenderedDocument);
 
-  if FDocument <> nil then
-    for I := 1 to FDocument.LayerCount - 1 do
-    begin
-      Layer := FDocument[I];
-      if not Layer.Visible or
-        not ((Layer is TVectArtRectangleLayer) or
-          (Layer is TVectArtLineLayer) or
-          (Layer is TVectArtPathLayer) or
-          (Layer is TVectArtImageLayer) or
-          (Layer is TVectArtTextLayer)) then
-        Continue;
-      if Layer is TVectArtRectangleLayer then
-      begin
-        RectangleLayer := TVectArtRectangleLayer(Layer);
-        RotatedBounds := QuadBounds(RectangleCorners(RectangleLayer.Bounds,
-          RectangleLayer.RotationDegrees));
-        SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
-          SelectionFrameOffset(RectangleLayer.StrokeWidth, FZoom));
-      end
-      else if Layer is TVectArtLineLayer then
-      begin
-        LineLayer := TVectArtLineLayer(Layer);
-        RotatedBounds := TRectF.Create(Min(LineLayer.StartPoint.X,
-          LineLayer.EndPoint.X), Min(LineLayer.StartPoint.Y,
-          LineLayer.EndPoint.Y), Max(LineLayer.StartPoint.X,
-          LineLayer.EndPoint.X), Max(LineLayer.StartPoint.Y,
-          LineLayer.EndPoint.Y));
-        SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
-          SelectionFrameOffset(LineLayer.StrokeWidth, FZoom));
-      end
-      else if Layer is TVectArtPathLayer then
-      begin
-        PathLayer := TVectArtPathLayer(Layer);
-        // 選択枠は頂点編集とリサイズの基準なので、装飾マーカーでは広げない。
-        RotatedBounds := PointsBounds(BuildPathDisplayPolyline(
-          PathLayer.Points, PathLayer.Bezier, PathLayer.Closed, 16));
-        SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
-          SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
-      end
-      else if Layer is TVectArtTextLayer then
-      begin
-        TextLayer := TVectArtTextLayer(Layer);
-        RotatedBounds := QuadBounds(RectangleCorners(TextLayer.Bounds,
-          TextLayer.RotationDegrees));
-      end
-      else
-      begin
-        ImageLayer := TVectArtImageLayer(Layer);
-        RotatedBounds := TRectF.Create(ImageLayer.Points[0],
-          ImageLayer.Points[0]);
-        for RotationHandleIndex := 1 to High(ImageLayer.Points) do
-        begin
-          RotatedBounds.Left := Min(RotatedBounds.Left,
-            ImageLayer.Points[RotationHandleIndex].X);
-          RotatedBounds.Top := Min(RotatedBounds.Top,
-            ImageLayer.Points[RotationHandleIndex].Y);
-          RotatedBounds.Right := Max(RotatedBounds.Right,
-            ImageLayer.Points[RotationHandleIndex].X);
-          RotatedBounds.Bottom := Max(RotatedBounds.Bottom,
-            ImageLayer.Points[RotationHandleIndex].Y);
-        end;
-      end;
-      LayerRect := Rect(FCanvasBounds.Left +
-        Round(RotatedBounds.Left * FZoom), FCanvasBounds.Top +
-        Round(RotatedBounds.Top * FZoom), FCanvasBounds.Left +
-        Round(RotatedBounds.Right * FZoom), FCanvasBounds.Top +
-        Round(RotatedBounds.Bottom * FZoom));
-      if LayerRect.Width = 0 then
-        Inc(LayerRect.Right);
-      if LayerRect.Height = 0 then
-        Inc(LayerRect.Bottom);
-      if FDocument.IsLayerSelected(I) then
-      begin
-        SelectionLocked := SelectionLocked or Layer.Locked;
-        if SelectionLayerRect.IsEmpty then
-          SelectionLayerRect := LayerRect
-        else
-          SelectionLayerRect := Rect(
-            Min(SelectionLayerRect.Left, LayerRect.Left),
-            Min(SelectionLayerRect.Top, LayerRect.Top),
-            Max(SelectionLayerRect.Right, LayerRect.Right),
-            Max(SelectionLayerRect.Bottom, LayerRect.Bottom));
-      end;
-    end;
-  if (SelectionLayerRect.Width > 0) and (SelectionLayerRect.Height > 0) then
+  SelectionOverlay := BuildVectArtSelectionOverlay(FDocument,
+    FInteraction, FCanvasBounds, FZoom);
+  SelectionLocked := SelectionOverlay.Locked;
+  if SelectionOverlay.Visible then
   begin
-    if (FDocument.SelectionCount = 1) and
-      (FDocument.SelectedIndex > 0) and
-      (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
-    begin
-      LineLayer := TVectArtLineLayer(FDocument[FDocument.SelectedIndex]);
-      SelectionGeometry := BuildLineSelectionGeometry(Point(
-        FCanvasBounds.Left + Round(LineLayer.StartPoint.X * FZoom),
-        FCanvasBounds.Top + Round(LineLayer.StartPoint.Y * FZoom)), Point(
-        FCanvasBounds.Left + Round(LineLayer.EndPoint.X * FZoom),
-        FCanvasBounds.Top + Round(LineLayer.EndPoint.Y * FZoom)));
-    end
-    else if (FDocument.SelectionCount = 1) and
-      (FDocument.SelectedIndex > 0) and
-      (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
-      SelectionGeometry := BuildPathSelectionGeometry(SelectionLayerRect,
-        SelectionFrameOffsetPixels)
-    else if (FDocument.SelectionCount = 1) and
-      (FDocument.SelectedIndex > 0) and
-      (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer) then
-    begin
-      ImageLayer := TVectArtImageLayer(FDocument[FDocument.SelectedIndex]);
-      for I := 0 to High(ScreenQuad) do
-        ScreenQuad[I] := Point(FCanvasBounds.Left +
-          Round(ImageLayer.Points[I].X * FZoom), FCanvasBounds.Top +
-          Round(ImageLayer.Points[I].Y * FZoom));
-      SelectionGeometry := BuildRotatedSelectionGeometry(ScreenQuad,
-        SelectionFrameOffsetPixels);
-    end
-    else if not FInteraction.AxisAlignedSelection and
-      (FDocument.SelectionCount = 1) and
-      (FDocument.SelectedIndex > 0) and
-      (FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) then
-    begin
-      RectangleLayer := TVectArtRectangleLayer(
-        FDocument[FDocument.SelectedIndex]);
-      LogicalQuad := RectangleCorners(RectangleLayer.Bounds,
-        RectangleLayer.RotationDegrees);
-      for I := 0 to High(ScreenQuad) do
-        ScreenQuad[I] := Point(FCanvasBounds.Left +
-          Round(LogicalQuad[I].X * FZoom), FCanvasBounds.Top +
-          Round(LogicalQuad[I].Y * FZoom));
-      SelectionGeometry := BuildRotatedSelectionGeometry(ScreenQuad,
-        SelectionFrameOffsetPixels);
-    end
-    else
-      SelectionGeometry := BuildSelectionGeometry(SelectionLayerRect,
-        SelectionFrameOffsetPixels);
+    SelectionGeometry := SelectionOverlay.Geometry;
     Canvas.Brush.Style := bsSolid;
     Canvas.Brush.Color := COLOR_SELECTION;
     Canvas.Pen.Color := COLOR_SELECTION;
@@ -1729,10 +1641,7 @@ begin
           Canvas.Brush.Color := COLOR_SELECTION;
           Canvas.FrameRect(SelectionGeometry.Handles[Handle]);
         end;
-      if (FDocument.SelectionCount = 1) and
-        ((FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) or
-         (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer)) and
-        not FInteraction.AxisAlignedSelection then
+      if SelectionOverlay.ShowRotationHandles then
         for RotationHandleIndex := 0 to 3 do
         begin
           Canvas.Brush.Color := TColor($00F0C060);

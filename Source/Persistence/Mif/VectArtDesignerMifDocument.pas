@@ -607,6 +607,7 @@ var
   Layout: TVectArtTextLayout;
   Paint: ISkPaint;
   Pixels: TArray<TVectArtRgbaPixel>;
+  PointValue: TPointF;
   Quad: TVectArtQuad;
   RGBColor: TColor;
   ShiftJis: TEncoding;
@@ -630,10 +631,10 @@ begin
   Canvas := Surface.Canvas;
   Canvas.Clear(TAlphaColorRec.Null);
   Font := CreateVectArtTextFont(TextLayer.FontFamily, TextLayer.FontSize,
-    TextLayer.FontStyle);
+    TextLayer.FontStyle, TextLayer.Vertical);
   Layout := BuildVectArtTextLayout(TextLayer.Text, TextLayer.FontFamily,
     TextLayer.FontSize, TextLayer.FontStyle, TextLayer.LetterSpacingRatio,
-    TextLayer.LineSpacingRatio);
+    TextLayer.LineSpacingRatio, TextLayer.Vertical);
   Paint := TSkPaint.Create(TSkPaintStyle.Fill);
   Paint.AntiAlias := True;
   RGBColor := ColorToRGB(TextLayer.TextColor);
@@ -644,15 +645,32 @@ begin
   TextScaleX := Width / Max(Layout.Width, 1.0);
   TextScaleY := Height / Max(Layout.Height, 1.0);
   Canvas.Scale(TextScaleX, TextScaleY);
-  for I := 0 to High(Layout.Lines) do
-    DrawVectArtTextLine(Canvas, Layout.Lines[I], 0,
-      Layout.Ascent + I * Layout.LineHeight, Font, Paint,
-      TextLayer.FontSize * TextLayer.LetterSpacingRatio);
+  if TextLayer.Vertical then
+    for I := 0 to High(Layout.Lines) do
+      DrawVectArtTextColumn(Canvas, Layout.Lines[I],
+        Layout.Width - Layout.BaseLineHeight - I * Layout.LineHeight,
+        0, Layout.BaseLineHeight, Layout.Ascent,
+        Layout.CharacterAdvance, Font, Paint)
+  else
+    for I := 0 to High(Layout.Lines) do
+      DrawVectArtTextLine(Canvas, Layout.Lines[I], 0,
+        Layout.Ascent + I * Layout.LineHeight, Font, Paint,
+        TextLayer.FontSize * TextLayer.LetterSpacingRatio);
   Surface.Flush;
   Result := EncodeRgba(@Pixels[0], Width, Height);
   AddPhysicalDimensions(Result);
   AddText(Result, 'object type', 'logo');
   Quad := RectangleCorners(TextLayer.Bounds, TextLayer.RotationDegrees);
+  if TextLayer.FlipHorizontal then
+  begin
+    PointValue := Quad[0]; Quad[0] := Quad[1]; Quad[1] := PointValue;
+    PointValue := Quad[3]; Quad[3] := Quad[2]; Quad[2] := PointValue;
+  end;
+  if TextLayer.FlipVertical then
+  begin
+    PointValue := Quad[0]; Quad[0] := Quad[3]; Quad[3] := PointValue;
+    PointValue := Quad[1]; Quad[1] := Quad[2]; Quad[2] := PointValue;
+  end;
   AddImagePlacementMetadata(Result, Quad, MifAlpha(TextLayer.Opacity),
     not TextLayer.Visible);
   AddWadaInteger(Result, 'logo fs auto', 1);
@@ -690,7 +708,7 @@ begin
   AddWadaInteger(Result, 'font quality', 1);
   AddWadaInteger(Result, 'font pitchandfamily', 0);
   AddWadaString(Result, 'font facename', TextLayer.FontFamily);
-  AddWadaInteger(Result, 'logo writing mode', 0);
+  AddWadaInteger(Result, 'logo writing mode', Ord(TextLayer.Vertical));
   AddWadaString(Result, 'logo outline object type', 'none');
   AddWadaString(Result, 'logo effect object type', 'none');
 end;
@@ -2094,6 +2112,7 @@ var
   ApplicationName: string;
   BackgroundColor: Int32;
   Bottom: Int32;
+  CrossProduct: Int64;
   CanvasHeight: Integer;
   CanvasWidth: Integer;
   ClosedValue: Int32;
@@ -2151,6 +2170,7 @@ var
   StrokeEnabled: Int32;
   StrokeStyle: Int32;
   StrokeWidth: Double;
+  WritingMode: Int32;
   Top: Int32;
   TextData: TVectArtTextData;
   Texts: TList<TVectArtTextData>;
@@ -2253,6 +2273,10 @@ begin
             Include(TextData.FontStyle, fsStrikeOut);
           TextData.Text := TextValue;
           TextData.TextColor := clBlack;
+          WritingMode := 0;
+          TryReadPngInteger(Container[I].Data, 'logo writing mode',
+            WritingMode);
+          TextData.Vertical := WritingMode <> 0;
           FillColor := ColorToRGB(clBlack);
           if (I + 1 < Container.ChunkCount) and
             (Container[I + 1].Tag = 'IPNG') then
@@ -2264,6 +2288,10 @@ begin
           TextData.Opacity := EnsureRange(Alpha / 255.0, 0.0, 1.0);
           TextData.RotationDegrees := RadToDeg(ArcTan2(Position2Y - Top,
             Position2X - Left));
+          CrossProduct := Int64(Position2X - Left) * (Position4Y - Top) -
+            Int64(Position2Y - Top) * (Position4X - Left);
+          TextData.FlipHorizontal := False;
+          TextData.FlipVertical := CrossProduct < 0;
           TextData.Visible := Hidden = 0;
           TextData.Locked := False;
           Texts.Add(TextData);
@@ -2281,6 +2309,7 @@ begin
           ImageData.SourceKind := visImage;
         end;
         ImageData.PngData := Copy(Container[I].Data);
+        ImageData.SourceFileName := '';
         ImageData.Points[0] := TPointF.Create(Left, Top);
         ImageData.Points[1] := TPointF.Create(Position2X, Position2Y);
         ImageData.Points[2] := TPointF.Create(Right, Bottom);
@@ -2646,6 +2675,9 @@ begin
       if Layer is TVectArtImageLayer then
       begin
         Inc(ImageIndex);
+        if TVectArtImageLayer(Layer).SourceFileName <> '' then
+          Report.AddIssue(meikConversion, I, Layer.Name,
+            '取込元ファイル名はMIFへ保持されません。埋め込み画像データは保持されます。');
         TryPrepareImagePngForMif(TVectArtImageLayer(Layer), I, ImageIndex,
           Report, PreparedImagePngs[I]);
         Continue;

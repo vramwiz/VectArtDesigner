@@ -223,9 +223,10 @@ begin
         Continue;
       TextLayout := BuildVectArtTextLayout(TextLayer.Text,
         TextLayer.FontFamily, TextLayer.FontSize, TextLayer.FontStyle,
-        TextLayer.LetterSpacingRatio, TextLayer.LineSpacingRatio);
+        TextLayer.LetterSpacingRatio, TextLayer.LineSpacingRatio,
+        TextLayer.Vertical);
       Font := CreateVectArtTextFont(TextLayer.FontFamily,
-        TextLayer.FontSize, TextLayer.FontStyle);
+        TextLayer.FontSize, TextLayer.FontStyle, TextLayer.Vertical);
       Paint.Style := TSkPaintStyle.Fill;
       Paint.Color := VclColorToAlphaColor(TextLayer.TextColor,
         TextLayer.Opacity);
@@ -234,16 +235,25 @@ begin
         Canvas.Translate(TextLayer.Bounds.CenterPoint.X,
           TextLayer.Bounds.CenterPoint.Y);
         Canvas.Rotate(TextLayer.RotationDegrees);
+        Canvas.Scale(IfThen(TextLayer.FlipHorizontal, -1.0, 1.0),
+          IfThen(TextLayer.FlipVertical, -1.0, 1.0));
         Canvas.Translate(-TextLayer.Bounds.CenterPoint.X,
           -TextLayer.Bounds.CenterPoint.Y);
         TextScaleX := TextLayer.Bounds.Width / Max(TextLayout.Width, 1.0);
         TextScaleY := TextLayer.Bounds.Height / Max(TextLayout.Height, 1.0);
         Canvas.Translate(TextLayer.Bounds.Left, TextLayer.Bounds.Top);
         Canvas.Scale(TextScaleX, TextScaleY);
-        for J := 0 to High(TextLayout.Lines) do
-          DrawVectArtTextLine(Canvas, TextLayout.Lines[J], 0,
-            TextLayout.Ascent + J * TextLayout.LineHeight, Font, Paint,
-            TextLayer.FontSize * TextLayer.LetterSpacingRatio);
+        if TextLayer.Vertical then
+          for J := 0 to High(TextLayout.Lines) do
+            DrawVectArtTextColumn(Canvas, TextLayout.Lines[J],
+              TextLayout.Width - TextLayout.BaseLineHeight -
+                J * TextLayout.LineHeight, 0, TextLayout.BaseLineHeight,
+              TextLayout.Ascent, TextLayout.CharacterAdvance, Font, Paint)
+        else
+          for J := 0 to High(TextLayout.Lines) do
+            DrawVectArtTextLine(Canvas, TextLayout.Lines[J], 0,
+              TextLayout.Ascent + J * TextLayout.LineHeight, Font, Paint,
+              TextLayer.FontSize * TextLayer.LetterSpacingRatio);
       finally
         Canvas.Restore;
       end;
