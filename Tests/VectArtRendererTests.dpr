@@ -13,6 +13,8 @@ uses
   VectArtDesignerDocument in
     'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
+  VectArtDesignerBezierGeometry in
+    'Source\Editor\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerRenderer in
     'Source\Rendering\VectArtDesignerRenderer.pas';
 

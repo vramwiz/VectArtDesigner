@@ -1,4 +1,5 @@
 ﻿// 図形作成ツールの入力状態、プレビュー、新規レイヤー確定を管理する。
+// 図形データはDocumentへ直接抱えず、確定時に履歴コマンドへ引き渡す。
 unit VectArtDesignerShapeCreation;
 
 interface
@@ -12,6 +13,7 @@ type
   private
     FActive: Boolean;
     FCanvasBounds: TRect;
+    FCreationTool: TVectArtEditorTool;
     FCurrentPoint: TPoint;
     FDocument: TVectArtDocument;
     FEditorState: TVectArtEditorState;
@@ -48,11 +50,16 @@ implementation
 
 uses
   System.Math, System.SysUtils,
+  VectArtDesignerBezierGeometry,
+  VectArtDesignerFreehandGeometry,
   VectArtDesignerLayerStructureCommands;
 
 const
   MIN_DRAG_SIZE = 3;
   PATH_CLOSE_DISTANCE = 8;
+  BEZIER_STEPS_PER_SEGMENT = 12;
+  FREEHAND_SAMPLE_DISTANCE = 2;
+  FREEHAND_SIMPLIFY_TOLERANCE = 1.5;
 
 procedure TVectArtShapeCreation.CancelPath;
 begin
@@ -116,6 +123,7 @@ begin
     Data.Points[I] := TPointF.Create(
       (FPathPoints[I].X - FCanvasBounds.Left) / FZoom,
       (FPathPoints[I].Y - FCanvasBounds.Top) / FZoom);
+  Data.Bezier := FCreationTool in [vetBezier, vetFreehandBezier];
   Data.Closed := Closed;
   Data.Filled := Closed;
   Data.FillColor := FEditorState.RectangleFillColor;
@@ -155,7 +163,9 @@ procedure TVectArtShapeCreation.Configure(ADocument: TVectArtDocument;
   const ACanvasBounds: TRect; AZoom: Single);
 begin
   if (Length(FPathPoints) > 0) and ((AEditorState = nil) or
-    (AEditorState.CurrentTool <> vetPath)) then
+    not (AEditorState.CurrentTool in [vetPath, vetBezier,
+      vetFreehandLine, vetFreehandBezier]) or
+    (FActive and (AEditorState.CurrentTool <> FCreationTool))) then
     CancelPath;
   FDocument := ADocument;
   FEditHistory := AEditHistory;
@@ -211,13 +221,22 @@ var
 begin
   Result := (Button = mbLeft) and (FDocument <> nil) and
     (FEditorState <> nil) and
-    (FEditorState.CurrentTool in [vetRectangle, vetLine, vetPath]) and
+    (FEditorState.CurrentTool in [vetRectangle, vetLine, vetPath,
+      vetBezier, vetFreehandLine, vetFreehandBezier]) and
     (FZoom > 0) and
     PtInRect(FCanvasBounds, Point(X, Y));
   if not Result then
     Exit;
   PointValue := ClampToCanvas(Point(X, Y));
-  if FEditorState.CurrentTool = vetPath then
+  if FEditorState.CurrentTool in [vetFreehandLine, vetFreehandBezier] then
+  begin
+    FActive := True;
+    FCreationTool := FEditorState.CurrentTool;
+    FPathPoints := [PointValue];
+    FCurrentPoint := PointValue;
+    Exit;
+  end;
+  if FEditorState.CurrentTool in [vetPath, vetBezier] then
   begin
     if (ssDouble in Shift) and (Length(FPathPoints) >= 2) then
     begin
@@ -227,6 +246,7 @@ begin
     if not FActive then
     begin
       FActive := True;
+      FCreationTool := FEditorState.CurrentTool;
       FPathPoints := [PointValue];
     end
     else if (Length(FPathPoints) >= 3) and
@@ -253,7 +273,26 @@ begin
   Result := FActive;
   if not FActive then
     Exit;
-  if (FEditorState <> nil) and (FEditorState.CurrentTool = vetPath) then
+  if (FEditorState <> nil) and
+    (FEditorState.CurrentTool in [vetFreehandLine,
+      vetFreehandBezier]) then
+  begin
+    if not (ssLeft in Shift) then
+    begin
+      CancelPath;
+      Exit;
+    end;
+    FCurrentPoint := ClampToCanvas(Point(X, Y));
+    if FreehandPointIsFarEnough(FPathPoints[High(FPathPoints)],
+      FCurrentPoint, FREEHAND_SAMPLE_DISTANCE) then
+    begin
+      SetLength(FPathPoints, Length(FPathPoints) + 1);
+      FPathPoints[High(FPathPoints)] := FCurrentPoint;
+    end;
+    Exit;
+  end;
+  if (FEditorState <> nil) and
+    (FEditorState.CurrentTool in [vetPath, vetBezier]) then
   begin
     FCurrentPoint := ClampToCanvas(Point(X, Y));
     Exit;
@@ -271,13 +310,27 @@ function TVectArtShapeCreation.MouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer): Boolean;
 begin
   if FActive and (FEditorState <> nil) and
-    (FEditorState.CurrentTool = vetPath) then
+    (FEditorState.CurrentTool in [vetPath, vetBezier]) then
     Exit(False);
   Result := (Button = mbLeft) and FActive;
   if not Result then
     Exit;
   FCurrentPoint := ClampToCanvas(Point(X, Y));
   FModifiers := Shift;
+  if FEditorState.CurrentTool in [vetFreehandLine, vetFreehandBezier] then
+  begin
+    if FreehandPointIsFarEnough(FPathPoints[High(FPathPoints)],
+      FCurrentPoint, FREEHAND_SAMPLE_DISTANCE) then
+    begin
+      SetLength(FPathPoints, Length(FPathPoints) + 1);
+      FPathPoints[High(FPathPoints)] := FCurrentPoint;
+    end;
+    FPathPoints := SimplifyFreehandPolyline(FPathPoints,
+      FREEHAND_SIMPLIFY_TOLERANCE);
+    CreatePath(False);
+    CancelPath;
+    Exit;
+  end;
   if FEditorState.CurrentTool = vetLine then
     CreateLine
   else
@@ -288,7 +341,9 @@ end;
 function TVectArtShapeCreation.FinishPath(Closed: Boolean): Boolean;
 begin
   Result := FActive and (FEditorState <> nil) and
-    (FEditorState.CurrentTool = vetPath) and (Length(FPathPoints) >= 2);
+    (FEditorState.CurrentTool in [vetPath, vetBezier]) and
+    (FEditorState.CurrentTool = FCreationTool) and
+    (Length(FPathPoints) >= 2);
   if not Result then
     Exit;
   CreatePath(Closed);
@@ -342,8 +397,18 @@ end;
 function TVectArtShapeCreation.PreviewPath(
   out Points: TArray<TPoint>): Boolean;
 begin
+  if FActive and (FEditorState <> nil) and
+    (FEditorState.CurrentTool in [vetFreehandLine,
+      vetFreehandBezier]) and
+    (FEditorState.CurrentTool = FCreationTool) then
+  begin
+    Points := Copy(FPathPoints);
+    Exit(Length(Points) >= 2);
+  end;
   Result := FActive and (FEditorState <> nil) and
-    (FEditorState.CurrentTool = vetPath) and (Length(FPathPoints) > 0);
+    (FEditorState.CurrentTool in [vetPath, vetBezier]) and
+    (FEditorState.CurrentTool = FCreationTool) and
+    (Length(FPathPoints) > 0);
   if not Result then
   begin
     Points := nil;
@@ -352,6 +417,8 @@ begin
   Points := Copy(FPathPoints);
   SetLength(Points, Length(Points) + 1);
   Points[High(Points)] := FCurrentPoint;
+  if FCreationTool = vetBezier then
+    Points := BuildSmoothBezierPreview(Points, BEZIER_STEPS_PER_SEGMENT);
 end;
 
 function TVectArtShapeCreation.PreviewLine(out StartPoint,

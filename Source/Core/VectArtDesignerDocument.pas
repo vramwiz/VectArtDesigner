@@ -146,6 +146,7 @@ type
 
   TVectArtPathLayer = class(TVectArtLayer)
   private
+    FBezier: Boolean;
     FClosed: Boolean;
     FEndMarker: TVectArtLineMarker;
     FEndMarkerSize: Single;
@@ -163,6 +164,7 @@ type
   public
     constructor Create(const AName: string; const APoints: TArray<TPointF>;
       AClosed: Boolean);
+    property Bezier: Boolean read FBezier write FBezier;
     property Closed: Boolean read FClosed write FClosed;
     property EndMarker: TVectArtLineMarker read FEndMarker write FEndMarker;
     property EndMarkerSize: Single read FEndMarkerSize write FEndMarkerSize;
@@ -183,6 +185,7 @@ type
   end;
 
   TVectArtPathData = record
+    Bezier: Boolean;                       // 頂点間を滑らかな3次ベジェで結ぶ。
     Closed: Boolean;                        // 終点と始点を閉じる状態。
     EndMarker: TVectArtLineMarker;          // 開いたPathの終点マーカー。
     EndMarkerSize: Single;                  // 終点マーカー倍率。
@@ -428,6 +431,7 @@ constructor TVectArtPathLayer.Create(const AName: string;
 begin
   inherited Create(vlkPath, AName);
   FPoints := Copy(APoints);
+  FBezier := False;
   FClosed := AClosed;
   FEndMarker := vlmNone;
   FEndMarkerSize := 4.0;
@@ -604,6 +608,7 @@ var
 begin
   Result := EnsureRange(Index, 1, FLayers.Count);
   PathLayer := TVectArtPathLayer.Create(Data.Name, Data.Points, Data.Closed);
+  PathLayer.Bezier := Data.Bezier;
   PathLayer.EndMarker := Data.EndMarker;
   PathLayer.EndMarkerSize := Max(Data.EndMarkerSize, 1.0);
   PathLayer.FillColor := Data.FillColor;
@@ -772,6 +777,7 @@ begin
   if not Result then
     Exit;
   PathLayer := TVectArtPathLayer(FLayers[Index]);
+  Data.Bezier := PathLayer.Bezier;
   Data.Closed := PathLayer.Closed;
   Data.EndMarker := PathLayer.EndMarker;
   Data.EndMarkerSize := PathLayer.EndMarkerSize;

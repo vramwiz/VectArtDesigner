@@ -1,4 +1,5 @@
 ﻿// 編集キャンバス上の選択、移動、リサイズ、中心回り回転を管理する。
+// ドラッグ中はDocumentの対話更新区間とし、周辺UIの再構築を操作終了まで遅延する。
 unit VectArtDesignerCanvasInteraction;
 
 interface
@@ -17,6 +18,7 @@ type
   private
     FCanvasBounds: TRect;
     FDocument: TVectArtDocument;
+    FDocumentUpdateActive: Boolean;
     FEditHistory: TVectArtEditHistory;
     FDragHandle: TVectArtSelectionHandle;
     FDragLayerIndex: Integer;
@@ -45,6 +47,7 @@ type
     FToggleSelectionModeOnClick: Boolean;
     FZoom: Single;
     procedure EndDrag;
+    procedure BeginDocumentUpdate;
     procedure ApplyRangeSelection;
     procedure ApplyResizeSelection(X, Y: Integer);
     procedure ApplyImageResize(X, Y: Integer);
@@ -92,12 +95,24 @@ type
 implementation
 
 uses
-  System.Math, VectArtDesignerGeometry;
+  System.Math, VectArtDesignerBezierGeometry, VectArtDesignerGeometry;
 
 const
   MIN_RECTANGLE_SIZE = 16.0;
   MOVE_DRAG_THRESHOLD = 6;
   PATH_VERTEX_HANDLE_SIZE = 9;
+
+function PathLayerDisplayPoints(PathLayer: TVectArtPathLayer):
+  TArray<TPointF>;
+begin
+  Result := BuildPathDisplayPolyline(PathLayer.Points, PathLayer.Bezier,
+    PathLayer.Closed, 16);
+end;
+
+function PathLayerBounds(PathLayer: TVectArtPathLayer): TRectF;
+begin
+  Result := PointsBounds(PathLayerDisplayPoints(PathLayer));
+end;
 
 function ImagePointsBounds(const Points: TVectArtImagePoints): TRectF;
 var
@@ -179,6 +194,14 @@ begin
   FDragLayerIndex := -1;
   FPathVertexIndex := -1;
   FSelectionModeLayerIndex := -1;
+end;
+
+procedure TVectArtCanvasInteraction.BeginDocumentUpdate;
+begin
+  if FDocumentUpdateActive or (FDocument = nil) then
+    Exit;
+  FDocument.BeginInteractiveUpdate;
+  FDocumentUpdateActive := True;
 end;
 
 procedure TVectArtCanvasInteraction.Configure(ADocument: TVectArtDocument;
@@ -568,6 +591,12 @@ end;
 
 procedure TVectArtCanvasInteraction.EndDrag;
 begin
+  if FDocumentUpdateActive then
+  begin
+    FDocumentUpdateActive := False;
+    if FDocument <> nil then
+      FDocument.EndInteractiveUpdate;
+  end;
   FDragMode := vcdmNone;
   FDragHandle := vshNone;
   FDragLayerIndex := -1;
@@ -626,6 +655,7 @@ var
   LogicalX: Single;
   LogicalY: Single;
   PathLayer: TVectArtPathLayer;
+  PathPoints: TArray<TPointF>;
   ImageLayer: TVectArtImageLayer;
   ImagePolygon: TArray<TPointF>;
   Projection: Single;
@@ -686,29 +716,30 @@ begin
     if Layer is TVectArtPathLayer then
     begin
       PathLayer := TVectArtPathLayer(Layer);
+      PathPoints := PathLayerDisplayPoints(PathLayer);
       if PathLayer.Closed and PathLayer.Filled and
         PointInPolygon(TPointF.Create(LogicalX, LogicalY),
-          PathLayer.Points) then
+          PathPoints) then
         Exit(I);
-      for J := 0 to High(PathLayer.Points) - 1 do
+      for J := 0 to High(PathPoints) - 1 do
         if DistanceToSegment(TPointF.Create(LogicalX, LogicalY),
-          PathLayer.Points[J], PathLayer.Points[J + 1]) <=
+          PathPoints[J], PathPoints[J + 1]) <=
           Max(PathLayer.StrokeWidth * 0.5, 6 / FZoom) then
           Exit(I);
-      if PathLayer.Closed and (Length(PathLayer.Points) > 2) and
+      if PathLayer.Closed and (Length(PathPoints) > 2) and
         (DistanceToSegment(TPointF.Create(LogicalX, LogicalY),
-          PathLayer.Points[High(PathLayer.Points)], PathLayer.Points[0]) <=
+          PathPoints[High(PathPoints)], PathPoints[0]) <=
           Max(PathLayer.StrokeWidth * 0.5, 6 / FZoom)) then
         Exit(I);
-      if not PathLayer.Closed and (Length(PathLayer.Points) >= 2) then
+      if not PathLayer.Closed and (Length(PathPoints) >= 2) then
       begin
         Tolerance := Max(PathLayer.StrokeWidth * 0.5, 6 / FZoom);
         if PointHitsMarker(PointF(LogicalX, LogicalY),
-          PathLayer.StartMarker, PathLayer.Points[0], PathLayer.Points[1],
+          PathLayer.StartMarker, PathPoints[0], PathPoints[1],
           PathLayer.StrokeWidth, PathLayer.StartMarkerSize, Tolerance) or
           PointHitsMarker(PointF(LogicalX, LogicalY), PathLayer.EndMarker,
-          PathLayer.Points[High(PathLayer.Points)],
-          PathLayer.Points[High(PathLayer.Points) - 1],
+          PathPoints[High(PathPoints)],
+          PathPoints[High(PathPoints) - 1],
           PathLayer.StrokeWidth, PathLayer.EndMarkerSize, Tolerance) then
           Exit(I);
       end;
@@ -768,7 +799,7 @@ begin
   if FDocument[Index] is TVectArtPathLayer then
   begin
     PathLayer := TVectArtPathLayer(FDocument[Index]);
-    Bounds := PointsBounds(PathLayer.Points);
+    Bounds := PathLayerBounds(PathLayer);
     Result := Rect(FCanvasBounds.Left + Round(Bounds.Left * FZoom),
       FCanvasBounds.Top + Round(Bounds.Top * FZoom),
       FCanvasBounds.Left + Round(Bounds.Right * FZoom),
@@ -832,7 +863,7 @@ begin
       else if FDocument[I] is TVectArtPathLayer then
       begin
         PathLayer := TVectArtPathLayer(FDocument[I]);
-        Bounds := PointsBounds(PathLayer.Points);
+        Bounds := PathLayerBounds(PathLayer);
       end
       else
       begin
@@ -1018,6 +1049,7 @@ begin
     FDragStartPathPoints := Copy(TVectArtPathLayer(
       FDocument[FDragLayerIndex]).Points);
     FDragStartMouse := Point(X, Y);
+    BeginDocumentUpdate;
     Exit(True);
   end;
   SelectionRect := SelectedLayersScreenRect;
@@ -1146,6 +1178,8 @@ begin
     end;
   end;
   FDragStartMouse := Point(X, Y);
+  if FDragMode in [vcdmMove, vcdmResize, vcdmRotate, vcdmPathVertex] then
+    BeginDocumentUpdate;
   Result := True;
 end;
 

@@ -78,6 +78,7 @@ begin
     LineData.Visible := True;
     SourceDocument.InsertLine(SourceDocument.LayerCount, LineData);
     PathData.Name := 'Path 1';
+    PathData.Bezier := True;
     PathData.Points := [PointF(300, 40), PointF(500, 80),
       PointF(440, 220)];
     PathData.Closed := True;
@@ -152,7 +153,8 @@ begin
       SameValue(TargetLine.StartMarkerSize, LineData.StartMarkerSize),
       'Line stroke differs');
     TargetPath := TVectArtPathLayer(TargetDocument[3]);
-    Require((Length(TargetPath.Points) = 3) and TargetPath.Closed and
+    Require(TargetPath.Bezier and (Length(TargetPath.Points) = 3) and
+      TargetPath.Closed and
       TargetPath.Filled, 'Path properties differ');
     Require(SameValue(TargetPath.Points[1].X, PathData.Points[1].X) and
       SameValue(TargetPath.Points[2].Y, PathData.Points[2].Y),

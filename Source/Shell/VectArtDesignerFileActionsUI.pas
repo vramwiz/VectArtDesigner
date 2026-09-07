@@ -5,8 +5,7 @@ unit VectArtDesignerFileActionsUI;
 interface
 
 uses
-  System.Classes, Vcl.Controls, Vcl.Dialogs, Vcl.ExtCtrls,
-  VectArtDarkPopupMenu;
+  System.Classes, Vcl.Dialogs, Vcl.Menus;
 
 type
   TVectArtFileNameEvent = procedure(Sender: TObject;
@@ -16,30 +15,29 @@ type
   private
     FCanSave: Boolean;
     FCurrentFileName: string;
-    FMenu: TVectArtDarkPopupMenu;
+    FMenu: TMenuItem;
     FOnOpenFile: TVectArtFileNameEvent;
     FOnSaveFile: TVectArtFileNameEvent;
     FOpenDialog: TOpenDialog;
     FSaveDialog: TSaveDialog;
-    FSaveAsItem: TPanel;
-    FSaveItem: TPanel;
-    function NewMenuItem(const Caption: string; Top: Integer;
-      ClickHandler: TNotifyEvent): TPanel;
+    FSaveAsItem: TMenuItem;
+    FSaveItem: TMenuItem;
+    function NewMenuItem(const Caption: string; AShortCut: TShortCut;
+      ClickHandler: TNotifyEvent): TMenuItem;
     procedure OpenClick(Sender: TObject);
     procedure SaveAsClick(Sender: TObject);
     procedure SaveClick(Sender: TObject);
     procedure SaveTypeChange(Sender: TObject);
     procedure SetCanSave(const Value: Boolean);
   public
-    constructor CreateForHosts(AOwner: TComponent; AMainForm,
-      AMenuBar: TWinControl);
+    constructor CreateForMenu(AOwner: TComponent; ARootItem: TMenuItem);
     procedure ExecuteOpen;
     procedure ExecuteSave;
     procedure ExecuteSaveAs;
     property CanSave: Boolean read FCanSave write SetCanSave;
     property CurrentFileName: string read FCurrentFileName
       write FCurrentFileName;
-    property Menu: TVectArtDarkPopupMenu read FMenu;
+    property Menu: TMenuItem read FMenu;
     property OnOpenFile: TVectArtFileNameEvent read FOnOpenFile
       write FOnOpenFile;
     property OnSaveFile: TVectArtFileNameEvent read FOnSaveFile
@@ -51,16 +49,16 @@ implementation
 uses
   System.SysUtils;
 
-constructor TVectArtFileActionsUI.CreateForHosts(AOwner: TComponent;
-  AMainForm, AMenuBar: TWinControl);
+constructor TVectArtFileActionsUI.CreateForMenu(AOwner: TComponent;
+  ARootItem: TMenuItem);
 begin
   inherited Create(AOwner);
-  FMenu := TVectArtDarkPopupMenu.CreateForHosts(Self, AMainForm, AMenuBar,
-    'ファイル', 0, 56, 240, 96);
-  NewMenuItem('開く...               Ctrl+O', 0, OpenClick);
-  FSaveItem := NewMenuItem('上書き保存          Ctrl+S', 32, SaveClick);
-  FSaveAsItem := NewMenuItem('名前を付けて保存...  Ctrl+Shift+S', 64,
-    SaveAsClick);
+  FMenu := ARootItem;
+  NewMenuItem('開く...', ShortCut(Ord('O'), [ssCtrl]), OpenClick);
+  FSaveItem := NewMenuItem('上書き保存', ShortCut(Ord('S'), [ssCtrl]),
+    SaveClick);
+  FSaveAsItem := NewMenuItem('名前を付けて保存...',
+    ShortCut(Ord('S'), [ssCtrl, ssShift]), SaveAsClick);
 
   FOpenDialog := TOpenDialog.Create(Self);
   FOpenDialog.DefaultExt := '';
@@ -79,19 +77,17 @@ begin
   FSaveDialog.Title := 'デザインファイルを保存';
   FSaveDialog.OnTypeChange := SaveTypeChange;
   SetCanSave(False);
-  FMenu.SetItemEnabled(FSaveAsItem, True);
+  FSaveAsItem.Enabled := True;
 end;
 
 procedure TVectArtFileActionsUI.ExecuteOpen;
 begin
-  FMenu.Close;
   if FOpenDialog.Execute and Assigned(FOnOpenFile) then
     FOnOpenFile(Self, FOpenDialog.FileName);
 end;
 
 procedure TVectArtFileActionsUI.ExecuteSave;
 begin
-  FMenu.Close;
   if not FCanSave then
     Exit;
   if FCurrentFileName = '' then
@@ -102,7 +98,6 @@ end;
 
 procedure TVectArtFileActionsUI.ExecuteSaveAs;
 begin
-  FMenu.Close;
   FSaveDialog.FileName := FCurrentFileName;
   if SameText(ExtractFileExt(FCurrentFileName), '.svg') then
     FSaveDialog.FilterIndex := 2
@@ -113,10 +108,14 @@ begin
     FOnSaveFile(Self, FSaveDialog.FileName);
 end;
 
-function TVectArtFileActionsUI.NewMenuItem(const Caption: string; Top: Integer;
-  ClickHandler: TNotifyEvent): TPanel;
+function TVectArtFileActionsUI.NewMenuItem(const Caption: string;
+  AShortCut: TShortCut; ClickHandler: TNotifyEvent): TMenuItem;
 begin
-  Result := FMenu.AddItem(Caption, Top, ClickHandler);
+  Result := TMenuItem.Create(Self);
+  Result.Caption := Caption;
+  Result.ShortCut := AShortCut;
+  Result.OnClick := ClickHandler;
+  FMenu.Add(Result);
 end;
 
 procedure TVectArtFileActionsUI.OpenClick(Sender: TObject);
@@ -145,7 +144,7 @@ end;
 procedure TVectArtFileActionsUI.SetCanSave(const Value: Boolean);
 begin
   FCanSave := Value;
-  FMenu.SetItemEnabled(FSaveItem, Value);
+  FSaveItem.Enabled := Value;
 end;
 
 end.

@@ -1,5 +1,5 @@
-﻿// 選択Rectangleの位置、サイズ、塗り色を表示・編集するダークテーマ用Controlを提供する。
-// MIFで扱える共通項目と図形装飾を編集するControlを提供する。
+﻿// 選択図形の位置、サイズとMIFで扱える装飾を表示・編集するControlを提供する。
+// 複数選択では共通値だけを示し、ロックを含む選択への変更を許可しない。
 unit VectArtDesignerObjectPropertiesControl;
 
 interface
@@ -82,7 +82,7 @@ implementation
 
 uses
   System.Generics.Collections, System.Math, System.SysUtils, Winapi.Windows,
-  Vcl.Graphics, VectArtDesignerGeometry;
+  Vcl.Graphics, VectArtDesignerBezierGeometry, VectArtDesignerGeometry;
 
 const
   COLOR_BACKGROUND = TColor($00212121);
@@ -1131,7 +1131,8 @@ begin
       (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
     begin
       PathLayer := TVectArtPathLayer(FDocument[FDocument.SelectedIndex]);
-      Bounds := PointsBounds(PathLayer.Points);
+      Bounds := PointsBounds(BuildPathDisplayPolyline(PathLayer.Points,
+        PathLayer.Bezier, PathLayer.Closed, 16));
       FXEdit.Text := FormatFloat('0.##', Bounds.Left);
       FYEdit.Text := FormatFloat('0.##', Bounds.Top);
       FWidthEdit.Text := FormatFloat('0.##', Bounds.Width);

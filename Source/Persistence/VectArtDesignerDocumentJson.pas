@@ -166,6 +166,7 @@ begin
         PathJson := TJSONObject.Create;
         PathJson.AddPair('type', 'path');
         PathJson.AddPair('name', Path.Name);
+        PathJson.AddPair('bezier', TJSONBool.Create(Path.Bezier));
         PathJson.AddPair('closed', TJSONBool.Create(Path.Closed));
         PathJson.AddPair('filled', TJSONBool.Create(Path.Filled));
         PathJson.AddPair('fillColor',
@@ -422,6 +423,10 @@ begin
         if LayerTypes[I] = 'path' then
         begin
           PathValue.Name := ReadString(LayerJson, 'name');
+          PathValue.Bezier := False;
+          if LayerJson.GetValue('bezier') is TJSONBool then
+            PathValue.Bezier := TJSONBool(
+              LayerJson.GetValue('bezier')).AsBoolean;
           PathValue.Closed := ReadBoolean(LayerJson, 'closed');
           PathValue.Filled := ReadBoolean(LayerJson, 'filled');
           PathValue.FillColor := TColor(ReadInteger(LayerJson, 'fillColor'));

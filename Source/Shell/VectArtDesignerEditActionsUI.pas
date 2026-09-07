@@ -4,8 +4,8 @@ unit VectArtDesignerEditActionsUI;
 interface
 
 uses
-  System.Classes, System.Types, Vcl.Controls, Vcl.ExtCtrls,
-  VectArtDarkPopupMenu, VectArtDesignerEditHistory;
+  System.Classes, System.Types, Vcl.Controls, Vcl.Menus,
+  VectArtDesignerEditHistory;
 
 type
   TVectArtEditShortcutControl = class(TCustomControl)
@@ -34,19 +34,19 @@ type
 
   TVectArtEditActionsUI = class(TComponent)
   private
-    FCanvasSettingsItem: TPanel;
+    FCanvasSettingsItem: TMenuItem;
     FCanvasSettingsVisible: Boolean;
     FHistory: TVectArtEditHistory;
-    FMenu: TVectArtDarkPopupMenu;
+    FMenu: TMenuItem;
     FOnOpenRequest: TNotifyEvent;
     FOnSaveRequest: TNotifyEvent;
     FOnCanvasSettingsRequest: TNotifyEvent;
-    FRedoItem: TPanel;
+    FRedoItem: TMenuItem;
     FShortcutControl: TVectArtEditShortcutControl;
-    FUndoItem: TPanel;
+    FUndoItem: TMenuItem;
     procedure CanvasSettingsClick(Sender: TObject);
-    function NewMenuItem(const Caption: string; Top: Integer;
-      ClickHandler: TNotifyEvent): TPanel;
+    function NewMenuItem(const Caption: string; AShortCut: TShortCut;
+      ClickHandler: TNotifyEvent): TMenuItem;
     procedure RedoClick(Sender: TObject);
     procedure SetHistory(const Value: TVectArtEditHistory);
     procedure SetCanvasSettingsVisible(const Value: Boolean);
@@ -54,11 +54,11 @@ type
     procedure SetOnSaveRequest(const Value: TNotifyEvent);
     procedure UndoClick(Sender: TObject);
   public
-    constructor CreateForHosts(AOwner: TComponent; AMainForm,
-      AMenuBar, AShortcutHost: TWinControl);
+    constructor CreateForMenu(AOwner: TComponent; ARootItem: TMenuItem;
+      AShortcutHost: TWinControl);
     procedure RefreshState;
     property History: TVectArtEditHistory read FHistory write SetHistory;
-    property Menu: TVectArtDarkPopupMenu read FMenu;
+    property Menu: TMenuItem read FMenu;
     property CanvasSettingsVisible: Boolean read FCanvasSettingsVisible
       write SetCanvasSettingsVisible;
     property OnCanvasSettingsRequest: TNotifyEvent
@@ -240,15 +240,17 @@ end;
 
 { TVectArtEditActionsUI }
 
-constructor TVectArtEditActionsUI.CreateForHosts(AOwner: TComponent;
-  AMainForm, AMenuBar, AShortcutHost: TWinControl);
+constructor TVectArtEditActionsUI.CreateForMenu(AOwner: TComponent;
+  ARootItem: TMenuItem; AShortcutHost: TWinControl);
 begin
   inherited Create(AOwner);
-  FMenu := TVectArtDarkPopupMenu.CreateForHosts(Self, AMainForm, AMenuBar,
-    '編集', 56, 36, 190, 96);
-  FUndoItem := NewMenuItem('Undo    Ctrl+Z', 0, UndoClick);
-  FRedoItem := NewMenuItem('Redo    Ctrl+Y', 32, RedoClick);
-  FCanvasSettingsItem := NewMenuItem('キャンバスの設定', 64,
+  FMenu := ARootItem;
+  FUndoItem := NewMenuItem('元に戻す', ShortCut(Ord('Z'), [ssCtrl]),
+    UndoClick);
+  FRedoItem := NewMenuItem('やり直し', ShortCut(Ord('Y'), [ssCtrl]),
+    RedoClick);
+  NewMenuItem('-', 0, nil);
+  FCanvasSettingsItem := NewMenuItem('キャンバスの設定...', 0,
     CanvasSettingsClick);
   FCanvasSettingsVisible := True;
 
@@ -259,20 +261,22 @@ end;
 
 procedure TVectArtEditActionsUI.CanvasSettingsClick(Sender: TObject);
 begin
-  FMenu.Close;
   if FCanvasSettingsVisible and Assigned(FOnCanvasSettingsRequest) then
     FOnCanvasSettingsRequest(Self);
 end;
 
 function TVectArtEditActionsUI.NewMenuItem(const Caption: string;
-  Top: Integer; ClickHandler: TNotifyEvent): TPanel;
+  AShortCut: TShortCut; ClickHandler: TNotifyEvent): TMenuItem;
 begin
-  Result := FMenu.AddItem(Caption, Top, ClickHandler);
+  Result := TMenuItem.Create(Self);
+  Result.Caption := Caption;
+  Result.ShortCut := AShortCut;
+  Result.OnClick := ClickHandler;
+  FMenu.Add(Result);
 end;
 
 procedure TVectArtEditActionsUI.RedoClick(Sender: TObject);
 begin
-  FMenu.Close;
   if (FHistory <> nil) and FHistory.CanRedo then
     FHistory.Redo;
 end;
@@ -282,10 +286,6 @@ begin
   FShortcutControl.RefreshState;
   FUndoItem.Enabled := (FHistory <> nil) and FHistory.CanUndo;
   FRedoItem.Enabled := (FHistory <> nil) and FHistory.CanRedo;
-  if FUndoItem.Enabled then FUndoItem.Font.Color := COLOR_TEXT
-  else FUndoItem.Font.Color := COLOR_DISABLED;
-  if FRedoItem.Enabled then FRedoItem.Font.Color := COLOR_TEXT
-  else FRedoItem.Font.Color := COLOR_DISABLED;
 end;
 
 procedure TVectArtEditActionsUI.SetHistory(const Value: TVectArtEditHistory);
@@ -300,10 +300,6 @@ procedure TVectArtEditActionsUI.SetCanvasSettingsVisible(
 begin
   FCanvasSettingsVisible := Value;
   FCanvasSettingsItem.Visible := Value;
-  if Value then
-    FMenu.PopupHeight := 96
-  else
-    FMenu.PopupHeight := 64;
 end;
 
 procedure TVectArtEditActionsUI.SetOnOpenRequest(const Value: TNotifyEvent);
@@ -322,7 +318,6 @@ end;
 
 procedure TVectArtEditActionsUI.UndoClick(Sender: TObject);
 begin
-  FMenu.Close;
   if (FHistory <> nil) and FHistory.CanUndo then
     FHistory.Undo;
 end;

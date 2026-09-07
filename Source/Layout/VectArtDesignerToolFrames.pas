@@ -102,7 +102,7 @@ type
 implementation
 
 uses
-  System.Math, System.SysUtils, Winapi.Dwmapi, Winapi.Windows;
+  System.Math, System.SysUtils, Winapi.Windows;
 
 const
   COLOR_TEXT_PRIMARY      = TColor($00E6E6E6);
@@ -379,7 +379,6 @@ end;
 
 procedure TToolPlaceholderFrame.EnsureFloating;
 var
-  DarkModeEnabled: BOOL;
   FrameHeight: Integer;
   FrameWidth: Integer;
   Origin: TPoint;
@@ -404,9 +403,6 @@ begin
   FFloatingForm.ClientHeight := FrameHeight;
   FFloatingForm.Left := Origin.X;
   FFloatingForm.Top := Origin.Y;
-  DarkModeEnabled := True;
-  DwmSetWindowAttribute(FFloatingForm.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE,
-    @DarkModeEnabled, SizeOf(DarkModeEnabled));
   Parent := FFloatingForm;
   Align := alClient;
   FGripPanel.Visible := False;

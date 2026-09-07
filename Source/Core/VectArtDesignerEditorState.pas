@@ -8,7 +8,8 @@ uses
   System.Classes, Vcl.Graphics, VectArtDesignerDocument;
 
 type
-  TVectArtEditorTool = (vetSelect, vetRectangle, vetLine, vetPath);
+  TVectArtEditorTool = (vetSelect, vetRectangle, vetLine, vetPath,
+    vetBezier, vetFreehandLine, vetFreehandBezier);
 
   TVectArtEditorState = class
   private
@@ -61,6 +62,8 @@ type
     procedure SetRectangleStrokeWidth(const Value: Single);
   public
     constructor Create;
+    procedure SelectFreehandToolGroup;
+    procedure SelectPathToolGroup;
     property CurrentTool: TVectArtEditorTool read FCurrentTool
       write SetCurrentTool;
     property LineCap: TVectArtLineCap read FLineCap write SetLineCap;
@@ -139,6 +142,22 @@ begin
   FRectangleStrokeColor := clBlack;
   FRectangleStrokeStyle := vssSolid;
   FRectangleStrokeWidth := 0.0;
+end;
+
+procedure TVectArtEditorState.SelectFreehandToolGroup;
+begin
+  if FCurrentTool = vetFreehandLine then
+    CurrentTool := vetFreehandBezier
+  else
+    CurrentTool := vetFreehandLine;
+end;
+
+procedure TVectArtEditorState.SelectPathToolGroup;
+begin
+  if FCurrentTool = vetPath then
+    CurrentTool := vetBezier
+  else
+    CurrentTool := vetPath;
 end;
 
 procedure TVectArtEditorState.SetPathLineCap(const Value: TVectArtLineCap);

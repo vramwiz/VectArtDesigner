@@ -20,6 +20,8 @@ uses
     'Lib\TextRenderer\TextRendererSkiaRuntime.pas',
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
+  VectArtDesignerBezierGeometry in
+    'Source\Editor\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerEditorState in
     'Source\Core\VectArtDesignerEditorState.pas',
   VectArtDesignerEditCommands in

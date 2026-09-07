@@ -1,5 +1,5 @@
 ﻿// 中央編集領域のキャンバス表示を担当する。
-// 論理サイズと画面上の拡大率を分離し、描画にはDirect2Dを優先して使用する。
+// 図形本体は表示寸法のSkia画像へキャッシュし、最終合成と選択表示にはDirect2Dを優先する。
 unit VectArtDesignerCanvas;
 
 interface
@@ -74,7 +74,7 @@ implementation
 
 uses
   System.Math, Winapi.D2D1, Winapi.Windows, Vcl.Direct2D,
-  VectArtDesignerGeometry;
+  VectArtDesignerBezierGeometry, VectArtDesignerGeometry;
 
 const
   CANVAS_MARGIN         = 32;
@@ -484,7 +484,8 @@ begin
   FShapeCreation.Configure(FDocument, EditHistory, FEditorState,
     FCanvasBounds, FZoom);
   if (Button = mbRight) and (FEditorState <> nil) and
-    (FEditorState.CurrentTool = vetPath) and FShapeCreation.Active then
+    (FEditorState.CurrentTool in [vetPath, vetBezier]) and
+    FShapeCreation.Active then
   begin
     if not FShapeCreation.FinishPath(False) then
       FShapeCreation.CancelPath;
@@ -510,14 +511,15 @@ begin
     if FShapeCreation.MouseDown(Button, Shift, X, Y) then
     begin
       if (FEditorState <> nil) and
-        (FEditorState.CurrentTool <> vetPath) then
+        not (FEditorState.CurrentTool in [vetPath, vetBezier]) then
         MouseCapture := True;
       Cursor := crCross;
       Invalidate;
       Exit;
     end;
     if (FEditorState <> nil) and
-      (FEditorState.CurrentTool in [vetRectangle, vetLine, vetPath]) then
+      (FEditorState.CurrentTool in [vetRectangle, vetLine, vetPath,
+        vetBezier, vetFreehandLine, vetFreehandBezier]) then
     begin
       Cursor := crCross;
       Exit;
@@ -562,7 +564,8 @@ begin
     Exit;
   end;
   if (FEditorState <> nil) and
-    (FEditorState.CurrentTool in [vetRectangle, vetLine, vetPath]) then
+    (FEditorState.CurrentTool in [vetRectangle, vetLine, vetPath,
+      vetBezier, vetFreehandLine, vetFreehandBezier]) then
   begin
     Cursor := crCross;
     Exit;
@@ -611,6 +614,11 @@ end;
 procedure TVectArtCanvasControl.Paint;
 begin
   CalculateCanvasBounds;
+  // 選択頂点や範囲選択はInteraction側で画面座標を生成する。
+  // ズーム、パン、Resize後も描画直前に最新のBoundsと倍率へ同期する。
+  FInteraction.Configure(FDocument, FCanvasBounds, FZoom);
+  FShapeCreation.Configure(FDocument, EditHistory, FEditorState,
+    FCanvasBounds, FZoom);
   UpdateRenderedDocument;
   if FDirect2DEnabled then
     try
@@ -639,8 +647,10 @@ begin
     FRenderedRevision := -1;
     Exit;
   end;
-  Width := Max(FDocument.CanvasLayer.Width, 1);
-  Height := Max(FDocument.CanvasLayer.Height, 1);
+  // 縮小表示中にDocumentの論理画素数を丸ごと生成しない。
+  // 表示寸法までで描けば、Direct2Dで同じBoundsへ転送した結果は維持できる。
+  Width := Max(Min(FCanvasBounds.Width, FDocument.CanvasLayer.Width), 1);
+  Height := Max(Min(FCanvasBounds.Height, FDocument.CanvasLayer.Height), 1);
   PreviewStrokeWidth := 0.0;
   if ENABLE_THIN_STROKE_PREVIEW and (FZoom > 0) then
     PreviewStrokeWidth := MIN_PREVIEW_STROKE_WIDTH_PIXELS / FZoom;
@@ -653,7 +663,9 @@ begin
   RenderVectArtDocument(FDocument, FRenderBuffer, Width, Height,
     PreviewStrokeWidth);
   FRenderedDocument.PixelFormat := pf32bit;
-  FRenderedDocument.SetSize(Width, Height);
+  if (FRenderedDocument.Width <> Width) or
+    (FRenderedDocument.Height <> Height) then
+    FRenderedDocument.SetSize(Width, Height);
   FRenderedDocument.AlphaFormat := afPremultiplied;
   Source := FRenderBuffer.Data;
   for Y := 0 to Height - 1 do
@@ -824,7 +836,8 @@ begin
           begin
             PathLayer := TVectArtPathLayer(Layer);
             // 選択枠は頂点編集とリサイズの基準なので、装飾マーカーでは広げない。
-            RotatedBounds := PointsBounds(PathLayer.Points);
+            RotatedBounds := PointsBounds(BuildPathDisplayPolyline(
+              PathLayer.Points, PathLayer.Bezier, PathLayer.Closed, 16));
             SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
               SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
           end
@@ -1117,7 +1130,8 @@ begin
       begin
         PathLayer := TVectArtPathLayer(Layer);
         // 選択枠は頂点編集とリサイズの基準なので、装飾マーカーでは広げない。
-        RotatedBounds := PointsBounds(PathLayer.Points);
+        RotatedBounds := PointsBounds(BuildPathDisplayPolyline(
+          PathLayer.Points, PathLayer.Bezier, PathLayer.Closed, 16));
         SelectionFrameOffsetPixels := Max(SelectionFrameOffsetPixels,
           SelectionFrameOffset(PathLayer.StrokeWidth, FZoom));
       end

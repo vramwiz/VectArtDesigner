@@ -2,12 +2,13 @@
 
 uses
   Vcl.Forms,
+  Vcl.Themes,
+  Vcl.Styles,
   TextRendererSkiaBootstrap in 'Lib\TextRenderer\TextRendererSkiaBootstrap.pas',
   TextRendererTypes in 'Lib\TextRenderer\TextRendererTypes.pas',
   TextRenderer in 'Lib\TextRenderer\TextRenderer.pas',
   TextRendererSkiaRuntime in 'Lib\TextRenderer\TextRendererSkiaRuntime.pas',
   TextRendererSkia in 'Lib\TextRenderer\TextRendererSkia.pas',
-  VectArtDarkPopupMenu in 'Lib\DarkMenu\VectArtDarkPopupMenu.pas',
   ShortcutAction in 'Lib\ShortcutAction\ShortcutAction.pas',
   HorizontalTrackBarRenderer in 'Lib\HorizontalTrackBar\HorizontalTrackBarRenderer.pas',
   HorizontalTrackBarControl in 'Lib\HorizontalTrackBar\HorizontalTrackBarControl.pas',
@@ -34,6 +35,8 @@ uses
   VectArtDesignerDocumentJson in 'Source\Persistence\VectArtDesignerDocumentJson.pas',
   VectArtDesignerCanvas in 'Source\Editor\VectArtDesignerCanvas.pas',
   VectArtDesignerCanvasInteraction in 'Source\Editor\VectArtDesignerCanvasInteraction.pas',
+  VectArtDesignerBezierGeometry in 'Source\Editor\VectArtDesignerBezierGeometry.pas',
+  VectArtDesignerFreehandGeometry in 'Source\Editor\VectArtDesignerFreehandGeometry.pas',
   VectArtDesignerShapeCreation in 'Source\Editor\VectArtDesignerShapeCreation.pas',
   VectArtDesignerKeyboardMovement in 'Source\Editor\VectArtDesignerKeyboardMovement.pas',
   VectArtDesignerEditorWorkspaceFrame in 'Source\Editor\VectArtDesignerEditorWorkspaceFrame.pas',
@@ -55,6 +58,7 @@ uses
 
 begin
   Application.Initialize;
+  TStyleManager.TrySetStyle('Windows Modern Dark');
   Application.MainFormOnTaskbar := True;
   Application.Title := 'VectArtDesigner';
   Application.CreateForm(TMainForm, MainForm);

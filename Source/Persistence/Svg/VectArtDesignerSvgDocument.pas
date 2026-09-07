@@ -54,7 +54,8 @@ uses
   System.Classes, System.Generics.Collections, System.IOUtils, System.Math,
   System.NetEncoding, System.SysUtils, System.Types, System.Variants,
   Vcl.Graphics, Vcl.Imaging.pngimage, Winapi.Windows,
-  VectArtDesignerGeometry, Xml.omnixmldom, Xml.XMLDoc, Xml.XMLIntf,
+  VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
+  Xml.omnixmldom, Xml.XMLDoc, Xml.XMLIntf,
   Xml.xmldom;
 
 const
@@ -341,6 +342,7 @@ var
   Layer: TVectArtLayer;
   Line: TVectArtLineLayer;
   Path: TVectArtPathLayer;
+  PathDisplayPoints: TArray<TPointF>;
   PointIndex: Integer;
   Rectangle: TVectArtRectangleLayer;
 begin
@@ -487,16 +489,19 @@ begin
         if Layer is TVectArtPathLayer then
         begin
           Path := TVectArtPathLayer(Layer);
+          PathDisplayPoints := BuildPathDisplayPolyline(Path.Points,
+            Path.Bezier, Path.Closed, 16);
           if Path.Closed then
             Builder.Append('  <polygon points="')
           else
             Builder.Append('  <polyline points="');
-          for PointIndex := 0 to High(Path.Points) do
+          for PointIndex := 0 to High(PathDisplayPoints) do
           begin
             if PointIndex > 0 then
               Builder.Append(' ');
-            Builder.Append(SvgNumber(Path.Points[PointIndex].X)).Append(',')
-              .Append(SvgNumber(Path.Points[PointIndex].Y));
+            Builder.Append(SvgNumber(PathDisplayPoints[PointIndex].X))
+              .Append(',').Append(SvgNumber(
+              PathDisplayPoints[PointIndex].Y));
           end;
           Builder.Append('" fill="');
           if Path.Filled and Path.Closed then
@@ -1551,6 +1556,7 @@ var
   VisibilityValue: string;
 begin
   Result := False;
+  Data.Bezier := False;
   if SameText(LocalNodeName(Node), 'path') then
   begin
     if not TryGetAttribute(Node, 'd', PointsText) or
@@ -1905,6 +1911,7 @@ function PathDataFromTransformedRectangle(
 var
   I: Integer;
 begin
+  Result.Bezier := False;
   Result.Closed := True;
   Result.EndMarker := vlmNone;
   Result.EndMarkerSize := 4.0;

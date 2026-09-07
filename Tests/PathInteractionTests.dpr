@@ -25,6 +25,10 @@ uses
     'Source\Editor\VectArtDesignerSelectionGeometry.pas',
   VectArtDesignerCanvasInteraction in
     'Source\Editor\VectArtDesignerCanvasInteraction.pas',
+  VectArtDesignerBezierGeometry in
+    'Source\Editor\VectArtDesignerBezierGeometry.pas',
+  VectArtDesignerFreehandGeometry in
+    'Source\Editor\VectArtDesignerFreehandGeometry.pas',
   VectArtDesignerShapeCreation in
     'Source\Editor\VectArtDesignerShapeCreation.pas',
   VectArtDesignerLayerDuplication in
@@ -39,6 +43,7 @@ begin
 end;
 
 var
+  BezierDisplayPoints: TArray<TPointF>;
   Data: TVectArtPathData;
   Creation: TVectArtShapeCreation;
   Document: TVectArtDocument;
@@ -47,6 +52,7 @@ var
   Interaction: TVectArtCanvasInteraction;
   Operations: TVectArtLayerOperations;
   Path: TVectArtPathLayer;
+  SimplifiedPoints: TArray<TPoint>;
 begin
   Document := TVectArtDocument.Create;
   EditorState := TVectArtEditorState.Create;
@@ -55,6 +61,18 @@ begin
   Creation := TVectArtShapeCreation.Create;
   Operations := TVectArtLayerOperations.Create;
   try
+    Require(not FreehandPointIsFarEnough(Point(0, 0), Point(1, 1), 2),
+      'Freehand sampling accepted a point below the minimum distance');
+    Require(FreehandPointIsFarEnough(Point(0, 0), Point(2, 0), 2),
+      'Freehand sampling rejected a point at the minimum distance');
+    SimplifiedPoints := SimplifyFreehandPolyline([
+      Point(0, 0), Point(5, 0), Point(10, 0), Point(10, 10)], 1.5);
+    Require((Length(SimplifiedPoints) = 3) and
+      (SimplifiedPoints[0] = Point(0, 0)) and
+      (SimplifiedPoints[1] = Point(10, 0)) and
+      (SimplifiedPoints[2] = Point(10, 10)),
+      'Freehand simplification did not preserve the corner and endpoints');
+
     Data.Name := 'Path 1';
     Data.Points := [PointF(100, 100), PointF(200, 100),
       PointF(200, 200), PointF(100, 200)];
@@ -92,9 +110,13 @@ begin
     Interaction.Configure(Document, Rect(0, 0, 1000, 1000), 1);
     Require(Interaction.MouseDown(mbLeft, 100, 100),
       'Path vertex drag did not start');
+    Require(Document.IsInteractiveUpdate,
+      'Path vertex drag did not begin an interactive document update');
     Require(Interaction.MouseMove([ssLeft], 80, 90),
       'Path vertex drag was not applied');
     Require(Interaction.MouseUp(mbLeft), 'Path vertex drag did not finish');
+    Require(not Document.IsInteractiveUpdate,
+      'Path vertex drag did not end its interactive document update');
     Require(SameValue(Path.Points[0].X, 80.0) and
       SameValue(Path.Points[0].Y, 90.0), 'Path vertex differs');
     History.Undo;
@@ -197,6 +219,90 @@ begin
       'Created closed path properties differ');
     History.Undo;
     Require(Document.LayerCount = 2, 'Path creation undo differs');
+
+    EditorState.CurrentTool := vetBezier;
+    Creation.Configure(Document, History, EditorState,
+      Rect(0, 0, 1000, 1000), 1);
+    Require(Creation.MouseDown(mbLeft, [], 300, 300),
+      'Bezier creation first anchor failed');
+    Creation.MouseMove([], 400, 200);
+    Require(Creation.MouseDown(mbLeft, [], 400, 200),
+      'Bezier creation second anchor failed');
+    Creation.MouseMove([], 500, 300);
+    Require(Creation.MouseDown(mbLeft, [], 500, 300),
+      'Bezier creation third anchor failed');
+    Require(Creation.FinishPath(False), 'Bezier creation finish failed');
+    Require((Document.LayerCount = 3) and
+      (Document[2] is TVectArtPathLayer), 'Created Bezier path differs');
+    Path := TVectArtPathLayer(Document[2]);
+    Require(Path.Bezier and not Path.Closed and
+      (Length(Path.Points) = 3), 'Bezier anchors were not preserved');
+    Require(SameValue(Path.Points[0].X, 300.0) and
+      SameValue(Path.Points[0].Y, 300.0) and
+      SameValue(Path.Points[High(Path.Points)].X, 500.0) and
+      SameValue(Path.Points[High(Path.Points)].Y, 300.0),
+      'Bezier path endpoints differ');
+    BezierDisplayPoints := BuildSmoothBezierPolyline(Path.Points, False, 12);
+    Require((Length(BezierDisplayPoints) = 25) and
+      (BezierDisplayPoints[6].Y < 249.0),
+      'Bezier path was not curved between anchors');
+    Interaction.Configure(Document, Rect(0, 0, 1000, 1000), 1);
+    Require(Length(Interaction.SelectedPathVertexRects) = 3,
+      'Bezier selection displayed generated subdivision points');
+    History.Undo;
+    Require(Document.LayerCount = 2, 'Bezier creation undo differs');
+
+    EditorState.CurrentTool := vetFreehandLine;
+    Creation.Configure(Document, History, EditorState,
+      Rect(0, 0, 1000, 1000), 1);
+    Require(Creation.MouseDown(mbLeft, [], 300, 300),
+      'Freehand polyline did not start');
+    Creation.MouseMove([ssLeft], 310, 300);
+    Creation.MouseMove([ssLeft], 320, 300);
+    Creation.MouseMove([ssLeft], 320, 310);
+    Creation.MouseMove([ssLeft], 320, 320);
+    Require(Creation.MouseUp(mbLeft, [], 320, 330),
+      'Freehand polyline did not finish');
+    Require((Document.LayerCount = 3) and
+      (Document[2] is TVectArtPathLayer),
+      'Freehand polyline did not create a Path');
+    Path := TVectArtPathLayer(Document[2]);
+    Require(not Path.Bezier and not Path.Closed and
+      (Length(Path.Points) = 3),
+      'Freehand polyline was not simplified to sharp vertices');
+    Require(SameValue(Path.Points[0].X, 300.0) and
+      SameValue(Path.Points[0].Y, 300.0) and
+      SameValue(Path.Points[1].X, 320.0) and
+      SameValue(Path.Points[1].Y, 300.0) and
+      SameValue(Path.Points[2].X, 320.0) and
+      SameValue(Path.Points[2].Y, 330.0),
+      'Freehand polyline vertices differ');
+    History.Undo;
+    Require(Document.LayerCount = 2,
+      'Freehand polyline creation undo differs');
+
+    EditorState.CurrentTool := vetFreehandBezier;
+    Creation.Configure(Document, History, EditorState,
+      Rect(0, 0, 1000, 1000), 1);
+    Require(Creation.MouseDown(mbLeft, [], 300, 300),
+      'Freehand Bezier did not start');
+    Creation.MouseMove([ssLeft], 350, 250);
+    Creation.MouseMove([ssLeft], 400, 300);
+    Require(Creation.MouseUp(mbLeft, [], 450, 250),
+      'Freehand Bezier did not finish');
+    Require((Document.LayerCount = 3) and
+      (Document[2] is TVectArtPathLayer),
+      'Freehand Bezier did not create a Path');
+    Path := TVectArtPathLayer(Document[2]);
+    Require(Path.Bezier and not Path.Closed and
+      (Length(Path.Points) >= 3),
+      'Freehand Bezier was not converted on mouse release');
+    BezierDisplayPoints := BuildSmoothBezierPolyline(Path.Points, False, 12);
+    Require(Length(BezierDisplayPoints) > Length(Path.Points),
+      'Freehand Bezier did not produce a continuous curve');
+    History.Undo;
+    Require(Document.LayerCount = 2,
+      'Freehand Bezier creation undo differs');
 
     Operations.Document := Document;
     Operations.EditHistory := History;

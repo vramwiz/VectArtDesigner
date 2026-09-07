@@ -11,6 +11,8 @@ uses
   Vcl.Graphics,
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
+  VectArtDesignerBezierGeometry in
+    'Source\Editor\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerEditCommands in
     'Source\Core\Commands\VectArtDesignerEditCommands.pas',
   VectArtDesignerEditHistory in

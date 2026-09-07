@@ -51,7 +51,8 @@ uses
   System.Classes, System.Generics.Collections, System.Math,
   System.NetEncoding, System.Skia, System.Types, System.UITypes,
   Vcl.Graphics, Vcl.Imaging.pngimage, Winapi.Windows,
-  VectArtDesignerDocumentJson, VectArtDesignerGeometry,
+  VectArtDesignerBezierGeometry, VectArtDesignerDocumentJson,
+  VectArtDesignerGeometry,
   VectArtDesignerRenderer;
 
 const
@@ -737,6 +738,7 @@ function CreatePathRasterPng(PathLayer: TVectArtPathLayer;
 var
   Canvas: ISkCanvas;
   DashIntervals: TArray<Single>;
+  DisplayPoints: TArray<TPointF>;
   FillPaint: ISkPaint;
   Height: Integer;
   I: Integer;
@@ -783,7 +785,9 @@ var
     Canvas.DrawPath(MarkerBuilder.Detach, StrokePaint);
   end;
 begin
-  PlacementBounds := PointsBounds(PathLayer.Points);
+  DisplayPoints := BuildPathDisplayPolyline(PathLayer.Points,
+    PathLayer.Bezier, PathLayer.Closed, 16);
+  PlacementBounds := PointsBounds(DisplayPoints);
   if not PathLayer.Closed and
     ((PathLayer.StartMarker <> vlmNone) or
      (PathLayer.EndMarker <> vlmNone)) then
@@ -804,11 +808,11 @@ begin
   Canvas := Surface.Canvas;
   Canvas.Clear(TAlphaColorRec.Null);
   PathBuilder := TSkPathBuilder.Create;
-  PathBuilder.MoveTo(PathLayer.Points[0].X - PlacementBounds.Left,
-    PathLayer.Points[0].Y - PlacementBounds.Top);
-  for I := 1 to High(PathLayer.Points) do
-    PathBuilder.LineTo(PathLayer.Points[I].X - PlacementBounds.Left,
-      PathLayer.Points[I].Y - PlacementBounds.Top);
+  PathBuilder.MoveTo(DisplayPoints[0].X - PlacementBounds.Left,
+    DisplayPoints[0].Y - PlacementBounds.Top);
+  for I := 1 to High(DisplayPoints) do
+    PathBuilder.LineTo(DisplayPoints[I].X - PlacementBounds.Left,
+      DisplayPoints[I].Y - PlacementBounds.Top);
   if PathLayer.Closed then
     PathBuilder.Close;
   Path := PathBuilder.Detach;
@@ -853,11 +857,11 @@ begin
     Canvas.DrawPath(Path, StrokePaint);
     if not PathLayer.Closed then
     begin
-      DrawPathMarker(PathLayer.StartMarker, PathLayer.Points[0],
-        PathLayer.Points[1], PathLayer.StartMarkerSize);
+      DrawPathMarker(PathLayer.StartMarker, DisplayPoints[0],
+        DisplayPoints[1], PathLayer.StartMarkerSize);
       DrawPathMarker(PathLayer.EndMarker,
-        PathLayer.Points[High(PathLayer.Points)],
-        PathLayer.Points[High(PathLayer.Points) - 1],
+        DisplayPoints[High(DisplayPoints)],
+        DisplayPoints[High(DisplayPoints) - 1],
         PathLayer.EndMarkerSize);
     end;
   end;
@@ -1136,15 +1140,22 @@ var
   Count: UInt32;
   I: Integer;
   Offset: Integer;
+  PathPoints: TArray<TPointF>;
   Pixels: TArray<TVectArtRgbaPixel>;
   Raw: TBytes;
   X: Double;
   Y: Double;
 begin
-  Count := Length(PathLayer.Points) + Ord(PathLayer.Closed);
+  PathPoints := BuildPathDisplayPolyline(PathLayer.Points,
+    PathLayer.Bezier, PathLayer.Closed, 16);
+  if PathLayer.Closed and (Length(PathPoints) > 1) and
+    SameValue(PathPoints[0].X, PathPoints[High(PathPoints)].X) and
+    SameValue(PathPoints[0].Y, PathPoints[High(PathPoints)].Y) then
+    SetLength(PathPoints, Length(PathPoints) - 1);
+  Count := Length(PathPoints) + Ord(PathLayer.Closed);
   SetLength(Raw, 4 + Integer(Count) * RECORD_SIZE);
   Move(Count, Raw[0], SizeOf(Count));
-  for I := 0 to High(PathLayer.Points) do
+  for I := 0 to High(PathPoints) do
   begin
     Offset := 4 + I * RECORD_SIZE;
     if I = 0 then
@@ -1152,14 +1163,14 @@ begin
     else
       Command := 2;
     Move(Command, Raw[Offset], SizeOf(Command));
-    X := PathLayer.Points[I].X;
-    Y := PathLayer.Points[I].Y;
+    X := PathPoints[I].X;
+    Y := PathPoints[I].Y;
     Move(X, Raw[Offset + 4], SizeOf(X));
     Move(Y, Raw[Offset + 12], SizeOf(Y));
   end;
   if PathLayer.Closed then
   begin
-    Offset := 4 + Length(PathLayer.Points) * RECORD_SIZE;
+    Offset := 4 + Length(PathPoints) * RECORD_SIZE;
     Command := 3;
     Move(Command, Raw[Offset], SizeOf(Command));
   end;
@@ -1238,6 +1249,9 @@ begin
   if PathLayer.Locked then
     Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
       '編集ロックはMIFへ保持されません。');
+  if PathLayer.Bezier then
+    Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
+      'ベジェ曲線はMIFへ16分割の連続直線として保存されます。');
   StoredOpacity := MifAlpha(PathLayer.Opacity) / 255.0;
   if not SameValue(PathLayer.Opacity, StoredOpacity, 0.000001) then
     Report.AddIssue(meikConversion, LayerIndex, PathLayer.Name,
@@ -1310,7 +1324,8 @@ begin
   AddWadaDouble(Result, 'vector matrix d', 1.0);
   AddWadaDouble(Result, 'vector matrix e', 0.0);
   AddWadaDouble(Result, 'vector matrix f', 0.0);
-  OriginalBounds := PointsBounds(PathLayer.Points);
+  OriginalBounds := PointsBounds(BuildPathDisplayPolyline(PathLayer.Points,
+    PathLayer.Bezier, PathLayer.Closed, 16));
   AddWadaInteger(Result, 'vector original position1 x',
     Floor(OriginalBounds.Left));
   AddWadaInteger(Result, 'vector original position1 y',
@@ -2099,6 +2114,7 @@ begin
               MatrixB * VectorPoints[Position2X].X +
                 MatrixD * VectorPoints[Position2X].Y + MatrixF);
           PathData.Name := Format('Path %d', [Paths.Count + 1]);
+          PathData.Bezier := False;
           PathData.Points := Copy(VectorPoints);
           PathData.Closed := PathClosed;
           PathData.Filled := PathClosed and (FillEnabled <> 0);

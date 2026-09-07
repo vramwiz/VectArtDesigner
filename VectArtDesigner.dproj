@@ -1,4 +1,4 @@
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{6ACF092C-3927-4E2D-9C26-F5EB35BA02BF}</ProjectGuid>
         <ProjectVersion>20.4</ProjectVersion>
@@ -80,6 +80,7 @@
         <DCC_DcuOutput>Win64\$(Config)</DCC_DcuOutput>
         <DCC_UsePackage>vcl;rtl;vclx;$(DCC_UsePackage)</DCC_UsePackage>
         <SanitizedProjectName>VectArtDesigner</SanitizedProjectName>
+        <Custom_Styles>&quot;Windows Modern Dark|VCLSTYLE|$(BDSCOMMONDIR)\Styles\WindowsModernDark.vsf&quot;</Custom_Styles>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
         <BT_BuildType>Debug</BT_BuildType>
@@ -101,6 +102,9 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1_Win64)'!=''">
         <BT_BuildType>Debug</BT_BuildType>
+        <VerInfo_Locale>1041</VerInfo_Locale>
+        <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
+        <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1_WinARM64EC)'!=''">
         <BT_BuildType>Debug</BT_BuildType>
@@ -124,13 +128,17 @@
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
-        <DCCReference Include="Source\Shell\VectArtDesignerMainForm.pas">
-            <Form>MainForm</Form>
-        </DCCReference>
-        <DCCReference Include="Lib\DarkMenu\VectArtDarkPopupMenu.pas"/>
+        <DCCReference Include="Lib\TextRenderer\TextRendererSkiaBootstrap.pas"/>
+        <DCCReference Include="Lib\TextRenderer\TextRendererTypes.pas"/>
+        <DCCReference Include="Lib\TextRenderer\TextRenderer.pas"/>
+        <DCCReference Include="Lib\TextRenderer\TextRendererSkiaRuntime.pas"/>
+        <DCCReference Include="Lib\TextRenderer\TextRendererSkia.pas"/>
         <DCCReference Include="Lib\ShortcutAction\ShortcutAction.pas"/>
         <DCCReference Include="Lib\HorizontalTrackBar\HorizontalTrackBarRenderer.pas"/>
         <DCCReference Include="Lib\HorizontalTrackBar\HorizontalTrackBarControl.pas"/>
+        <DCCReference Include="Source\Shell\VectArtDesignerMainForm.pas">
+            <Form>MainForm</Form>
+        </DCCReference>
         <DCCReference Include="Source\Shell\VectArtDesignerFileActionsUI.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerEditActionsUI.pas"/>
         <DCCReference Include="Source\ObjectProperties\VectArtDesignerStrokeStyleCombo.pas"/>
@@ -153,6 +161,8 @@
         <DCCReference Include="Source\Persistence\VectArtDesignerDocumentJson.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerCanvas.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerCanvasInteraction.pas"/>
+        <DCCReference Include="Source\Editor\VectArtDesignerBezierGeometry.pas"/>
+        <DCCReference Include="Source\Editor\VectArtDesignerFreehandGeometry.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerShapeCreation.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerKeyboardMovement.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerEditorWorkspaceFrame.pas"/>
@@ -169,11 +179,6 @@
         <DCCReference Include="Source\ObjectProperties\VectArtDesignerObjectPropertiesFrame.pas"/>
         <DCCReference Include="Source\ToolPalette\VectArtDesignerToolPaletteFrame.pas"/>
         <DCCReference Include="Source\ToolPalette\VectArtDesignerToolPalette.pas"/>
-        <DCCReference Include="Lib\TextRenderer\TextRendererSkiaBootstrap.pas"/>
-        <DCCReference Include="Lib\TextRenderer\TextRendererTypes.pas"/>
-        <DCCReference Include="Lib\TextRenderer\TextRenderer.pas"/>
-        <DCCReference Include="Lib\TextRenderer\TextRendererSkiaRuntime.pas"/>
-        <DCCReference Include="Lib\TextRenderer\TextRendererSkia.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -194,6 +199,10 @@
                 <Source>
                     <Source Name="MainSource">VectArtDesigner.dpr</Source>
                 </Source>
+                <Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dcloffice2k370.bpl">Microsoft Office 2000 オートメーション サーバー ラッパー コンポーネントのサンプル</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp370.bpl">Microsoft Office XP オートメーション サーバー ラッパー コンポーネントのサンプル</Excluded_Packages>
+                </Excluded_Packages>
             </Delphi.Personality>
             <Platforms>
                 <Platform value="Win32">True</Platform>

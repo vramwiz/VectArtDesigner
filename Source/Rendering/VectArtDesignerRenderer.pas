@@ -1,5 +1,5 @@
-﻿// Documentの表示オブジェクトを、各ホストで共有できる透明RGBA8画像へ描画する。
-// 線種と線端マーカーを含むDocumentの編集結果を描画する。
+﻿// Documentの表示オブジェクトを、各表示先で共有できる透明RGBA8画像へ描画する。
+// UI状態を参照せず、線装飾とベジェ属性を含むDocumentだけを描画の正本とする。
 unit VectArtDesignerRenderer;
 
 interface
@@ -49,7 +49,7 @@ implementation
 uses
   System.Math, System.Skia, System.Types, System.UITypes,
   TextRendererSkiaRuntime, Vcl.Graphics, Winapi.Windows,
-  VectArtDesignerGeometry;
+  VectArtDesignerBezierGeometry, VectArtDesignerGeometry;
 
 const
   MAX_RENDER_DIMENSION = 16384;
@@ -102,6 +102,8 @@ begin
   Count := Int64(AWidth) * AHeight;
   if Count > MaxInt then
     raise EArgumentOutOfRangeException.Create('Render buffer is too large');
+  if (FWidth = AWidth) and (FHeight = AHeight) then
+    Exit;
   FWidth := AWidth;
   FHeight := AHeight;
   SetLength(FPixels, NativeInt(Count));
@@ -113,6 +115,8 @@ procedure RenderVectArtDocument(Document: TVectArtDocument;
 var
   Canvas: ISkCanvas;
   CanvasLayer: TVectArtCanvasLayer;
+  Control1: TPointF;
+  Control2: TPointF;
   DashIntervals: TArray<Single>;
   I: Integer;
   J: Integer;
@@ -290,8 +294,24 @@ begin
         Continue;
       PathBuilder := TSkPathBuilder.Create;
       PathBuilder.MoveTo(PathLayer.Points[0]);
-      for J := 1 to High(PathLayer.Points) do
-        PathBuilder.LineTo(PathLayer.Points[J]);
+      if PathLayer.Bezier then
+      begin
+        for J := 0 to High(PathLayer.Points) - 1 do
+        begin
+          SmoothBezierSegmentControls(PathLayer.Points, PathLayer.Closed,
+            J, Control1, Control2);
+          PathBuilder.CubicTo(Control1, Control2, PathLayer.Points[J + 1]);
+        end;
+        if PathLayer.Closed then
+        begin
+          SmoothBezierSegmentControls(PathLayer.Points, True,
+            High(PathLayer.Points), Control1, Control2);
+          PathBuilder.CubicTo(Control1, Control2, PathLayer.Points[0]);
+        end;
+      end
+      else
+        for J := 1 to High(PathLayer.Points) do
+          PathBuilder.LineTo(PathLayer.Points[J]);
       if PathLayer.Closed then
         PathBuilder.Close;
       Path := PathBuilder.Detach;

@@ -59,7 +59,7 @@ implementation
 
 uses
   System.Classes, System.Math, System.UITypes, Winapi.D2D1, Winapi.Windows,
-  VectArtDesignerGeometry;
+  VectArtDesignerBezierGeometry, VectArtDesignerGeometry;
 
 const
   COLOR_LIST_BACKGROUND   = TColor($001A1A1A);
@@ -518,7 +518,8 @@ begin
     PathLayer := TVectArtPathLayer(Layer);
     LineStrokeWidth := VectArtLineThumbnailStrokeWidth(
       PathLayer.StrokeWidth);
-    PathPoints := VectArtPathThumbnailPoints(PathLayer.Points,
+    PathPoints := VectArtPathThumbnailPoints(BuildPathDisplayPolyline(
+      PathLayer.Points, PathLayer.Bezier, PathLayer.Closed, 16),
       ThumbnailRect, LineStrokeWidth);
     SavedDC := SaveDC(ACanvas.Handle);
     try
@@ -779,7 +780,8 @@ begin
     PathLayer := TVectArtPathLayer(Layer);
     LineStrokeWidth := VectArtLineThumbnailStrokeWidth(
       PathLayer.StrokeWidth);
-    PathPoints := VectArtPathThumbnailPoints(PathLayer.Points,
+    PathPoints := VectArtPathThumbnailPoints(BuildPathDisplayPolyline(
+      PathLayer.Points, PathLayer.Bezier, PathLayer.Closed, 16),
       ThumbnailRect, LineStrokeWidth);
     ACanvas.RenderTarget.PushAxisAlignedClip(ThumbnailRect,
       D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);

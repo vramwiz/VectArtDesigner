@@ -1,13 +1,13 @@
-﻿// VectArtDesignerのメイン画面を提供する。
-// 個別ツールの内容はFrameへ分離し、このユニットは外枠と初期配置だけを担当する。
+﻿// VectArtDesignerのメイン画面と標準メニューを構築する。
+// 個別編集UIはFrameへ委譲し、ここではDocument、履歴、ショートカットとの接続を担当する。
 unit VectArtDesignerMainForm;
 
 interface
 
 uses
   System.Classes, System.SysUtils, Vcl.Controls, Vcl.ExtCtrls, Vcl.Forms,
-  Vcl.StdCtrls, Winapi.Windows,
-  ShortcutAction, VectArtDarkPopupMenu, VectArtDesignerContext,
+  Vcl.Menus, Vcl.StdCtrls, Winapi.Windows,
+  ShortcutAction, VectArtDesignerContext,
   VectArtDesignerDockManager,
   VectArtDesignerDocument,
   VectArtDesignerEditHistory, VectArtDesignerEditorState,
@@ -21,11 +21,6 @@ uses
 
 type
   TMainForm = class(TForm)
-    pnlMenuBar: TPanel;
-    lblMenuItems: TLabel;
-    pnlViewMenuButton: TPanel;
-    pnlViewMenuPopup: TPanel;
-    pnlLayoutEditMenuItem: TPanel;
     pnlShortcutBar: TPanel;
     lblShortcutItems: TLabel;
     pnlStatusBar: TPanel;
@@ -42,7 +37,6 @@ type
     procedure FormDestroy(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure FormResize(Sender: TObject);
-    procedure lblLayoutEditMenuItemClick(Sender: TObject);
   private
     FDockManager: TVectDockManager;
     FDesignerContext: IVectArtDesignerContext;
@@ -58,13 +52,14 @@ type
     FSkiaAcquired: Boolean;
     FShortcuts: TShortcutAction;
     FToolPaletteFrame: TToolPaletteFrame;
-    FViewMenu: TVectArtDarkPopupMenu;
+    FMainMenu: TMainMenu;
+    FViewMenu: TMenuItem;
     FLayoutEditing: Boolean;
     FLayoutFileName: string;
-    FMenuGroup: TVectArtDarkMenuGroup;
-    FLayerMenuItem: TPanel;
-    FObjectPropertiesMenuItem: TPanel;
-    FToolPaletteMenuItem: TPanel;
+    FLayoutEditMenuItem: TMenuItem;
+    FLayerMenuItem: TMenuItem;
+    FObjectPropertiesMenuItem: TMenuItem;
+    FToolPaletteMenuItem: TMenuItem;
     FMifContainer: TVectArtMifContainer;
     FMifHasEditableDocument: Boolean;
     FMifAnalysisDetail: string;
@@ -74,7 +69,8 @@ type
     FMifWriter: IVectArtMifContainerWriter;
     procedure AttachFrame(AFrame: TFrame; AHost: TWinControl);
     procedure CanvasSettingsRequest(Sender: TObject);
-    function CreateViewMenuItem(const Caption: string): TPanel;
+    procedure CreateStandardMenus;
+    function CreateViewMenuItem(const Caption: string): TMenuItem;
     procedure DocumentChanged(Sender: TObject);
     procedure FinalizeSkiaRuntime;
     procedure HistoryChanged(Sender: TObject);
@@ -85,6 +81,7 @@ type
     procedure FileSaveShortcut(Sender: TObject);
     procedure InitializeSkiaRuntime;
     procedure InitializeShortcuts;
+    function CanUseToolShortcut: Boolean;
     function IsEditingSurfaceFocused: Boolean;
     function IsTextInputFocused: Boolean;
     function MifConstraintStatusText: string;
@@ -92,6 +89,7 @@ type
     procedure SaveLayoutSettings;
     procedure SelectAllLayers;
     procedure SetLayoutEditing(const Value: Boolean);
+    procedure LayoutEditMenuItemClick(Sender: TObject);
     procedure ToolMenuItemClick(Sender: TObject);
     procedure ToolVisibilityChanged(Sender: TToolPlaceholderFrame);
     procedure UpdateLayoutEditMenu;
@@ -118,21 +116,9 @@ uses
   {$IFDEF DEBUG} VectArtDesignerMifDebugLog, {$ENDIF}
   TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
   VectArtDesignerCanvasSettingsDialog,
-  VectArtDesignerKeyboardMovement, Winapi.Dwmapi;
+  VectArtDesignerKeyboardMovement;
 
 {$R *.dfm}
-
-const
-  DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-
-function CheckedMenuCaption(const IsVisible: Boolean;
-  const Caption: string): string;
-begin
-  if IsVisible then
-    Result := '✓ ' + Caption
-  else
-    Result := '□ ' + Caption;
-end;
 
 function ConstrainToMonitor(const Bounds: TRect): TRect;
 var
@@ -163,29 +149,42 @@ begin
   AFrame.Visible := True;
 end;
 
-function TMainForm.CreateViewMenuItem(const Caption: string): TPanel;
+procedure TMainForm.CreateStandardMenus;
+var
+  EditMenu: TMenuItem;
+  FileMenu: TMenuItem;
 begin
-  Result := TPanel.Create(Self);
-  Result.Parent := pnlViewMenuPopup;
-  Result.Align := alTop;
-  Result.BevelOuter := bvNone;
+  FMainMenu := TMainMenu.Create(Self);
+  Menu := FMainMenu;
+
+  FileMenu := TMenuItem.Create(FMainMenu);
+  FileMenu.Caption := 'ファイル(&F)';
+  FMainMenu.Items.Add(FileMenu);
+  FFileActionsUI := TVectArtFileActionsUI.CreateForMenu(Self, FileMenu);
+
+  EditMenu := TMenuItem.Create(FMainMenu);
+  EditMenu.Caption := '編集(&E)';
+  FMainMenu.Items.Add(EditMenu);
+  FEditActionsUI := TVectArtEditActionsUI.CreateForMenu(Self, EditMenu,
+    pnlShortcutBar);
+
+  FViewMenu := TMenuItem.Create(FMainMenu);
+  FViewMenu.Caption := '表示(&V)';
+  FMainMenu.Items.Add(FViewMenu);
+end;
+
+function TMainForm.CreateViewMenuItem(const Caption: string): TMenuItem;
+begin
+  Result := TMenuItem.Create(Self);
   Result.Caption := Caption;
-  Result.Color := pnlViewMenuPopup.Color;
-  Result.Font.Assign(pnlLayoutEditMenuItem.Font);
-  Result.Height := 32;
-  Result.ParentBackground := False;
   Result.OnClick := ToolMenuItemClick;
+  FViewMenu.Add(Result);
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
-  DarkModeEnabled: BOOL;
   LayoutFolder: string;
 begin
-  DarkModeEnabled := True;
-  DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE,
-    @DarkModeEnabled, SizeOf(DarkModeEnabled));
-
   InitializeSkiaRuntime;
 
   FDocument := TVectArtDocument.Create;
@@ -199,14 +198,10 @@ begin
     FEditorState);
   FMifReader := CreateVectArtMifContainerReader;
   FMifWriter := CreateVectArtMifContainerWriter;
-  lblMenuItems.Visible := False;
   lblShortcutItems.Visible := False;
-  FFileActionsUI := TVectArtFileActionsUI.CreateForHosts(Self, Self,
-    pnlMenuBar);
+  CreateStandardMenus;
   FFileActionsUI.OnOpenFile := FileOpenRequest;
   FFileActionsUI.OnSaveFile := FileSaveRequest;
-  FEditActionsUI := TVectArtEditActionsUI.CreateForHosts(Self, Self,
-    pnlMenuBar, pnlShortcutBar);
   FEditActionsUI.History := FEditHistory;
   FEditActionsUI.OnCanvasSettingsRequest := CanvasSettingsRequest;
   FEditActionsUI.OnOpenRequest := FileOpenShortcut;
@@ -216,12 +211,6 @@ begin
   FLineToolbar.EditHistory := FEditHistory;
   FLineToolbar.EditorState := FEditorState;
   FLineToolbar.BringToFront;
-  FViewMenu := TVectArtDarkPopupMenu.CreateForControls(Self, Self,
-    pnlViewMenuButton, pnlViewMenuPopup);
-  FMenuGroup := TVectArtDarkMenuGroup.Create(Self);
-  FMenuGroup.RegisterMenu(FFileActionsUI.Menu);
-  FMenuGroup.RegisterMenu(FEditActionsUI.Menu);
-  FMenuGroup.RegisterMenu(FViewMenu);
   FEditorFrame := TEditorWorkspaceFrame.Create(Self);
   FEditorFrame.Context := FDesignerContext;
   AttachFrame(FEditorFrame, pnlEditorHost);
@@ -240,8 +229,11 @@ begin
   FDockManager.RegisterTool(FObjectPropertiesFrame, vdsRight);
   FDockManager.OnToolVisibilityChanged := ToolVisibilityChanged;
 
-  pnlViewMenuPopup.Height := 128;
-  pnlLayoutEditMenuItem.Align := alTop;
+  FLayoutEditMenuItem := TMenuItem.Create(Self);
+  FLayoutEditMenuItem.Caption := 'レイアウト編集';
+  FLayoutEditMenuItem.OnClick := LayoutEditMenuItemClick;
+  FViewMenu.Add(FLayoutEditMenuItem);
+  FViewMenu.Add(NewLine);
   FObjectPropertiesMenuItem := CreateViewMenuItem('Object Properties');
   FToolPaletteMenuItem := CreateViewMenuItem('Tools');
   FLayerMenuItem := CreateViewMenuItem('Layers');
@@ -256,7 +248,6 @@ begin
   end;
 
   FLayoutEditing := False;
-  FViewMenu.Close;
   UpdateLayoutEditMenu;
   UpdateToolMenuItems;
   LoadLayoutSettings;
@@ -477,12 +468,12 @@ end;
 
 procedure TMainForm.DocumentChanged(Sender: TObject);
 begin
-  if FEditActionsUI <> nil then
-    FEditActionsUI.RefreshState;
   if FEditorFrame <> nil then
     FEditorFrame.CanvasControl.Invalidate;
   if (FDocument <> nil) and FDocument.IsInteractiveUpdate then
     Exit;
+  if FEditActionsUI <> nil then
+    FEditActionsUI.RefreshState;
   if FLayerFrame <> nil then
     FLayerFrame.RefreshFromDocument;
   if FObjectPropertiesFrame <> nil then
@@ -510,18 +501,7 @@ procedure TMainForm.SetFileMenuVisible(const Value: Boolean);
 begin
   if (FFileActionsUI = nil) or (FEditActionsUI = nil) then
     Exit;
-  FFileActionsUI.Menu.Button.Visible := Value;
-  if Value then
-  begin
-    FEditActionsUI.Menu.Button.Left := 56;
-    pnlViewMenuButton.Left := 92;
-  end
-  else
-  begin
-    FFileActionsUI.Menu.Close;
-    FEditActionsUI.Menu.Button.Left := 0;
-    pnlViewMenuButton.Left := 36;
-  end;
+  FFileActionsUI.Menu.Visible := Value;
 end;
 
 function TMainForm.MifConstraintStatusText: string;
@@ -588,6 +568,18 @@ begin
     (FEditorState.CurrentTool = vetPath) then
     lblStatus.Caption := 'Path: click vertices, click first point to close, ' +
       'double-click/right-click to finish   Canvas: ' + CanvasSize
+  else if (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetBezier) then
+    lblStatus.Caption := 'Bezier: click anchors, double-click/right-click ' +
+      'to finish   Canvas: ' + CanvasSize
+  else if (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetFreehandLine) then
+    lblStatus.Caption := 'Freehand polyline: drag to draw, release to ' +
+      'finish   Canvas: ' + CanvasSize
+  else if (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetFreehandBezier) then
+    lblStatus.Caption := 'Freehand Bezier: drag to draw, release to smooth ' +
+      'and finish   Canvas: ' + CanvasSize
   else
     lblStatus.Caption := 'Ready   Tool: Select   Canvas: ' + CanvasSize;
   if ConstraintStatus <> '' then
@@ -622,7 +614,6 @@ begin
   else if Sender = FObjectPropertiesMenuItem then
     FDockManager.SetToolVisible(FObjectPropertiesFrame,
       not FDockManager.ToolVisible(FObjectPropertiesFrame));
-  FViewMenu.Close;
 end;
 
 procedure TMainForm.ToolVisibilityChanged(Sender: TToolPlaceholderFrame);
@@ -727,6 +718,42 @@ begin
       Result := IsEditingSurfaceFocused and (FLayerFrame <> nil) and
         FLayerFrame.CanRunLayerAction(vlaDuplicate);
     end);
+  FShortcuts.Add(Ord('S'), [],
+    procedure
+    begin
+      FEditorState.CurrentTool := vetSelect;
+    end,
+    function: Boolean
+    begin
+      Result := CanUseToolShortcut;
+    end);
+  FShortcuts.Add(Ord('L'), [],
+    procedure
+    begin
+      FEditorState.CurrentTool := vetLine;
+    end,
+    function: Boolean
+    begin
+      Result := CanUseToolShortcut;
+    end);
+  FShortcuts.Add(Ord('P'), [],
+    procedure
+    begin
+      FEditorState.SelectPathToolGroup;
+    end,
+    function: Boolean
+    begin
+      Result := CanUseToolShortcut;
+    end);
+  FShortcuts.Add(Ord('B'), [],
+    procedure
+    begin
+      FEditorState.SelectFreehandToolGroup;
+    end,
+    function: Boolean
+    begin
+      Result := CanUseToolShortcut;
+    end);
   FShortcuts.Add(VK_DELETE, [],
     procedure
     begin
@@ -747,6 +774,12 @@ begin
       Result := IsEditingSurfaceFocused and (FDocument <> nil) and
         (FDocument.SelectionCount > 0);
     end);
+end;
+
+function TMainForm.CanUseToolShortcut: Boolean;
+begin
+  Result := (FEditorState <> nil) and IsEditingSurfaceFocused and
+    not IsTextInputFocused;
 end;
 
 function TMainForm.IsEditingSurfaceFocused: Boolean;
@@ -879,12 +912,10 @@ end;
 
 procedure TMainForm.UpdateToolMenuItems;
 begin
-  FLayerMenuItem.Caption := CheckedMenuCaption(
-    FDockManager.ToolVisible(FLayerFrame), 'Layers');
-  FToolPaletteMenuItem.Caption := CheckedMenuCaption(
-    FDockManager.ToolVisible(FToolPaletteFrame), 'Tools');
-  FObjectPropertiesMenuItem.Caption := CheckedMenuCaption(
-    FDockManager.ToolVisible(FObjectPropertiesFrame), 'Object Properties');
+  FLayerMenuItem.Checked := FDockManager.ToolVisible(FLayerFrame);
+  FToolPaletteMenuItem.Checked := FDockManager.ToolVisible(FToolPaletteFrame);
+  FObjectPropertiesMenuItem.Checked :=
+    FDockManager.ToolVisible(FObjectPropertiesFrame);
 end;
 
 procedure TMainForm.FormResize(Sender: TObject);
@@ -893,10 +924,9 @@ begin
     FDockManager.Resize;
 end;
 
-procedure TMainForm.lblLayoutEditMenuItemClick(Sender: TObject);
+procedure TMainForm.LayoutEditMenuItemClick(Sender: TObject);
 begin
   SetLayoutEditing(not FLayoutEditing);
-  FViewMenu.Close;
 end;
 
 procedure TMainForm.SetLayoutEditing(const Value: Boolean);
@@ -910,10 +940,7 @@ end;
 
 procedure TMainForm.UpdateLayoutEditMenu;
 begin
-  if FLayoutEditing then
-    pnlLayoutEditMenuItem.Caption := '✓ レイアウト編集'
-  else
-    pnlLayoutEditMenuItem.Caption := '□ レイアウト編集';
+  FLayoutEditMenuItem.Checked := FLayoutEditing;
 end;
 
 end.

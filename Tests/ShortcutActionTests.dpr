@@ -5,6 +5,12 @@ program ShortcutActionTests;
 uses
   System.Classes,
   System.SysUtils,
+  VectArtDesignerGeometry in
+    'Source\Core\VectArtDesignerGeometry.pas',
+  VectArtDesignerDocument in
+    'Source\Core\VectArtDesignerDocument.pas',
+  VectArtDesignerEditorState in
+    'Source\Core\VectArtDesignerEditorState.pas',
   ShortcutAction in 'Lib\ShortcutAction\ShortcutAction.pas';
 
 type
@@ -33,9 +39,11 @@ var
   Gate: TGlobalGate;
   Key: Word;
   PressKey: Char;
+  State: TVectArtEditorState;
 begin
   Action := TShortcutAction.Create;
   Gate := TGlobalGate.Create;
+  State := TVectArtEditorState.Create;
   try
     Fired := 0;
     AllowItem := False;
@@ -96,8 +104,61 @@ begin
         DuplicateRejected := True;
     end;
     Require(DuplicateRejected, 'Duplicate shortcut was accepted');
+
+    Action.OnCanExecute := nil;
+    Action.Add(Ord('S'), [],
+      procedure
+      begin
+        State.CurrentTool := vetSelect;
+      end);
+    Action.Add(Ord('L'), [],
+      procedure
+      begin
+        State.CurrentTool := vetLine;
+      end);
+    Action.Add(Ord('P'), [],
+      procedure
+      begin
+        State.SelectPathToolGroup;
+      end);
+    Action.Add(Ord('B'), [],
+      procedure
+      begin
+        State.SelectFreehandToolGroup;
+      end);
+
+    Key := Ord('P');
+    Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetPath),
+      'P did not select the continuous-line tool');
+    Key := Ord('P');
+    Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetBezier),
+      'Repeated P did not select the continuous-Bezier tool');
+    Key := Ord('P');
+    Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetPath),
+      'Third P did not cycle back to the continuous-line tool');
+
+    Key := Ord('B');
+    Require(Action.KeyDown(Key, []) and
+      (State.CurrentTool = vetFreehandLine),
+      'B did not select the freehand-line tool');
+    Key := Ord('B');
+    Require(Action.KeyDown(Key, []) and
+      (State.CurrentTool = vetFreehandBezier),
+      'Repeated B did not select the freehand-Bezier tool');
+    Key := Ord('B');
+    Require(Action.KeyDown(Key, []) and
+      (State.CurrentTool = vetFreehandLine),
+      'Third B did not cycle back to the freehand-line tool');
+
+    Key := Ord('L');
+    Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetLine),
+      'L did not select the line tool');
+    Key := Ord('S');
+    Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetSelect),
+      'S did not select the selection tool');
     Writeln('Shortcut action tests: PASS');
   finally
+    State.Free;
     Gate.Free;
     Action.Free;
   end;
