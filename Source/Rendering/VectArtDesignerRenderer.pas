@@ -40,6 +40,10 @@ type
 procedure RenderVectArtDocument(Document: TVectArtDocument;
   Target: TVectArtRenderBuffer; Width, Height: Integer;
   MinimumStrokeWidth: Single = 0.0);
+// グループ所属レイヤーだけを元の配置・重なり順のままサムネイルへ収める。
+procedure RenderVectArtGroupThumbnail(Document: TVectArtDocument;
+  GroupId: TVectArtGroupId; Target: TVectArtRenderBuffer;
+  Width, Height: Integer);
 // ストレートアルファRGBA8同士をSource-overで合成する。
 procedure CompositeVectArtRgba(const Source: TVectArtRenderBuffer;
   Destination: PVectArtRgbaPixel; Width, Height: Integer);
@@ -110,12 +114,12 @@ begin
   SetLength(FPixels, NativeInt(Count));
 end;
 
-procedure RenderVectArtDocument(Document: TVectArtDocument;
+procedure RenderVectArtDocumentRegion(Document: TVectArtDocument;
   Target: TVectArtRenderBuffer; Width, Height: Integer;
-  MinimumStrokeWidth: Single);
+  const LogicalBounds: TRectF; GroupId: TVectArtGroupId;
+  MinimumStrokeWidth: Single; ShowHiddenLayers: Boolean);
 var
   Canvas: ISkCanvas;
-  CanvasLayer: TVectArtCanvasLayer;
   Control1: TPointF;
   Control2: TPointF;
   DashIntervals: TArray<Single>;
@@ -131,6 +135,7 @@ var
   SignedHeight: Single;
   RotationDegrees: Single;
   Layer: TVectArtLayer;
+  LayerOpacityMultiplier: Single;
   LineLayer: TVectArtLineLayer;
   Paint: ISkPaint;
   Path: ISkPath;
@@ -185,11 +190,10 @@ begin
     raise EArgumentNilException.Create('Target');
   if not TTextRendererSkiaRuntime.IsAcquired then
     raise EInvalidOp.Create('Skia runtime is not acquired');
-  CanvasLayer := Document.CanvasLayer;
-  if CanvasLayer = nil then
-    raise EInvalidOp.Create('Document canvas is missing');
   if (Width <= 0) or (Height <= 0) then
     raise EArgumentOutOfRangeException.Create('Render dimensions must be positive');
+  if (LogicalBounds.Width <= 0) or (LogicalBounds.Height <= 0) then
+    raise EArgumentOutOfRangeException.Create('Render bounds must be positive');
 
   Target.SetSize(Width, Height);
   Target.Clear;
@@ -201,8 +205,8 @@ begin
     raise EInvalidOp.Create('Cannot create VectArt raster surface');
   Canvas := Surface.Canvas;
   Canvas.Clear(TAlphaColorRec.Null);
-  ScaleX := Width / Max(CanvasLayer.Width, 1);
-  ScaleY := Height / Max(CanvasLayer.Height, 1);
+  ScaleX := Width / LogicalBounds.Width;
+  ScaleY := Height / LogicalBounds.Height;
   MinimumStrokeWidth := Max(MinimumStrokeWidth, 0.0);
   Paint := TSkPaint.Create(TSkPaintStyle.Fill);
   Paint.AntiAlias := True;
@@ -211,11 +215,18 @@ begin
   ImagePaint := TSkPaint.Create;
   ImagePaint.AntiAlias := True;
   Canvas.Scale(ScaleX, ScaleY);
+  Canvas.Translate(-LogicalBounds.Left, -LogicalBounds.Top);
   for I := 1 to Document.LayerCount - 1 do
   begin
     Layer := Document[I];
-    if not Layer.Visible then
+    if (GroupId <> VECTART_NO_GROUP) and (Layer.GroupId <> GroupId) then
       Continue;
+    if not Layer.Visible and not ShowHiddenLayers then
+      Continue;
+    if Layer.Visible then
+      LayerOpacityMultiplier := 1.0
+    else
+      LayerOpacityMultiplier := 0.35;
     if Layer is TVectArtTextLayer then
     begin
       TextLayer := TVectArtTextLayer(Layer);
@@ -229,7 +240,7 @@ begin
         TextLayer.FontSize, TextLayer.FontStyle, TextLayer.Vertical);
       Paint.Style := TSkPaintStyle.Fill;
       Paint.Color := VclColorToAlphaColor(TextLayer.TextColor,
-        TextLayer.Opacity);
+        TextLayer.Opacity * LayerOpacityMultiplier);
       Canvas.Save;
       try
         Canvas.Translate(TextLayer.Bounds.CenterPoint.X,
@@ -281,7 +292,8 @@ begin
       RotationDegrees := RadToDeg(ArcTan2(
         ImageLayer.Points[1].Y - ImageLayer.Points[0].Y,
         ImageLayer.Points[1].X - ImageLayer.Points[0].X));
-      ImagePaint.AlphaF := EnsureRange(ImageLayer.Opacity, 0.0, 1.0);
+      ImagePaint.AlphaF := EnsureRange(
+        ImageLayer.Opacity * LayerOpacityMultiplier, 0.0, 1.0);
       Canvas.Save;
       try
         Canvas.Translate(ImageLayer.Points[0].X, ImageLayer.Points[0].Y);
@@ -302,7 +314,7 @@ begin
       StrokeWidth := Max(Max(LineLayer.StrokeWidth, 0.1),
         MinimumStrokeWidth);
       StrokePaint.Color := VclColorToAlphaColor(LineLayer.StrokeColor,
-        LineLayer.Opacity);
+        LineLayer.Opacity * LayerOpacityMultiplier);
       StrokePaint.StrokeWidth := StrokeWidth;
       DashIntervals := VectArtStrokeDashIntervals(LineLayer.StrokeStyle,
         StrokeWidth);
@@ -367,14 +379,14 @@ begin
       if PathLayer.Filled and PathLayer.Closed then
       begin
         Paint.Color := VclColorToAlphaColor(PathLayer.FillColor,
-          PathLayer.Opacity);
+          PathLayer.Opacity * LayerOpacityMultiplier);
         Canvas.DrawPath(Path, Paint);
       end;
       if PathLayer.StrokeWidth > 0 then
       begin
         StrokeWidth := Max(PathLayer.StrokeWidth, MinimumStrokeWidth);
         StrokePaint.Color := VclColorToAlphaColor(PathLayer.StrokeColor,
-          PathLayer.Opacity);
+          PathLayer.Opacity * LayerOpacityMultiplier);
         StrokePaint.StrokeWidth := StrokeWidth;
         DashIntervals := VectArtStrokeDashIntervals(PathLayer.StrokeStyle,
           StrokeWidth);
@@ -418,7 +430,7 @@ begin
     Paint.AntiAlias := True;
     StrokePaint.AntiAlias := True;
     Paint.Color := VclColorToAlphaColor(RectangleLayer.FillColor,
-      RectangleLayer.Opacity);
+      RectangleLayer.Opacity * LayerOpacityMultiplier);
     Canvas.Save;
     try
       Canvas.Rotate(RectangleLayer.RotationDegrees,
@@ -436,7 +448,7 @@ begin
         StrokeWidth := Max(RectangleLayer.StrokeWidth,
           MinimumStrokeWidth);
         StrokePaint.Color := VclColorToAlphaColor(RectangleLayer.StrokeColor,
-          RectangleLayer.Opacity);
+          RectangleLayer.Opacity * LayerOpacityMultiplier);
         StrokePaint.StrokeWidth := StrokeWidth;
         DashIntervals := VectArtStrokeDashIntervals(
           RectangleLayer.StrokeStyle, StrokeWidth);
@@ -459,6 +471,141 @@ begin
     end;
   end;
   Surface.Flush;
+end;
+
+procedure RenderVectArtDocument(Document: TVectArtDocument;
+  Target: TVectArtRenderBuffer; Width, Height: Integer;
+  MinimumStrokeWidth: Single);
+var
+  CanvasLayer: TVectArtCanvasLayer;
+begin
+  if Document = nil then
+    raise EArgumentNilException.Create('Document');
+  CanvasLayer := Document.CanvasLayer;
+  if CanvasLayer = nil then
+    raise EInvalidOp.Create('Document canvas is missing');
+  RenderVectArtDocumentRegion(Document, Target, Width, Height,
+    RectF(0, 0, Max(CanvasLayer.Width, 1), Max(CanvasLayer.Height, 1)),
+    VECTART_NO_GROUP, MinimumStrokeWidth, False);
+end;
+
+procedure RenderVectArtGroupThumbnail(Document: TVectArtDocument;
+  GroupId: TVectArtGroupId; Target: TVectArtRenderBuffer;
+  Width, Height: Integer);
+const
+  THUMBNAIL_MARGIN = 5;
+var
+  AvailableHeight: Integer;
+  AvailableWidth: Integer;
+  Bounds: TRectF;
+  Center: TPointF;
+  ContentBounds: TRectF;
+  ContentHeight: Single;
+  ContentWidth: Single;
+  Found: Boolean;
+  I: Integer;
+  ImageLayer: TVectArtImageLayer;
+  Layer: TVectArtLayer;
+  LayerBounds: TRectF;
+  LineLayer: TVectArtLineLayer;
+  LogicalHeight: Single;
+  LogicalWidth: Single;
+  PathLayer: TVectArtPathLayer;
+  PointIndex: Integer;
+  RectangleLayer: TVectArtRectangleLayer;
+  Scale: Single;
+  TextLayer: TVectArtTextLayer;
+begin
+  if Document = nil then
+    raise EArgumentNilException.Create('Document');
+  if Target = nil then
+    raise EArgumentNilException.Create('Target');
+  if GroupId = VECTART_NO_GROUP then
+    raise EArgumentOutOfRangeException.Create('GroupId');
+  Found := False;
+  ContentBounds := TRectF.Empty;
+  for I in Document.GetGroupLayerIndices(GroupId) do
+  begin
+    Layer := Document[I];
+    if Layer is TVectArtTextLayer then
+    begin
+      TextLayer := TVectArtTextLayer(Layer);
+      LayerBounds := QuadBounds(RectangleCorners(TextLayer.Bounds,
+        TextLayer.RotationDegrees));
+    end
+    else if Layer is TVectArtRectangleLayer then
+    begin
+      RectangleLayer := TVectArtRectangleLayer(Layer);
+      LayerBounds := QuadBounds(RectangleCorners(RectangleLayer.Bounds,
+        RectangleLayer.RotationDegrees));
+    end
+    else if Layer is TVectArtLineLayer then
+    begin
+      LineLayer := TVectArtLineLayer(Layer);
+      LayerBounds := RectF(Min(LineLayer.StartPoint.X, LineLayer.EndPoint.X),
+        Min(LineLayer.StartPoint.Y, LineLayer.EndPoint.Y),
+        Max(LineLayer.StartPoint.X, LineLayer.EndPoint.X),
+        Max(LineLayer.StartPoint.Y, LineLayer.EndPoint.Y));
+    end
+    else if Layer is TVectArtPathLayer then
+    begin
+      PathLayer := TVectArtPathLayer(Layer);
+      if Length(PathLayer.Points) = 0 then
+        Continue;
+      LayerBounds := PointsBounds(PathLayer.Points);
+    end
+    else if Layer is TVectArtImageLayer then
+    begin
+      ImageLayer := TVectArtImageLayer(Layer);
+      LayerBounds := RectF(ImageLayer.Points[0].X, ImageLayer.Points[0].Y,
+        ImageLayer.Points[0].X, ImageLayer.Points[0].Y);
+      for PointIndex := 1 to High(ImageLayer.Points) do
+      begin
+        LayerBounds.Left := Min(LayerBounds.Left,
+          ImageLayer.Points[PointIndex].X);
+        LayerBounds.Top := Min(LayerBounds.Top,
+          ImageLayer.Points[PointIndex].Y);
+        LayerBounds.Right := Max(LayerBounds.Right,
+          ImageLayer.Points[PointIndex].X);
+        LayerBounds.Bottom := Max(LayerBounds.Bottom,
+          ImageLayer.Points[PointIndex].Y);
+      end;
+    end
+    else
+      Continue;
+    if not Found then
+    begin
+      ContentBounds := LayerBounds;
+      Found := True;
+    end
+    else
+    begin
+      ContentBounds.Left := Min(ContentBounds.Left, LayerBounds.Left);
+      ContentBounds.Top := Min(ContentBounds.Top, LayerBounds.Top);
+      ContentBounds.Right := Max(ContentBounds.Right, LayerBounds.Right);
+      ContentBounds.Bottom := Max(ContentBounds.Bottom, LayerBounds.Bottom);
+    end;
+  end;
+  Target.SetSize(Width, Height);
+  Target.Clear;
+  AvailableWidth := Width - THUMBNAIL_MARGIN * 2;
+  AvailableHeight := Height - THUMBNAIL_MARGIN * 2;
+  if not Found or (AvailableWidth <= 0) or (AvailableHeight <= 0) then
+    Exit;
+  ContentWidth := Max(ContentBounds.Width, 1.0);
+  ContentHeight := Max(ContentBounds.Height, 1.0);
+  Scale := Min(AvailableWidth / ContentWidth,
+    AvailableHeight / ContentHeight);
+  if Scale <= 0 then
+    Exit;
+  LogicalWidth := Width / Scale;
+  LogicalHeight := Height / Scale;
+  Center := ContentBounds.CenterPoint;
+  Bounds := RectF(Center.X - LogicalWidth * 0.5,
+    Center.Y - LogicalHeight * 0.5, Center.X + LogicalWidth * 0.5,
+    Center.Y + LogicalHeight * 0.5);
+  RenderVectArtDocumentRegion(Document, Target, Width, Height, Bounds,
+    GroupId, 1.0 / Scale, True);
 end;
 
 procedure CompositeVectArtRgba(const Source: TVectArtRenderBuffer;

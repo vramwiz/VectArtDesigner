@@ -9,8 +9,14 @@ uses
   Vcl.Controls,
   Vcl.Forms,
   Vcl.Graphics,
+  TextRendererSkiaBootstrap in
+    'Lib\TextRenderer\TextRendererSkiaBootstrap.pas',
+  TextRendererSkiaRuntime in
+    'Lib\TextRenderer\TextRendererSkiaRuntime.pas',
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
+  VectArtDesignerTextGeometry in
+    'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerBezierGeometry in
     'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerSelectionGeometry in
@@ -29,12 +35,16 @@ uses
     'Source\Core\Commands\VectArtDesignerLayerRotationOperations.pas',
   VectArtDesignerLayerVisibilityOperations in
     'Source\Core\Commands\VectArtDesignerLayerVisibilityOperations.pas',
+  VectArtDesignerLayerGroupOperations in
+    'Source\Core\Commands\VectArtDesignerLayerGroupOperations.pas',
   VectArtDesignerObjectContextMenu in
     'Source\Editor\Menus\VectArtDesignerObjectContextMenu.pas',
   VectArtDesignerLayerRenderer in
     'Source\Layers\VectArtDesignerLayerRenderer.pas',
   VectArtDesignerLayerList in
-    'Source\Layers\VectArtDesignerLayerList.pas';
+    'Source\Layers\VectArtDesignerLayerList.pas',
+  VectArtDesignerRenderer in
+    'Source\Rendering\VectArtDesignerRenderer.pas';
 
 type
   TTestLayerList = class(TVectArtLayerListControl)

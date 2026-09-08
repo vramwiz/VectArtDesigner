@@ -116,7 +116,7 @@ uses
   {$IFDEF DEBUG} VectArtDesignerMifDebugLog, {$ENDIF}
   TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
   VectArtDesignerCanvasSettingsDialog,
-  VectArtDesignerKeyboardMovement;
+  VectArtDesignerKeyboardMovement, VectArtDesignerLayerGroupOperations;
 
 {$R *.dfm}
 
@@ -736,6 +736,26 @@ begin
     begin
       Result := IsEditingSurfaceFocused and (FLayerFrame <> nil) and
         FLayerFrame.CanRunLayerAction(vlaDuplicate);
+    end);
+  FShortcuts.Add(Ord('G'), [ssCtrl],
+    procedure
+    begin
+      GroupVectArtSelection(FDocument, FEditHistory);
+    end,
+    function: Boolean
+    begin
+      Result := IsEditingSurfaceFocused and
+        CanGroupVectArtSelection(FDocument);
+    end);
+  FShortcuts.Add(Ord('G'), [ssCtrl, ssShift],
+    procedure
+    begin
+      UngroupVectArtSelection(FDocument, FEditHistory);
+    end,
+    function: Boolean
+    begin
+      Result := IsEditingSurfaceFocused and
+        CanUngroupVectArtSelection(FDocument);
     end);
   FShortcuts.Add(Ord('S'), [],
     procedure

@@ -6,7 +6,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Types, Vcl.Controls, Vcl.Graphics,
-  Vcl.StdCtrls, Winapi.Messages,
+  Vcl.StdCtrls, Vcl.Direct2D, Winapi.Messages,
   VectArtDesignerCanvasInteraction,
   VectArtDesignerDocument, VectArtDesignerEditHistory,
   VectArtDesignerEditorState, VectArtDesignerSelectionGeometry,
@@ -66,6 +66,8 @@ type
     procedure WMDropFiles(var Message: TWMDropFiles); message WM_DROPFILES;
     procedure CalculateCanvasBounds;
     procedure EndPan;
+    procedure DrawSnapGuides(ACanvas: TCanvas); overload;
+    procedure DrawSnapGuides(ACanvas: TDirect2DCanvas); overload;
     procedure PaintDirect2D;
     procedure PaintGDI;
     procedure SetDocument(const Value: TVectArtDocument);
@@ -113,12 +115,12 @@ implementation
 uses
   System.Generics.Collections, System.Math, System.Skia, System.UITypes,
   Winapi.D2D1,
-  Winapi.ShellAPI, Winapi.Windows, Vcl.Dialogs, Vcl.Direct2D, Vcl.Forms,
+  Winapi.ShellAPI, Winapi.Windows, Vcl.Dialogs, Vcl.Forms,
   VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
   VectArtDesignerEditCommands, VectArtDesignerImageFileImport,
   VectArtDesignerLayerBatchCommands,
   VectArtDesignerLayerStructureCommands, VectArtDesignerSelectionOverlay,
-  VectArtDesignerTextGeometry;
+  VectArtDesignerTextGeometry, VectArtDesignerSnapGeometry;
 
 const
   CANVAS_MARGIN         = 32;
@@ -1343,6 +1345,98 @@ begin
   FRenderedPreviewStrokeWidth := PreviewStrokeWidth;
 end;
 
+procedure TVectArtCanvasControl.DrawSnapGuides(ACanvas: TCanvas);
+var
+  Guide: TVectArtDesignerSnapGuide;
+  Guides: TArray<TVectArtDesignerSnapGuide>;
+  TargetRect: TRect;
+  P1, P2: TPoint;
+  OldPenStyle: TPenStyle;
+  OldBrushStyle: TBrushStyle;
+  OldPenColor: TColor;
+  OldPenWidth: Integer;
+  function ScreenPoint(const P: TPointF): TPoint;
+  begin
+    Result := Point(Round(FCanvasBounds.Left + P.X * FZoom),
+      Round(FCanvasBounds.Top + P.Y * FZoom));
+  end;
+begin
+  OldPenStyle := ACanvas.Pen.Style;
+  OldBrushStyle := ACanvas.Brush.Style;
+  OldPenColor := ACanvas.Pen.Color;
+  OldPenWidth := ACanvas.Pen.Width;
+  Guides := FInteraction.SnapGuides;
+  if FShapeCreation.Active then
+    Guides := Guides + FShapeCreation.SnapGuides;
+  for Guide in Guides do
+  begin
+    ACanvas.Pen.Color := TColor($00E6B050);
+    ACanvas.Pen.Style := psDot;
+    ACanvas.Pen.Width := 1;
+    P1 := ScreenPoint(Guide.StartPoint);
+    P2 := ScreenPoint(Guide.EndPoint);
+    ACanvas.MoveTo(P1.X, P1.Y);
+    ACanvas.LineTo(P2.X, P2.Y);
+    if Guide.HighlightTarget then
+    begin
+      TargetRect := TRect.Create(ScreenPoint(Guide.TargetBounds.TopLeft),
+        ScreenPoint(Guide.TargetBounds.BottomRight));
+      ACanvas.Brush.Style := bsClear;
+      ACanvas.Rectangle(TargetRect);
+    end;
+  end;
+  ACanvas.Pen.Style := OldPenStyle;
+  ACanvas.Brush.Style := OldBrushStyle;
+  ACanvas.Pen.Color := OldPenColor;
+  ACanvas.Pen.Width := OldPenWidth;
+end;
+
+procedure TVectArtCanvasControl.DrawSnapGuides(ACanvas: TDirect2DCanvas);
+var
+  Guide: TVectArtDesignerSnapGuide;
+  Guides: TArray<TVectArtDesignerSnapGuide>;
+  TargetRect: TRect;
+  P1, P2: TPoint;
+  OldPenStyle: TPenStyle;
+  OldBrushStyle: TBrushStyle;
+  OldPenColor: TColor;
+  OldPenWidth: Integer;
+  function ScreenPoint(const P: TPointF): TPoint;
+  begin
+    Result := Point(Round(FCanvasBounds.Left + P.X * FZoom),
+      Round(FCanvasBounds.Top + P.Y * FZoom));
+  end;
+begin
+  OldPenStyle := ACanvas.Pen.Style;
+  OldBrushStyle := ACanvas.Brush.Style;
+  OldPenColor := ACanvas.Pen.Color;
+  OldPenWidth := ACanvas.Pen.Width;
+  Guides := FInteraction.SnapGuides;
+  if FShapeCreation.Active then
+    Guides := Guides + FShapeCreation.SnapGuides;
+  for Guide in Guides do
+  begin
+    ACanvas.Pen.Color := TColor($00E6B050);
+    ACanvas.Pen.Style := psDot;
+    ACanvas.Pen.Width := 1;
+    P1 := ScreenPoint(Guide.StartPoint);
+    P2 := ScreenPoint(Guide.EndPoint);
+    ACanvas.MoveTo(P1.X, P1.Y);
+    ACanvas.LineTo(P2.X, P2.Y);
+    if Guide.HighlightTarget then
+    begin
+      TargetRect := TRect.Create(ScreenPoint(Guide.TargetBounds.TopLeft),
+        ScreenPoint(Guide.TargetBounds.BottomRight));
+      ACanvas.Brush.Style := bsClear;
+      ACanvas.Rectangle(TargetRect);
+    end;
+  end;
+  ACanvas.Pen.Style := OldPenStyle;
+  ACanvas.Brush.Style := OldBrushStyle;
+  ACanvas.Pen.Color := OldPenColor;
+  ACanvas.Pen.Width := OldPenWidth;
+end;
+
 procedure TVectArtCanvasControl.PaintDirect2D;
 var
   CanvasLayer: TVectArtCanvasLayer;
@@ -1471,7 +1565,10 @@ begin
           if SelectionOverlay.ShowRotationHandles then
             for RotationHandleIndex := 0 to 3 do
             begin
-              Direct2DCanvas.Brush.Color := TColor($00F0C060);
+              if FInteraction.RotationSnapped then
+                Direct2DCanvas.Brush.Color := TColor($00E6B050)
+              else
+                Direct2DCanvas.Brush.Color := TColor($00F0C060);
               Direct2DCanvas.FillRect(
                 SelectionGeometry.RotationHandles[RotationHandleIndex]);
               Direct2DCanvas.Brush.Color := COLOR_SELECTION;
@@ -1534,6 +1631,7 @@ begin
         Direct2DCanvas.Polyline(PathPreview);
       end;
     finally
+      DrawSnapGuides(Direct2DCanvas);
       Direct2DCanvas.EndDraw;
     end;
   finally
@@ -1644,7 +1742,10 @@ begin
       if SelectionOverlay.ShowRotationHandles then
         for RotationHandleIndex := 0 to 3 do
         begin
-          Canvas.Brush.Color := TColor($00F0C060);
+          if FInteraction.RotationSnapped then
+            Canvas.Brush.Color := TColor($00E6B050)
+          else
+            Canvas.Brush.Color := TColor($00F0C060);
           Canvas.FillRect(SelectionGeometry.RotationHandles[
             RotationHandleIndex]);
           Canvas.Brush.Color := COLOR_SELECTION;
@@ -1705,6 +1806,7 @@ begin
     Canvas.Pen.Color := COLOR_SELECTION;
     Canvas.Polyline(PathPreview);
   end;
+  DrawSnapGuides(Canvas);
 end;
 
 procedure TVectArtCanvasControl.SetReferenceBackgroundRgba(

@@ -8,7 +8,7 @@ uses
   System.Classes, System.Generics.Collections, System.Types, Vcl.Controls,
   VectArtDesignerDocument, VectArtDesignerEditHistory,
   VectArtDesignerEditCommands,
-  VectArtDesignerSelectionGeometry;
+  VectArtDesignerSelectionGeometry, VectArtDesignerSnapGeometry;
 
 type
   TVectArtCanvasDragMode = (vcdmNone, vcdmMove, vcdmResize, vcdmRotate,
@@ -30,6 +30,11 @@ type
     FMoveStartBounds: TArray<TRectF>;
     FMoveImageLayerIndices: TArray<Integer>;
     FMoveStartImagePoints: TArray<TVectArtImagePoints>;
+    FMoveLineLayerIndices: TArray<Integer>;
+    FMoveStartLineEnds: TArray<TPointF>;
+    FMoveStartLineStarts: TArray<TPointF>;
+    FMovePathLayerIndices: TArray<Integer>;
+    FMoveStartPathPoints: TArray<TArray<TPointF>>;
     FDragStartBounds: TRectF;
     FDragStartLineEnd: TPointF;
     FDragStartLineStart: TPointF;
@@ -46,10 +51,14 @@ type
     FSelectionModeLayerIndex: Integer;
     FToggleSelectionModeOnClick: Boolean;
     FZoom: Single;
+    FSnapGuides: TArray<TVectArtDesignerSnapGuide>;
+    FSnapMoveBounds: TRectF;
+    FRotationSnapped: Boolean;
     procedure EndDrag;
     procedure BeginDocumentUpdate;
     procedure ApplyRangeSelection;
     procedure ApplyResizeSelection(X, Y: Integer);
+    procedure AdjustResizeSnap(Shift: TShiftState; var X, Y: Integer);
     procedure ApplyPathResize(X, Y: Integer);
     procedure ApplyImageResize(X, Y: Integer);
     procedure CaptureMoveSelection;
@@ -86,6 +95,8 @@ type
     function MouseUp(Button: TMouseButton): Boolean;
     function LayerAt(X, Y: Integer): Integer;
     function SelectedPathVertexRects: TArray<TRect>;
+    property RotationSnapped: Boolean read FRotationSnapped;
+    property SnapGuides: TArray<TVectArtDesignerSnapGuide> read FSnapGuides;
     property Dragging: Boolean read GetDragging;
     property AxisAlignedSelection: Boolean read FAxisAlignedSelection;
     property EditHistory: TVectArtEditHistory read FEditHistory
@@ -459,7 +470,9 @@ var
   ImagePointIndex: Integer;
   NewBounds: TRectF;
   NewImagePoints: TVectArtImagePoints;
+  NewPathPoints: TArray<TPointF>;
   NewSelectionBounds: TRectF;
+  PointIndex: Integer;
   ScaleX: Single;
   ScaleY: Single;
   StartBounds: TRectF;
@@ -491,6 +504,29 @@ begin
           (FMoveStartImagePoints[I][ImagePointIndex].Y -
            FDragStartBounds.Top) * ScaleY);
     FDocument.SetImagePoints(FMoveImageLayerIndices[I], NewImagePoints);
+  end;
+  for I := 0 to High(FMoveLineLayerIndices) do
+    FDocument.SetLinePoints(FMoveLineLayerIndices[I],
+      TPointF.Create(NewSelectionBounds.Left +
+        (FMoveStartLineStarts[I].X - FDragStartBounds.Left) * ScaleX,
+        NewSelectionBounds.Top +
+        (FMoveStartLineStarts[I].Y - FDragStartBounds.Top) * ScaleY),
+      TPointF.Create(NewSelectionBounds.Left +
+        (FMoveStartLineEnds[I].X - FDragStartBounds.Left) * ScaleX,
+        NewSelectionBounds.Top +
+        (FMoveStartLineEnds[I].Y - FDragStartBounds.Top) * ScaleY));
+  for I := 0 to High(FMovePathLayerIndices) do
+  begin
+    SetLength(NewPathPoints, Length(FMoveStartPathPoints[I]));
+    for PointIndex := 0 to High(NewPathPoints) do
+      NewPathPoints[PointIndex] := TPointF.Create(
+        NewSelectionBounds.Left +
+          (FMoveStartPathPoints[I][PointIndex].X - FDragStartBounds.Left) *
+          ScaleX,
+        NewSelectionBounds.Top +
+          (FMoveStartPathPoints[I][PointIndex].Y - FDragStartBounds.Top) *
+          ScaleY);
+    FDocument.SetPathPoints(FMovePathLayerIndices[I], NewPathPoints);
   end;
 end;
 
@@ -534,14 +570,23 @@ procedure TVectArtCanvasInteraction.CaptureMoveSelection;
 var
   I: Integer;
   ImageIndex: Integer;
+  LineIndex: Integer;
   MoveIndex: Integer;
+  PathIndex: Integer;
 begin
   SetLength(FMoveLayerIndices, FDocument.SelectionCount);
   SetLength(FMoveStartBounds, FDocument.SelectionCount);
   SetLength(FMoveImageLayerIndices, FDocument.SelectionCount);
   SetLength(FMoveStartImagePoints, FDocument.SelectionCount);
+  SetLength(FMoveLineLayerIndices, FDocument.SelectionCount);
+  SetLength(FMoveStartLineStarts, FDocument.SelectionCount);
+  SetLength(FMoveStartLineEnds, FDocument.SelectionCount);
+  SetLength(FMovePathLayerIndices, FDocument.SelectionCount);
+  SetLength(FMoveStartPathPoints, FDocument.SelectionCount);
   MoveIndex := 0;
   ImageIndex := 0;
+  LineIndex := 0;
+  PathIndex := 0;
   for I := 1 to FDocument.LayerCount - 1 do
     if FDocument.IsLayerSelected(I) then
     begin
@@ -563,12 +608,33 @@ begin
         FMoveStartImagePoints[ImageIndex] :=
           TVectArtImageLayer(FDocument[I]).Points;
         Inc(ImageIndex);
+      end
+      else if FDocument[I] is TVectArtLineLayer then
+      begin
+        FMoveLineLayerIndices[LineIndex] := I;
+        FMoveStartLineStarts[LineIndex] :=
+          TVectArtLineLayer(FDocument[I]).StartPoint;
+        FMoveStartLineEnds[LineIndex] :=
+          TVectArtLineLayer(FDocument[I]).EndPoint;
+        Inc(LineIndex);
+      end
+      else if FDocument[I] is TVectArtPathLayer then
+      begin
+        FMovePathLayerIndices[PathIndex] := I;
+        FMoveStartPathPoints[PathIndex] := Copy(
+          TVectArtPathLayer(FDocument[I]).Points);
+        Inc(PathIndex);
       end;
     end;
   SetLength(FMoveLayerIndices, MoveIndex);
   SetLength(FMoveStartBounds, MoveIndex);
   SetLength(FMoveImageLayerIndices, ImageIndex);
   SetLength(FMoveStartImagePoints, ImageIndex);
+  SetLength(FMoveLineLayerIndices, LineIndex);
+  SetLength(FMoveStartLineStarts, LineIndex);
+  SetLength(FMoveStartLineEnds, LineIndex);
+  SetLength(FMovePathLayerIndices, PathIndex);
+  SetLength(FMoveStartPathPoints, PathIndex);
 end;
 
 procedure TVectArtCanvasInteraction.CommitBoundsCommand;
@@ -579,11 +645,17 @@ var
   ImageChanged: Boolean;
   ImageLayer: TVectArtImageLayer;
   ImagePointIndex: Integer;
+  LineLayer: TVectArtLineLayer;
+  PathChanged: Boolean;
+  PathLayer: TVectArtPathLayer;
+  PathPointIndex: Integer;
   NewBounds: TArray<TRectF>;
 begin
   if (FEditHistory = nil) or (FDocument = nil) or
     ((Length(FMoveLayerIndices) = 0) and
-     (Length(FMoveImageLayerIndices) = 0)) then
+     (Length(FMoveImageLayerIndices) = 0) and
+     (Length(FMoveLineLayerIndices) = 0) and
+     (Length(FMovePathLayerIndices) = 0)) then
     Exit;
   Command := TVectArtCompoundCommand.Create;
   SetLength(NewBounds, Length(FMoveLayerIndices));
@@ -620,6 +692,35 @@ begin
         FMoveImageLayerIndices[I], FMoveStartImagePoints[I],
         ImageLayer.Points));
   end;
+  for I := 0 to High(FMoveLineLayerIndices) do
+  begin
+    LineLayer := TVectArtLineLayer(FDocument[FMoveLineLayerIndices[I]]);
+    if not SameValue(FMoveStartLineStarts[I].X, LineLayer.StartPoint.X) or
+      not SameValue(FMoveStartLineStarts[I].Y, LineLayer.StartPoint.Y) or
+      not SameValue(FMoveStartLineEnds[I].X, LineLayer.EndPoint.X) or
+      not SameValue(FMoveStartLineEnds[I].Y, LineLayer.EndPoint.Y) then
+      Command.Add(TVectArtLinePointsCommand.Create(FDocument,
+        FMoveLineLayerIndices[I], FMoveStartLineStarts[I],
+        FMoveStartLineEnds[I], LineLayer.StartPoint, LineLayer.EndPoint));
+  end;
+  for I := 0 to High(FMovePathLayerIndices) do
+  begin
+    PathLayer := TVectArtPathLayer(FDocument[FMovePathLayerIndices[I]]);
+    PathChanged := Length(FMoveStartPathPoints[I]) <> Length(PathLayer.Points);
+    if not PathChanged then
+      for PathPointIndex := 0 to High(PathLayer.Points) do
+        if not SameValue(FMoveStartPathPoints[I][PathPointIndex].X,
+          PathLayer.Points[PathPointIndex].X) or
+          not SameValue(FMoveStartPathPoints[I][PathPointIndex].Y,
+          PathLayer.Points[PathPointIndex].Y) then
+        begin
+          PathChanged := True;
+          Break;
+        end;
+    if PathChanged then
+      Command.Add(TVectArtPathPointsCommand.Create(FDocument,
+        FMovePathLayerIndices[I], FMoveStartPathPoints[I], PathLayer.Points));
+  end;
   if Command.Count > 0 then
     FEditHistory.AddApplied(Command)
   else
@@ -628,6 +729,8 @@ end;
 
 procedure TVectArtCanvasInteraction.EndDrag;
 begin
+  FSnapGuides := nil;
+  FRotationSnapped := False;
   if FDocumentUpdateActive then
   begin
     FDocumentUpdateActive := False;
@@ -647,6 +750,11 @@ begin
   SetLength(FMoveStartBounds, 0);
   SetLength(FMoveImageLayerIndices, 0);
   SetLength(FMoveStartImagePoints, 0);
+  SetLength(FMoveLineLayerIndices, 0);
+  SetLength(FMoveStartLineStarts, 0);
+  SetLength(FMoveStartLineEnds, 0);
+  SetLength(FMovePathLayerIndices, 0);
+  SetLength(FMoveStartPathPoints, 0);
   SetLength(FDragStartPathPoints, 0);
 end;
 
@@ -1262,14 +1370,59 @@ begin
     end;
   end;
   FDragStartMouse := Point(X, Y);
+  FSnapMoveBounds := SelectedLayersLogicalRect;
   if FDragMode in [vcdmMove, vcdmResize, vcdmRotate, vcdmPathVertex] then
     BeginDocumentUpdate;
   Result := True;
 end;
 
+procedure TVectArtCanvasInteraction.AdjustResizeSnap(Shift: TShiftState;
+  var X, Y: Integer);
+var
+  Bounds: TRectF;
+  Proposed, Snapped: TPointF;
+  Guide: TVectArtDesignerSnapGuide;
+  Guides: TArray<TVectArtDesignerSnapGuide>;
+  ChangeX, ChangeY: Boolean;
+begin
+  if (ssAlt in Shift) or FDragIsImage or FDragIsLine then
+    Exit;
+  // 回転したローカル軸では画面XY補正が別の辺にも作用するため対象外にする。
+  if (FDocument.SelectionCount = 1) and
+    (FDocument[FDragLayerIndex] is TVectArtRectangleLayer) and
+    not SameValue(TVectArtRectangleLayer(FDocument[FDragLayerIndex]).RotationDegrees, 0) then
+    Exit;
+  Bounds := ResizedBounds(X, Y);
+  ChangeX := not (FDragHandle in [vshTop, vshBottom]);
+  ChangeY := not (FDragHandle in [vshLeft, vshRight]);
+  Proposed := Bounds.CenterPoint;
+  if FDragHandle in [vshTopLeft, vshLeft, vshBottomLeft] then
+    Proposed.X := Bounds.Left
+  else if ChangeX then
+    Proposed.X := Bounds.Right;
+  if FDragHandle in [vshTopLeft, vshTop, vshTopRight] then
+    Proposed.Y := Bounds.Top
+  else if ChangeY then
+    Proposed.Y := Bounds.Bottom;
+  if not SnapVectArtDesignerPoint(FDocument, Proposed, FZoom, True,
+    Snapped, Guides) then
+    Exit;
+  if ChangeX then
+    X := X + Round((Snapped.X - Proposed.X) * FZoom);
+  if ChangeY then
+    Y := Y + Round((Snapped.Y - Proposed.Y) * FZoom);
+  for Guide in Guides do
+    if ((Guide.Axis = slsaX) and ChangeX) or
+      ((Guide.Axis = slsaY) and ChangeY) then
+      FSnapGuides := FSnapGuides + [Guide];
+end;
+
 function TVectArtCanvasInteraction.MouseMove(Shift: TShiftState;
   X, Y: Integer): Boolean;
 var
+  SnappedPoint: TPointF;
+  Candidates: TArray<TPointF>;
+  AngleValue: Single;
   CenterX: Single;
   CenterY: Single;
   CurrentMouseAngle: Single;
@@ -1289,6 +1442,8 @@ var
   ImageBounds: TRectF;
   RectangleLayer: TVectArtRectangleLayer;
 begin
+  FSnapGuides := nil;
+  FRotationSnapped := False;
   Result := False;
   if FDragMode = vcdmNone then
     Exit;
@@ -1302,6 +1457,8 @@ begin
     FRangeCurrent := Point(X, Y);
     Exit(True);
   end;
+  if FDragMode = vcdmResize then
+    AdjustResizeSnap(Shift, X, Y);
   if FDragMode = vcdmPathVertex then
   begin
     if (FDragLayerIndex <= 0) or (FPathVertexIndex < 0) or
@@ -1313,6 +1470,17 @@ begin
         FDocument.CanvasLayer.Width * 1.0),
       EnsureRange((Y - FCanvasBounds.Top) / FZoom, 0.0,
         FDocument.CanvasLayer.Height * 1.0));
+    if not (ssAlt in Shift) then
+    begin
+      Candidates := nil;
+      for I := 0 to High(FDragStartPathPoints) do
+        if I <> FPathVertexIndex then
+          Candidates := Candidates + [FDragStartPathPoints[I]];
+      if SnapVectArtDesignerPointWithCandidates(FDocument,
+        NewPathPoints[FPathVertexIndex], FZoom, True, Candidates,
+        SnappedPoint, FSnapGuides) then
+        NewPathPoints[FPathVertexIndex] := SnappedPoint;
+    end;
     FDocument.SetPathPoints(FDragLayerIndex, NewPathPoints);
     Exit(True);
   end;
@@ -1324,6 +1492,13 @@ begin
     FMoveOccurred := True;
     DX := (X - FDragStartMouse.X) / FZoom;
     DY := (Y - FDragStartMouse.Y) / FZoom;
+    if not (ssAlt in Shift) and SnapVectArtDesignerMove(FDocument,
+      FSnapMoveBounds, TPointF.Create(DX, DY), FZoom, SnappedPoint,
+      FSnapGuides) then
+    begin
+      DX := SnappedPoint.X;
+      DY := SnappedPoint.Y;
+    end;
     if FDragIsImage then
     begin
       for I := 0 to High(NewImagePoints) do
@@ -1365,6 +1540,21 @@ begin
           FMoveStartImagePoints[I][ImagePointIndex].Y + DY);
       FDocument.SetImagePoints(FMoveImageLayerIndices[I], NewImagePoints);
     end;
+    for I := 0 to High(FMoveLineLayerIndices) do
+      FDocument.SetLinePoints(FMoveLineLayerIndices[I],
+        TPointF.Create(FMoveStartLineStarts[I].X + DX,
+          FMoveStartLineStarts[I].Y + DY),
+        TPointF.Create(FMoveStartLineEnds[I].X + DX,
+          FMoveStartLineEnds[I].Y + DY));
+    for I := 0 to High(FMovePathLayerIndices) do
+    begin
+      SetLength(NewPathPoints, Length(FMoveStartPathPoints[I]));
+      for ImagePointIndex := 0 to High(NewPathPoints) do
+        NewPathPoints[ImagePointIndex] := TPointF.Create(
+          FMoveStartPathPoints[I][ImagePointIndex].X + DX,
+          FMoveStartPathPoints[I][ImagePointIndex].Y + DY);
+      FDocument.SetPathPoints(FMovePathLayerIndices[I], NewPathPoints);
+    end;
     Exit(True);
   end
   else if FDragMode = vcdmRotate then
@@ -1380,11 +1570,17 @@ begin
       CenterY := FCanvasBounds.Top +
         (ImageBounds.Top + ImageBounds.Bottom) * 0.5 * FZoom;
       CurrentMouseAngle := RadToDeg(ArcTan2(Y - CenterY, X - CenterX));
+      FRotationSnapped := ssShift in Shift;
+      AngleValue := CurrentMouseAngle - FRotationStartMouseAngle;
+      if ssShift in Shift then
+        AngleValue := Round(AngleValue / 15) * 15
+      else if not (ssAlt in Shift) then
+        FRotationSnapped := SnapVectArtDesignerAngle(AngleValue, AngleValue);
       for I := 0 to High(NewImagePoints) do
         NewImagePoints[I] := RotatePointAround(FDragStartImagePoints[I],
           TPointF.Create((ImageBounds.Left + ImageBounds.Right) * 0.5,
             (ImageBounds.Top + ImageBounds.Bottom) * 0.5),
-          CurrentMouseAngle - FRotationStartMouseAngle);
+          AngleValue);
       FDocument.SetImagePoints(FDragLayerIndex, NewImagePoints);
       Exit(True);
     end;
@@ -1398,8 +1594,13 @@ begin
       (RectangleLayer.Bounds.Top + RectangleLayer.Bounds.Bottom) *
       0.5 * FZoom;
     CurrentMouseAngle := RadToDeg(ArcTan2(Y - CenterY, X - CenterX));
-    FDocument.SetRectangleRotation(FDragLayerIndex,
-      FRotationStartValue + CurrentMouseAngle - FRotationStartMouseAngle);
+    FRotationSnapped := ssShift in Shift;
+    AngleValue := FRotationStartValue + CurrentMouseAngle - FRotationStartMouseAngle;
+    if ssShift in Shift then
+      AngleValue := Round(AngleValue / 15) * 15
+    else if not (ssAlt in Shift) then
+      FRotationSnapped := SnapVectArtDesignerAngle(AngleValue, AngleValue);
+    FDocument.SetRectangleRotation(FDragLayerIndex, AngleValue);
     Exit(True);
   end
   else if FDragIsImage then
@@ -1426,14 +1627,18 @@ begin
     LogicalMouseX := (X - FCanvasBounds.Left) / FZoom;
     LogicalMouseY := (Y - FCanvasBounds.Top) / FZoom;
     if FDragHandle = vshTopLeft then
-      FDocument.SetLinePoints(FDragLayerIndex,
-        TPointF.Create(LogicalMouseX + LineUnitX * LogicalHandleDistance,
-          LogicalMouseY + LineUnitY * LogicalHandleDistance),
-        FDragStartLineEnd)
+      SnappedPoint := PointF(LogicalMouseX + LineUnitX * LogicalHandleDistance,
+        LogicalMouseY + LineUnitY * LogicalHandleDistance)
+    else
+      SnappedPoint := PointF(LogicalMouseX - LineUnitX * LogicalHandleDistance,
+        LogicalMouseY - LineUnitY * LogicalHandleDistance);
+    if not (ssAlt in Shift) then
+      SnapVectArtDesignerPoint(FDocument, SnappedPoint, FZoom, True,
+        SnappedPoint, FSnapGuides);
+    if FDragHandle = vshTopLeft then
+      FDocument.SetLinePoints(FDragLayerIndex, SnappedPoint, FDragStartLineEnd)
     else if FDragHandle = vshBottomRight then
-      FDocument.SetLinePoints(FDragLayerIndex, FDragStartLineStart,
-        TPointF.Create(LogicalMouseX - LineUnitX * LogicalHandleDistance,
-          LogicalMouseY - LineUnitY * LogicalHandleDistance));
+      FDocument.SetLinePoints(FDragLayerIndex, FDragStartLineStart, SnappedPoint);
   end
   else
     ApplyResizeSelection(X, Y);

@@ -6,7 +6,7 @@ interface
 
 uses
   System.Classes, System.Types, Vcl.Controls, VectArtDesignerDocument,
-  VectArtDesignerEditorState, VectArtDesignerEditHistory;
+  VectArtDesignerEditorState, VectArtDesignerEditHistory, VectArtDesignerSnapGeometry;
 
 type
   TVectArtShapeCreation = class
@@ -22,6 +22,8 @@ type
     FPathPoints: TArray<TPoint>;
     FStartPoint: TPoint;
     FZoom: Single;
+    FSnapGuides: TArray<TVectArtDesignerSnapGuide>;
+    function AdjustPoint(const Value: TPoint; Shift: TShiftState): TPoint;
     function ClampToCanvas(const Point: TPoint): TPoint;
     procedure CreateLine;
     procedure CreatePath(Closed: Boolean);
@@ -47,6 +49,7 @@ type
     function PreviewIsRoundedRectangle: Boolean;
     function PreviewIsEllipse: Boolean;
     function PreviewLine(out StartPoint, EndPoint: TPoint): Boolean;
+    property SnapGuides: TArray<TVectArtDesignerSnapGuide> read FSnapGuides;
     property Active: Boolean read FActive;
   end;
 
@@ -66,9 +69,81 @@ const
   FREEHAND_SAMPLE_DISTANCE = 2;
   FREEHAND_SIMPLIFY_TOLERANCE = 1.5;
 
+function TVectArtShapeCreation.AdjustPoint(const Value: TPoint;
+  Shift: TShiftState): TPoint;
+var
+  Logical, RawPoint, Snapped, Anchor: TPointF;
+  Candidates: TArray<TPointF>;
+  I: Integer;
+  Angle, Distance: Single;
+  Guide: TVectArtDesignerSnapGuide;
+  HasAnchor, AngleSnapped: Boolean;
+begin
+  Result := ClampToCanvas(Value);
+  FSnapGuides := nil;
+  if (FZoom <= 0) or (FEditorState = nil) or
+    (FEditorState.CurrentTool in [vetFreehandLine, vetFreehandBezier]) then
+    Exit;
+  Logical := PointF((Result.X - FCanvasBounds.Left) / FZoom,
+    (Result.Y - FCanvasBounds.Top) / FZoom);
+  RawPoint := Logical;
+  Candidates := nil;
+  for I := 0 to High(FPathPoints) do
+    Candidates := Candidates + [PointF((FPathPoints[I].X - FCanvasBounds.Left) / FZoom,
+      (FPathPoints[I].Y - FCanvasBounds.Top) / FZoom)];
+  HasAnchor := FActive and (FEditorState.CurrentTool in
+    [vetLine, vetPath, vetBezier, vetClosedPath, vetClosedBezier]);
+  Anchor := PointF((FStartPoint.X - FCanvasBounds.Left) / FZoom,
+    (FStartPoint.Y - FCanvasBounds.Top) / FZoom);
+  if Length(Candidates) > 0 then
+    Anchor := Candidates[High(Candidates)];
+  AngleSnapped := False;
+  if HasAnchor then
+  begin
+    if ssShift in Shift then
+    begin
+      if Abs(Logical.X - Anchor.X) >= Abs(Logical.Y - Anchor.Y) then
+        Logical.Y := Anchor.Y
+      else
+        Logical.X := Anchor.X;
+    end
+    else if not (ssAlt in Shift) then
+    begin
+      Angle := RadToDeg(ArcTan2(Logical.Y - Anchor.Y, Logical.X - Anchor.X));
+      Distance := Hypot(Logical.X - Anchor.X, Logical.Y - Anchor.Y);
+      AngleSnapped := SnapVectArtDesignerAngle(Angle, Angle);
+      if AngleSnapped then
+        Logical := PointF(Anchor.X + Distance * Cos(DegToRad(Angle)),
+          Anchor.Y + Distance * Sin(DegToRad(Angle)));
+    end;
+  end;
+  if not (ssAlt in Shift) and not (HasAnchor and (ssShift in Shift)) and
+    SnapVectArtDesignerPointWithCandidates(FDocument, RawPoint, FZoom,
+      False, Candidates, Snapped, FSnapGuides) then
+  begin
+    Logical := Snapped;
+    AngleSnapped := False;
+  end;
+  if AngleSnapped then
+  begin
+    Guide := Default(TVectArtDesignerSnapGuide);
+    Guide.Axis := slsaAngle;
+    Guide.StartPoint := Anchor;
+    Guide.EndPoint := Logical;
+    FSnapGuides := [Guide];
+  end;
+  Result := ClampToCanvas(Point(Round(FCanvasBounds.Left + Logical.X * FZoom),
+    Round(FCanvasBounds.Top + Logical.Y * FZoom)));
+  // 正方形・中心基準作成はPreviewRectで最終補正するため候補線を残さない。
+  if FEditorState.CurrentTool in [vetRectangle, vetEllipse, vetRoundedRectangle] then
+    if (ssShift in Shift) or (ssAlt in Shift) then
+      FSnapGuides := nil;
+end;
+
 procedure TVectArtShapeCreation.CancelPath;
 begin
   FActive := False;
+  FSnapGuides := nil;
   SetLength(FPathPoints, 0);
 end;
 
@@ -269,7 +344,7 @@ begin
     PtInRect(FCanvasBounds, Point(X, Y));
   if not Result then
     Exit;
-  PointValue := ClampToCanvas(Point(X, Y));
+  PointValue := AdjustPoint(Point(X, Y), Shift);
   if FEditorState.CurrentTool in [vetFreehandLine, vetFreehandBezier] then
   begin
     FActive := True;
@@ -327,7 +402,7 @@ begin
       CancelPath;
       Exit;
     end;
-    FCurrentPoint := ClampToCanvas(Point(X, Y));
+    FCurrentPoint := AdjustPoint(Point(X, Y), Shift);
     if FreehandPointIsFarEnough(FPathPoints[High(FPathPoints)],
       FCurrentPoint, FREEHAND_SAMPLE_DISTANCE) then
     begin
@@ -340,15 +415,16 @@ begin
     (FEditorState.CurrentTool in [vetPath, vetBezier, vetClosedPath,
       vetClosedBezier]) then
   begin
-    FCurrentPoint := ClampToCanvas(Point(X, Y));
+    FCurrentPoint := AdjustPoint(Point(X, Y), Shift);
     Exit;
   end;
   if not (ssLeft in Shift) then
   begin
     FActive := False;
+    FSnapGuides := nil;
     Exit;
   end;
-  FCurrentPoint := ClampToCanvas(Point(X, Y));
+  FCurrentPoint := AdjustPoint(Point(X, Y), Shift);
   FModifiers := Shift;
 end;
 
@@ -362,7 +438,7 @@ begin
   Result := (Button = mbLeft) and FActive;
   if not Result then
     Exit;
-  FCurrentPoint := ClampToCanvas(Point(X, Y));
+  FCurrentPoint := AdjustPoint(Point(X, Y), Shift);
   FModifiers := Shift;
   if FEditorState.CurrentTool in [vetFreehandLine, vetFreehandBezier] then
   begin
@@ -385,6 +461,7 @@ begin
   else
     CreateRectangle;
   FActive := False;
+  FSnapGuides := nil;
 end;
 
 function TVectArtShapeCreation.FinishPath(Closed: Boolean): Boolean;

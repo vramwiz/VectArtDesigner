@@ -9,6 +9,9 @@ uses
   Vcl.Graphics;
 
 type
+  TVectArtLayerId = UInt64;
+  TVectArtGroupId = UInt64;
+
   TVectArtLayerKind = (vlkCanvas, vlkRectangle, vlkLine, vlkPath, vlkImage,
     vlkText);
   TVectArtPrimitiveShape = (vpsRectangle, vpsEllipse);
@@ -30,6 +33,9 @@ type
 
   TVectArtLayer = class
   private
+    FGroupId: TVectArtGroupId;
+    FLayerId: TVectArtLayerId;
+    FRevision: Int64;
     FKind: TVectArtLayerKind;
     FLocked: Boolean;
     FName: string;
@@ -38,10 +44,13 @@ type
   protected
     constructor Create(AKind: TVectArtLayerKind; const AName: string);
   public
+    property GroupId: TVectArtGroupId read FGroupId;
     property Kind: TVectArtLayerKind read FKind;
+    property LayerId: TVectArtLayerId read FLayerId;
     property Locked: Boolean read FLocked write FLocked;
     property Name: string read FName write FName;
     property Opacity: Single read FOpacity write FOpacity;
+    property Revision: Int64 read FRevision;
     property Visible: Boolean read FVisible write FVisible;
   end;
 
@@ -89,6 +98,7 @@ type
     Bounds: TRectF;                         // 回転前の基本矩形。
     FillColor: TColor;                      // 内部の塗り色。
     Filled: Boolean;                        // 内部を塗る状態。
+    GroupId: TVectArtGroupId;               // フラットなグループ所属。0は未所属。
     Locked: Boolean;                        // 編集を禁止する状態。
     Name: string;                           // レイヤー一覧の表示名。
     Opacity: Single;                        // 0.0..1.0のレイヤー不透明度。
@@ -140,6 +150,7 @@ type
     EndMarkerSize: Single;               // 終点マーカー倍率。
     LineCap: TVectArtLineCap;               // 共通の線端形状。
     LineJoin: TVectArtLineJoin;             // 共通の線結合形状。
+    GroupId: TVectArtGroupId;               // フラットなグループ所属。0は未所属。
     Locked: Boolean;                        // 編集を禁止する状態。
     Name: string;                           // レイヤー一覧の表示名。
     Opacity: Single;                        // 0.0..1.0のレイヤー不透明度。
@@ -204,6 +215,7 @@ type
     Filled: Boolean;                        // 閉領域を塗る状態。
     LineCap: TVectArtLineCap;               // 開いたPathの線端形状。
     LineJoin: TVectArtLineJoin;             // 頂点間の線結合形状。
+    GroupId: TVectArtGroupId;               // フラットなグループ所属。0は未所属。
     AntiAlias: Boolean;                  // MIF vector qualityに対応する品質値。
     Locked: Boolean;                        // 編集を禁止する状態。
     Name: string;                           // レイヤー一覧の表示名。
@@ -234,6 +246,7 @@ type
   end;
 
   TVectArtImageData = record
+    GroupId: TVectArtGroupId;            // フラットなグループ所属。0は未所属。
     Locked: Boolean;                     // 編集を禁止する状態。
     Name: string;                        // レイヤー一覧の表示名。
     Opacity: Single;                     // 0.0..1.0のレイヤー不透明度。
@@ -287,6 +300,7 @@ type
     FontFamily: string;
     FontSize: Single;
     FontStyle: TFontStyles;
+    GroupId: TVectArtGroupId;     // フラットなグループ所属。0は未所属。
     LetterSpacingRatio: Single; // FontSizeに対する字間の割合。0が標準。
     LineSpacingRatio: Single;   // FontSizeに対する追加行間の割合。0が標準。
     Locked: Boolean;
@@ -305,6 +319,12 @@ type
     FChangePending: Boolean;
     FInteractiveChanged: Boolean;
     FInteractiveUpdateCount: Integer;
+    FLayerIndexById: TDictionary<TVectArtLayerId, Integer>;
+    FGroupMembersById: TObjectDictionary<TVectArtGroupId, TList<Integer>>;
+    FLayerRelationsValid: Boolean;
+    FLayerRelationRevision: Int64;
+    FNextGroupId: TVectArtGroupId;
+    FNextLayerId: TVectArtLayerId;
     FOnChanged: TNotifyEvent;
     FRevision: Int64;
     FSelectedIndex: Integer;
@@ -315,19 +335,28 @@ type
     function GetLayerCount: Integer;
     function GetIsInteractiveUpdate: Boolean;
     function GetSelectionCount: Integer;
+    procedure DoChanged;
+    procedure EnsureLayerIdentity(Layer: TVectArtLayer);
+    procedure InvalidateLayerRelations;
+    procedure RebuildLayerRelations;
     procedure SelectionChanged;
     procedure SetSelectedLayersCore(const Indices: array of Integer;
       Notify: Boolean);
     procedure SetSelectedIndex(const Value: Integer);
+    procedure StructureChanged;
   public
     constructor Create;
     destructor Destroy; override;
     procedure BeginInteractiveUpdate;
     procedure BeginUpdate;
     procedure Changed;
+    procedure ChangedLayer(Index: Integer);
     procedure EndInteractiveUpdate;
     procedure EndUpdate;
     function GetSelectedLayerIndices: TArray<Integer>;
+    function AllocateGroupId: TVectArtGroupId;
+    function GetGroupLayerIndices(GroupId: TVectArtGroupId): TArray<Integer>;
+    function IndexOfLayerId(LayerId: TVectArtLayerId): Integer;
     function InsertRectangle(Index: Integer;
       const Data: TVectArtRectangleData): Integer;
     function InsertLine(Index: Integer; const Data: TVectArtLineData): Integer;
@@ -363,6 +392,7 @@ type
     procedure SetPathStartMarker(Index: Integer; Value: TVectArtLineMarker);
     procedure SetPathStartMarkerSize(Index: Integer; Value: Single);
     procedure SetLayerLocked(Index: Integer; Value: Boolean);
+    procedure SetLayerGroup(Index: Integer; GroupId: TVectArtGroupId);
     procedure SetLayerOpacity(Index: Integer; Value: Single);
     procedure SetLayerVisible(Index: Integer; Value: Boolean);
     procedure MoveLayer(FromIndex, ToIndex: Integer);
@@ -384,6 +414,7 @@ type
     property LayerCount: Integer read GetLayerCount;
     property Layers[Index: Integer]: TVectArtLayer read GetLayer; default;
     property IsInteractiveUpdate: Boolean read GetIsInteractiveUpdate;
+    property LayerRelationRevision: Int64 read FLayerRelationRevision;
     property OnChanged: TNotifyEvent read FOnChanged write FOnChanged;
     property Revision: Int64 read FRevision;
     property SelectedIndex: Integer read FSelectedIndex write SetSelectedIndex;
@@ -391,6 +422,7 @@ type
   end;
 
 const
+  VECTART_NO_GROUP: TVectArtGroupId = 0;
   DEFAULT_CANVAS_WIDTH = 1920;
   DEFAULT_CANVAS_HEIGHT = 1080;
   // 旧実装名はMIF style 3（ダッシュ・ドット）として互換維持する。
@@ -445,10 +477,13 @@ constructor TVectArtLayer.Create(AKind: TVectArtLayerKind;
   const AName: string);
 begin
   inherited Create;
+  FGroupId := VECTART_NO_GROUP;
   FKind := AKind;
+  FLayerId := 0;
   FLocked := False;
   FName := AName;
   FOpacity := 1.0;
+  FRevision := 0;
   FVisible := True;
 end;
 
@@ -569,6 +604,7 @@ begin
   Result.FontFamily := Layer.FontFamily;
   Result.FontSize := Layer.FontSize;
   Result.FontStyle := Layer.FontStyle;
+  Result.GroupId := Layer.GroupId;
   Result.LetterSpacingRatio := Layer.LetterSpacingRatio;
   Result.LineSpacingRatio := Layer.LineSpacingRatio;
   Result.Locked := Layer.Locked;
@@ -587,20 +623,29 @@ constructor TVectArtDocument.Create;
 begin
   inherited Create;
   FLayers := TObjectList<TVectArtLayer>.Create(True);
+  FLayerIndexById := TDictionary<TVectArtLayerId, Integer>.Create;
+  FGroupMembersById := TObjectDictionary<TVectArtGroupId,
+    TList<Integer>>.Create([doOwnsValues]);
   FSelectedLayers := TList<Integer>.Create;
   FLayers.Add(TVectArtCanvasLayer.Create(DEFAULT_CANVAS_WIDTH,
     DEFAULT_CANVAS_HEIGHT, clWhite));
+  FNextGroupId := 1;
+  FNextLayerId := 1;
+  EnsureLayerIdentity(FLayers[0]);
+  FLayerRelationsValid := False;
   FSelectedIndex := -1;
 end;
 
 destructor TVectArtDocument.Destroy;
 begin
   FSelectedLayers.Free;
+  FGroupMembersById.Free;
+  FLayerIndexById.Free;
   FLayers.Free;
   inherited Destroy;
 end;
 
-procedure TVectArtDocument.Changed;
+procedure TVectArtDocument.DoChanged;
 begin
   if FUpdateCount > 0 then
   begin
@@ -612,6 +657,77 @@ begin
     FInteractiveChanged := True;
   if Assigned(FOnChanged) then
     FOnChanged(Self);
+end;
+
+procedure TVectArtDocument.Changed;
+var
+  Layer: TVectArtLayer;
+begin
+  // 呼び出し側が変更レイヤーを特定できない場合だけ全キャッシュを失効させる。
+  for Layer in FLayers do
+    Inc(Layer.FRevision);
+  DoChanged;
+end;
+
+procedure TVectArtDocument.ChangedLayer(Index: Integer);
+begin
+  if (Index < 0) or (Index >= FLayers.Count) then
+    Exit;
+  Inc(FLayers[Index].FRevision);
+  DoChanged;
+end;
+
+procedure TVectArtDocument.EnsureLayerIdentity(Layer: TVectArtLayer);
+begin
+  if Layer = nil then
+    Exit;
+  if Layer.FLayerId = 0 then
+  begin
+    Layer.FLayerId := FNextLayerId;
+    Inc(FNextLayerId);
+  end
+  else if Layer.FLayerId >= FNextLayerId then
+    FNextLayerId := Layer.FLayerId + 1;
+end;
+
+procedure TVectArtDocument.InvalidateLayerRelations;
+begin
+  FLayerRelationsValid := False;
+  Inc(FLayerRelationRevision);
+end;
+
+procedure TVectArtDocument.RebuildLayerRelations;
+var
+  GroupMembers: TList<Integer>;
+  I: Integer;
+  Layer: TVectArtLayer;
+begin
+  if FLayerRelationsValid then
+    Exit;
+  FLayerIndexById.Clear;
+  FGroupMembersById.Clear;
+  for I := 0 to FLayers.Count - 1 do
+  begin
+    Layer := FLayers[I];
+    EnsureLayerIdentity(Layer);
+    FLayerIndexById.AddOrSetValue(Layer.LayerId, I);
+    if Layer.GroupId = VECTART_NO_GROUP then
+      Continue;
+    if not FGroupMembersById.TryGetValue(Layer.GroupId, GroupMembers) then
+    begin
+      GroupMembers := TList<Integer>.Create;
+      FGroupMembersById.Add(Layer.GroupId, GroupMembers);
+    end;
+    GroupMembers.Add(I);
+  end;
+  FLayerRelationsValid := True;
+end;
+
+procedure TVectArtDocument.StructureChanged;
+begin
+  InvalidateLayerRelations;
+  // 並べ替えや追加・削除では既存レイヤーの描画内容自体は変わらない。
+  DoChanged;
 end;
 
 procedure TVectArtDocument.BeginInteractiveUpdate;
@@ -645,7 +761,7 @@ begin
   if (FUpdateCount = 0) and FChangePending then
   begin
     FChangePending := False;
-    Changed;
+    DoChanged;
   end;
 end;
 
@@ -658,6 +774,34 @@ end;
 function TVectArtDocument.GetSelectedLayerIndices: TArray<Integer>;
 begin
   Result := FSelectedLayers.ToArray;
+end;
+
+function TVectArtDocument.AllocateGroupId: TVectArtGroupId;
+begin
+  Result := FNextGroupId;
+  Inc(FNextGroupId);
+end;
+
+function TVectArtDocument.GetGroupLayerIndices(
+  GroupId: TVectArtGroupId): TArray<Integer>;
+var
+  GroupMembers: TList<Integer>;
+begin
+  Result := nil;
+  if GroupId = VECTART_NO_GROUP then
+    Exit;
+  RebuildLayerRelations;
+  if FGroupMembersById.TryGetValue(GroupId, GroupMembers) then
+    Result := GroupMembers.ToArray;
+end;
+
+function TVectArtDocument.IndexOfLayerId(LayerId: TVectArtLayerId): Integer;
+begin
+  Result := -1;
+  if LayerId = 0 then
+    Exit;
+  RebuildLayerRelations;
+  FLayerIndexById.TryGetValue(LayerId, Result);
 end;
 
 function TVectArtDocument.GetIsInteractiveUpdate: Boolean;
@@ -675,6 +819,9 @@ begin
   RectangleLayer := TVectArtRectangleLayer.Create(Data.Name, Data.Bounds,
     Data.FillColor);
   RectangleLayer.Filled := Data.Filled;
+  RectangleLayer.FGroupId := Data.GroupId;
+  if Data.GroupId >= FNextGroupId then
+    FNextGroupId := Data.GroupId + 1;
   RectangleLayer.Locked := Data.Locked;
   RectangleLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
   RectangleLayer.RotationDegrees := NormalizeAngleDegrees(
@@ -687,13 +834,14 @@ begin
   RectangleLayer.StrokeStyle := Data.StrokeStyle;
   RectangleLayer.StrokeWidth := Max(Data.StrokeWidth, 0.0);
   RectangleLayer.Visible := Data.Visible;
+  EnsureLayerIdentity(RectangleLayer);
   FLayers.Insert(Result, RectangleLayer);
   for I := 0 to FSelectedLayers.Count - 1 do
     if FSelectedLayers[I] >= Result then
       FSelectedLayers[I] := FSelectedLayers[I] + 1;
   if FSelectedIndex >= Result then
     Inc(FSelectedIndex);
-  Changed;
+  StructureChanged;
 end;
 
 function TVectArtDocument.InsertLine(Index: Integer;
@@ -706,6 +854,9 @@ begin
   LineLayer := TVectArtLineLayer.Create(Data.Name, Data.StartPoint,
     Data.EndPoint);
   LineLayer.Locked := Data.Locked;
+  LineLayer.FGroupId := Data.GroupId;
+  if Data.GroupId >= FNextGroupId then
+    FNextGroupId := Data.GroupId + 1;
   LineLayer.LineCap := Data.LineCap;
   LineLayer.AntiAlias := Data.AntiAlias;
   LineLayer.EndMarker := Data.EndMarker;
@@ -718,13 +869,14 @@ begin
   LineLayer.StrokeStyle := Data.StrokeStyle;
   LineLayer.StrokeWidth := Max(Data.StrokeWidth, 0.1);
   LineLayer.Visible := Data.Visible;
+  EnsureLayerIdentity(LineLayer);
   FLayers.Insert(Result, LineLayer);
   for I := 0 to FSelectedLayers.Count - 1 do
     if FSelectedLayers[I] >= Result then
       FSelectedLayers[I] := FSelectedLayers[I] + 1;
   if FSelectedIndex >= Result then
     Inc(FSelectedIndex);
-  Changed;
+  StructureChanged;
 end;
 
 function TVectArtDocument.InsertPath(Index: Integer;
@@ -743,6 +895,9 @@ begin
   PathLayer.Filled := Data.Filled;
   PathLayer.LineCap := Data.LineCap;
   PathLayer.LineJoin := Data.LineJoin;
+  PathLayer.FGroupId := Data.GroupId;
+  if Data.GroupId >= FNextGroupId then
+    FNextGroupId := Data.GroupId + 1;
   PathLayer.AntiAlias := Data.AntiAlias;
   PathLayer.Locked := Data.Locked;
   PathLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
@@ -752,13 +907,14 @@ begin
   PathLayer.StrokeStyle := Data.StrokeStyle;
   PathLayer.StrokeWidth := Max(Data.StrokeWidth, 0.0);
   PathLayer.Visible := Data.Visible;
+  EnsureLayerIdentity(PathLayer);
   FLayers.Insert(Result, PathLayer);
   for I := 0 to FSelectedLayers.Count - 1 do
     if FSelectedLayers[I] >= Result then
       FSelectedLayers[I] := FSelectedLayers[I] + 1;
   if FSelectedIndex >= Result then
     Inc(FSelectedIndex);
-  Changed;
+  StructureChanged;
 end;
 
 function TVectArtDocument.InsertImage(Index: Integer;
@@ -771,15 +927,19 @@ begin
   ImageLayer := TVectArtImageLayer.Create(Data.Name, Data.PngData,
     Data.Points, Data.SourceKind, Data.SourceFileName);
   ImageLayer.Locked := Data.Locked;
+  ImageLayer.FGroupId := Data.GroupId;
+  if Data.GroupId >= FNextGroupId then
+    FNextGroupId := Data.GroupId + 1;
   ImageLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
   ImageLayer.Visible := Data.Visible;
+  EnsureLayerIdentity(ImageLayer);
   FLayers.Insert(Result, ImageLayer);
   for I := 0 to FSelectedLayers.Count - 1 do
     if FSelectedLayers[I] >= Result then
       FSelectedLayers[I] := FSelectedLayers[I] + 1;
   if FSelectedIndex >= Result then
     Inc(FSelectedIndex);
-  Changed;
+  StructureChanged;
 end;
 
 function TVectArtDocument.InsertText(Index: Integer;
@@ -794,6 +954,9 @@ begin
   TextLayer.FlipHorizontal := Data.FlipHorizontal;
   TextLayer.FlipVertical := Data.FlipVertical;
   TextLayer.FontStyle := Data.FontStyle;
+  TextLayer.FGroupId := Data.GroupId;
+  if Data.GroupId >= FNextGroupId then
+    FNextGroupId := Data.GroupId + 1;
   TextLayer.LetterSpacingRatio := Data.LetterSpacingRatio;
   TextLayer.LineSpacingRatio := Data.LineSpacingRatio;
   TextLayer.Locked := Data.Locked;
@@ -801,13 +964,14 @@ begin
   TextLayer.RotationDegrees := NormalizeAngleDegrees(Data.RotationDegrees);
   TextLayer.Vertical := Data.Vertical;
   TextLayer.Visible := Data.Visible;
+  EnsureLayerIdentity(TextLayer);
   FLayers.Insert(Result, TextLayer);
   for I := 0 to FSelectedLayers.Count - 1 do
     if FSelectedLayers[I] >= Result then
       FSelectedLayers[I] := FSelectedLayers[I] + 1;
   if FSelectedIndex >= Result then
     Inc(FSelectedIndex);
-  Changed;
+  StructureChanged;
 end;
 
 procedure TVectArtDocument.MoveLayer(FromIndex, ToIndex: Integer);
@@ -834,7 +998,7 @@ begin
       (Selection[I] < FromIndex) then
       Inc(Selection[I]);
   SetSelectedLayersCore(Selection, False);
-  Changed;
+  StructureChanged;
 end;
 
 function TVectArtDocument.RemoveRectangle(Index: Integer;
@@ -852,6 +1016,7 @@ begin
   Data.Bounds := RectangleLayer.Bounds;
   Data.FillColor := RectangleLayer.FillColor;
   Data.Filled := RectangleLayer.Filled;
+  Data.GroupId := RectangleLayer.GroupId;
   Data.Locked := RectangleLayer.Locked;
   Data.Name := RectangleLayer.Name;
   Data.Opacity := RectangleLayer.Opacity;
@@ -875,7 +1040,7 @@ begin
   finally
     Selection.Free;
   end;
-  Changed;
+  StructureChanged;
 end;
 
 function TVectArtDocument.RemoveLine(Index: Integer;
@@ -896,6 +1061,7 @@ begin
   Data.EndMarker := LineLayer.EndMarker;
   Data.EndMarkerSize := LineLayer.EndMarkerSize;
   Data.LineJoin := LineLayer.LineJoin;
+  Data.GroupId := LineLayer.GroupId;
   Data.StartMarker := LineLayer.StartMarker;
   Data.StartMarkerSize := LineLayer.StartMarkerSize;
   Data.Locked := LineLayer.Locked;
@@ -920,7 +1086,7 @@ begin
   finally
     Selection.Free;
   end;
-  Changed;
+  StructureChanged;
 end;
 
 function TVectArtDocument.RemovePath(Index: Integer;
@@ -945,6 +1111,7 @@ begin
   Data.LineCap := PathLayer.LineCap;
   Data.LineJoin := PathLayer.LineJoin;
   Data.AntiAlias := PathLayer.AntiAlias;
+  Data.GroupId := PathLayer.GroupId;
   Data.Locked := PathLayer.Locked;
   Data.Name := PathLayer.Name;
   Data.Opacity := PathLayer.Opacity;
@@ -969,7 +1136,7 @@ begin
   finally
     Selection.Free;
   end;
-  Changed;
+  StructureChanged;
 end;
 
 function TVectArtDocument.RemoveImage(Index: Integer;
@@ -985,6 +1152,7 @@ begin
     Exit;
   ImageLayer := TVectArtImageLayer(FLayers[Index]);
   Data.Locked := ImageLayer.Locked;
+  Data.GroupId := ImageLayer.GroupId;
   Data.Name := ImageLayer.Name;
   Data.Opacity := ImageLayer.Opacity;
   Data.PngData := Copy(ImageLayer.PngData);
@@ -1006,7 +1174,7 @@ begin
   finally
     Selection.Free;
   end;
-  Changed;
+  StructureChanged;
 end;
 
 function TVectArtDocument.RemoveText(Index: Integer;
@@ -1034,7 +1202,7 @@ begin
   finally
     Selection.Free;
   end;
-  Changed;
+  StructureChanged;
 end;
 
 procedure TVectArtDocument.SetTextData(Index: Integer;
@@ -1052,6 +1220,13 @@ begin
   Layer.FontFamily := Data.FontFamily;
   Layer.FontSize := Max(Data.FontSize, 1.0);
   Layer.FontStyle := Data.FontStyle;
+  if Layer.GroupId <> Data.GroupId then
+  begin
+    Layer.FGroupId := Data.GroupId;
+    if Data.GroupId >= FNextGroupId then
+      FNextGroupId := Data.GroupId + 1;
+    InvalidateLayerRelations;
+  end;
   Layer.LetterSpacingRatio := Data.LetterSpacingRatio;
   Layer.LineSpacingRatio := Data.LineSpacingRatio;
   Layer.Locked := Data.Locked;
@@ -1062,7 +1237,7 @@ begin
   Layer.TextColor := Data.TextColor;
   Layer.Vertical := Data.Vertical;
   Layer.Visible := Data.Visible;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 function TVectArtDocument.GetCanvasLayer: TVectArtCanvasLayer;
@@ -1106,7 +1281,7 @@ begin
     Exit;
   Canvas.Width := AWidth;
   Canvas.Height := AHeight;
-  Changed;
+  ChangedLayer(0);
 end;
 
 procedure TVectArtDocument.SetSelectedIndex(const Value: Integer);
@@ -1114,15 +1289,10 @@ var
   NewValue: Integer;
 begin
   NewValue := EnsureRange(Value, -1, FLayers.Count - 1);
-  if (FSelectedIndex = NewValue) and
-    (((NewValue < 0) and (FSelectedLayers.Count = 0)) or
-     ((FSelectedLayers.Count = 1) and (FSelectedLayers[0] = NewValue))) then
-    Exit;
-  FSelectedLayers.Clear;
   if NewValue >= 0 then
-    FSelectedLayers.Add(NewValue);
-  FSelectedIndex := NewValue;
-  SelectionChanged;
+    SetSelectedLayersCore([NewValue], True)
+  else
+    SetSelectedLayersCore([], True);
 end;
 
 procedure TVectArtDocument.SetSelectedLayers(const Indices: array of Integer);
@@ -1161,8 +1331,12 @@ end;
 procedure TVectArtDocument.SetSelectedLayersCore(
   const Indices: array of Integer; Notify: Boolean);
 var
+  GroupId: TVectArtGroupId;
+  GroupMembers: TArray<Integer>;
   I: Integer;
   Index: Integer;
+  MemberIndex: Integer;
+  RequestedCount: Integer;
   HasSelectionChanged: Boolean;
   ValidIndices: TList<Integer>;
 begin
@@ -1172,6 +1346,19 @@ begin
       if (Index > 0) and (Index < FLayers.Count) and
         not ValidIndices.Contains(Index) then
         ValidIndices.Add(Index);
+    // どの入口から選択しても、フラットグループは常に一体として扱う。
+    RequestedCount := ValidIndices.Count;
+    for I := 0 to RequestedCount - 1 do
+    begin
+      GroupId := FLayers[ValidIndices[I]].GroupId;
+      if GroupId = VECTART_NO_GROUP then
+        Continue;
+      GroupMembers := GetGroupLayerIndices(GroupId);
+      for MemberIndex in GroupMembers do
+        if not ValidIndices.Contains(MemberIndex) then
+          ValidIndices.Add(MemberIndex);
+    end;
+    ValidIndices.Sort;
     HasSelectionChanged := ValidIndices.Count <> FSelectedLayers.Count;
     if not HasSelectionChanged then
       for I := 0 to ValidIndices.Count - 1 do
@@ -1197,6 +1384,9 @@ end;
 
 procedure TVectArtDocument.ToggleSelectedLayer(Index: Integer);
 var
+  GroupId: TVectArtGroupId;
+  GroupMembers: TArray<Integer>;
+  MemberIndex: Integer;
   Selection: TList<Integer>;
 begin
   if (Index <= 0) or (Index >= FLayers.Count) then
@@ -1204,7 +1394,19 @@ begin
   Selection := TList<Integer>.Create;
   try
     Selection.AddRange(FSelectedLayers);
-    if Selection.Contains(Index) then
+    GroupId := FLayers[Index].GroupId;
+    if GroupId <> VECTART_NO_GROUP then
+    begin
+      GroupMembers := GetGroupLayerIndices(GroupId);
+      if Selection.Contains(Index) then
+        for MemberIndex in GroupMembers do
+          Selection.Remove(MemberIndex)
+      else
+        for MemberIndex in GroupMembers do
+          if not Selection.Contains(MemberIndex) then
+            Selection.Add(MemberIndex);
+    end
+    else if Selection.Contains(Index) then
       Selection.Remove(Index)
     else
       Selection.Add(Index);
@@ -1247,7 +1449,7 @@ begin
     TextLayer.Bounds := Value
   else
     RectangleLayer.Bounds := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetRectangleFillColor(Index: Integer;
@@ -1262,7 +1464,7 @@ begin
   if RectangleLayer.FillColor = Value then
     Exit;
   RectangleLayer.FillColor := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetRectangleRotation(Index: Integer;
@@ -1279,7 +1481,7 @@ begin
   if SameValue(RectangleLayer.RotationDegrees, NewValue) then
     Exit;
   RectangleLayer.RotationDegrees := NewValue;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetRectangleStroke(Index: Integer; Color: TColor;
@@ -1300,7 +1502,7 @@ begin
   RectangleLayer.StrokeColor := Color;
   RectangleLayer.StrokeWidth := NewWidth;
   RectangleLayer.StrokeStyle := Style;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLinePoints(Index: Integer;
@@ -1319,7 +1521,7 @@ begin
     Exit;
   LineLayer.StartPoint := StartPoint;
   LineLayer.EndPoint := EndPoint;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLineCap(Index: Integer;
@@ -1334,7 +1536,7 @@ begin
   if LineLayer.LineCap = Value then
     Exit;
   LineLayer.LineCap := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLineAntiAlias(Index: Integer; Value: Boolean);
@@ -1348,7 +1550,7 @@ begin
   if LineLayer.AntiAlias = Value then
     Exit;
   LineLayer.AntiAlias := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLineEndMarker(Index: Integer;
@@ -1363,7 +1565,7 @@ begin
   if LineLayer.EndMarker = Value then
     Exit;
   LineLayer.EndMarker := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLineEndMarkerSize(Index: Integer; Value: Single);
@@ -1377,7 +1579,7 @@ begin
   NewValue := Max(Value, 1.0);
   if SameValue(LineLayer.EndMarkerSize, NewValue) then Exit;
   LineLayer.EndMarkerSize := NewValue;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLineStartMarker(Index: Integer;
@@ -1392,7 +1594,7 @@ begin
   if LineLayer.StartMarker = Value then
     Exit;
   LineLayer.StartMarker := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLineStartMarkerSize(Index: Integer; Value: Single);
@@ -1406,7 +1608,7 @@ begin
   NewValue := Max(Value, 1.0);
   if SameValue(LineLayer.StartMarkerSize, NewValue) then Exit;
   LineLayer.StartMarkerSize := NewValue;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLineJoin(Index: Integer;
@@ -1421,7 +1623,7 @@ begin
   if LineLayer.LineJoin = Value then
     Exit;
   LineLayer.LineJoin := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLineStroke(Index: Integer; Color: TColor;
@@ -1442,7 +1644,7 @@ begin
   LineLayer.StrokeColor := Color;
   LineLayer.StrokeWidth := NewWidth;
   LineLayer.StrokeStyle := Style;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetImagePoints(Index: Integer;
@@ -1455,7 +1657,7 @@ begin
     Exit;
   ImageLayer := TVectArtImageLayer(FLayers[Index]);
   ImageLayer.Points := Points;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetPathPoints(Index: Integer;
@@ -1480,7 +1682,7 @@ begin
       Exit;
   end;
   PathLayer.Points := Copy(Points);
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetPathFill(Index: Integer; Color: TColor;
@@ -1497,7 +1699,7 @@ begin
     Exit;
   PathLayer.FillColor := Color;
   PathLayer.Filled := Filled;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetPathEndMarker(Index: Integer;
@@ -1512,7 +1714,7 @@ begin
   if PathLayer.EndMarker = Value then
     Exit;
   PathLayer.EndMarker := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetPathEndMarkerSize(Index: Integer;
@@ -1529,7 +1731,7 @@ begin
   if SameValue(PathLayer.EndMarkerSize, NewValue) then
     Exit;
   PathLayer.EndMarkerSize := NewValue;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetPathLineCap(Index: Integer;
@@ -1544,7 +1746,7 @@ begin
   if PathLayer.LineCap = Value then
     Exit;
   PathLayer.LineCap := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetPathLineJoin(Index: Integer;
@@ -1559,7 +1761,7 @@ begin
   if PathLayer.LineJoin = Value then
     Exit;
   PathLayer.LineJoin := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetPathAntiAlias(Index: Integer;
@@ -1574,7 +1776,7 @@ begin
   if PathLayer.AntiAlias = Value then
     Exit;
   PathLayer.AntiAlias := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetPathStartMarker(Index: Integer;
@@ -1589,7 +1791,7 @@ begin
   if PathLayer.StartMarker = Value then
     Exit;
   PathLayer.StartMarker := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetPathStartMarkerSize(Index: Integer;
@@ -1606,7 +1808,7 @@ begin
   if SameValue(PathLayer.StartMarkerSize, NewValue) then
     Exit;
   PathLayer.StartMarkerSize := NewValue;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetPathStroke(Index: Integer; Color: TColor;
@@ -1627,7 +1829,7 @@ begin
   PathLayer.StrokeColor := Color;
   PathLayer.StrokeWidth := NewWidth;
   PathLayer.StrokeStyle := Style;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLayerLocked(Index: Integer; Value: Boolean);
@@ -1636,7 +1838,20 @@ begin
     (FLayers[Index].Locked = Value) then
     Exit;
   FLayers[Index].Locked := Value;
-  Changed;
+  ChangedLayer(Index);
+end;
+
+procedure TVectArtDocument.SetLayerGroup(Index: Integer;
+  GroupId: TVectArtGroupId);
+begin
+  if (Index <= 0) or (Index >= FLayers.Count) or
+    (FLayers[Index].GroupId = GroupId) then
+    Exit;
+  FLayers[Index].FGroupId := GroupId;
+  if GroupId >= FNextGroupId then
+    FNextGroupId := GroupId + 1;
+  InvalidateLayerRelations;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLayerOpacity(Index: Integer; Value: Single);
@@ -1649,7 +1864,7 @@ begin
   if SameValue(FLayers[Index].Opacity, NewValue) then
     Exit;
   FLayers[Index].Opacity := NewValue;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 procedure TVectArtDocument.SetLayerVisible(Index: Integer; Value: Boolean);
@@ -1658,7 +1873,7 @@ begin
     (FLayers[Index].Visible = Value) then
     Exit;
   FLayers[Index].Visible := Value;
-  Changed;
+  ChangedLayer(Index);
 end;
 
 end.

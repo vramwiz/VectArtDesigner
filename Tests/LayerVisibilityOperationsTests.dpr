@@ -15,6 +15,7 @@ uses
   VectArtDesignerLayerFlipOperations in 'Source\Core\Commands\VectArtDesignerLayerFlipOperations.pas',
   VectArtDesignerLayerRotationOperations in 'Source\Core\Commands\VectArtDesignerLayerRotationOperations.pas',
   VectArtDesignerLayerVisibilityOperations in 'Source\Core\Commands\VectArtDesignerLayerVisibilityOperations.pas',
+  VectArtDesignerLayerGroupOperations in 'Source\Core\Commands\VectArtDesignerLayerGroupOperations.pas',
   VectArtDesignerObjectContextMenu in 'Source\Editor\Menus\VectArtDesignerObjectContextMenu.pas';
 
 procedure Require(Condition: Boolean; const MessageText: string);
@@ -74,9 +75,14 @@ begin
     Menu.Document := Document;
     Menu.EditHistory := History;
     Menu.RefreshState;
-    Require((Menu.Items.Count = 3) and
+    Require((Menu.Items.Count >= 3) and
       (Menu.Items[0].Caption = '非表示(&H)') and Menu.Items[0].Checked,
       'shared context menu did not show the hidden check');
+    Require((Menu.Items[1].Caption = 'グループ(&G)') and
+      (Menu.Items[1].Count = 2) and
+      (Menu.Items[1].Items[0].Caption = 'グループ化(&G)') and
+      (Menu.Items[1].Items[1].Caption = 'グループ解除(&U)'),
+      'group commands were not placed in the group submenu');
     Menu.Items[0].Click;
     Require(Document[1].Visible and Document[2].Visible,
       'shared context menu did not show the selection');

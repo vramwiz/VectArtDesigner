@@ -15,16 +15,21 @@ type
     FEditHistory: TVectArtEditHistory;
     FFlipHorizontalItem: TMenuItem;
     FFlipVerticalItem: TMenuItem;
+    FGroupItem: TMenuItem;
+    FGroupMenu: TMenuItem;
     FHideItem: TMenuItem;
     FOnExecuted: TNotifyEvent;
     FRotate180Item: TMenuItem;
     FRotateLeftItem: TMenuItem;
     FRotateRightItem: TMenuItem;
+    FUngroupItem: TMenuItem;
     procedure FlipHorizontalClick(Sender: TObject);
     procedure FlipVerticalClick(Sender: TObject);
+    procedure GroupClick(Sender: TObject);
     procedure HideClick(Sender: TObject);
     procedure MenuPopup(Sender: TObject);
     procedure RotateClick(Sender: TObject);
+    procedure UngroupClick(Sender: TObject);
     procedure NotifyExecuted;
   public
     constructor Create(AOwner: TComponent); override;
@@ -39,6 +44,7 @@ implementation
 
 uses
   VectArtDesignerLayerFlipOperations,
+  VectArtDesignerLayerGroupOperations,
   VectArtDesignerLayerRotationOperations,
   VectArtDesignerLayerVisibilityOperations;
 
@@ -54,6 +60,20 @@ begin
   FHideItem.Caption := '非表示(&H)';
   FHideItem.OnClick := HideClick;
   Items.Add(FHideItem);
+
+  FGroupMenu := TMenuItem.Create(Self);
+  FGroupMenu.Caption := 'グループ(&G)';
+  Items.Add(FGroupMenu);
+  FGroupItem := TMenuItem.Create(Self);
+  FGroupItem.Caption := 'グループ化(&G)';
+  FGroupItem.ShortCut := ShortCut(Ord('G'), [ssCtrl]);
+  FGroupItem.OnClick := GroupClick;
+  FGroupMenu.Add(FGroupItem);
+  FUngroupItem := TMenuItem.Create(Self);
+  FUngroupItem.Caption := 'グループ解除(&U)';
+  FUngroupItem.ShortCut := ShortCut(Ord('G'), [ssCtrl, ssShift]);
+  FUngroupItem.OnClick := UngroupClick;
+  FGroupMenu.Add(FUngroupItem);
 
   FlipMenu := TMenuItem.Create(Self);
   FlipMenu.Caption := '反転(&F)';
@@ -105,6 +125,12 @@ begin
   NotifyExecuted;
 end;
 
+procedure TVectArtObjectContextMenu.GroupClick(Sender: TObject);
+begin
+  GroupVectArtSelection(FDocument, FEditHistory);
+  NotifyExecuted;
+end;
+
 procedure TVectArtObjectContextMenu.MenuPopup(Sender: TObject);
 begin
   RefreshState;
@@ -117,6 +143,9 @@ begin
   FHideItem.Enabled := (FDocument <> nil) and
     (FDocument.SelectionCount > 0);
   FHideItem.Checked := IsVectArtSelectionHidden(FDocument);
+  FGroupItem.Enabled := CanGroupVectArtSelection(FDocument);
+  FUngroupItem.Enabled := CanUngroupVectArtSelection(FDocument);
+  FGroupMenu.Enabled := FGroupItem.Enabled or FUngroupItem.Enabled;
   Enabled := CanFlipVectArtSelection(FDocument);
   FFlipHorizontalItem.Enabled := Enabled;
   FFlipVerticalItem.Enabled := Enabled;
@@ -137,6 +166,12 @@ begin
   if Sender is TMenuItem then
     RotateVectArtSelection(FDocument, FEditHistory,
       TMenuItem(Sender).Tag);
+  NotifyExecuted;
+end;
+
+procedure TVectArtObjectContextMenu.UngroupClick(Sender: TObject);
+begin
+  UngroupVectArtSelection(FDocument, FEditHistory);
   NotifyExecuted;
 end;
 

@@ -73,6 +73,7 @@ var
   Data: TArray<TVectArtRectangleData>;
   DataList: TList<TVectArtRectangleData>;
   I: Integer;
+  DuplicateGroupId: TVectArtGroupId;
   ImageData: TArray<TVectArtImageData>;
   ImageDataList: TList<TVectArtImageData>;
   ImageLayer: TVectArtImageLayer;
@@ -92,6 +93,20 @@ begin
   if not CanDuplicateSelectedLayers(ADocument) then
     Exit;
   BeforeSelection := ADocument.GetSelectedLayerIndices;
+  DuplicateGroupId := VECTART_NO_GROUP;
+  if (Length(BeforeSelection) > 1) and
+    (ADocument[BeforeSelection[0]].GroupId <> VECTART_NO_GROUP) then
+  begin
+    DuplicateGroupId := ADocument[BeforeSelection[0]].GroupId;
+    for I := 1 to High(BeforeSelection) do
+      if ADocument[BeforeSelection[I]].GroupId <> DuplicateGroupId then
+      begin
+        DuplicateGroupId := VECTART_NO_GROUP;
+        Break;
+      end;
+    if DuplicateGroupId <> VECTART_NO_GROUP then
+      DuplicateGroupId := ADocument.AllocateGroupId;
+  end;
   DataList := TList<TVectArtRectangleData>.Create;
   ImageDataList := TList<TVectArtImageData>.Create;
   TextDataList := TList<TVectArtTextData>.Create;
@@ -107,6 +122,8 @@ begin
         if ADocument[I] is TVectArtImageLayer then
         begin
           ImageLayer := TVectArtImageLayer(ADocument[I]);
+          ImageValue := Default(TVectArtImageData);
+          ImageValue.GroupId := DuplicateGroupId;
           ImageValue.Name := CopyName(ImageLayer.Name, UsedNames);
           ImageValue.Locked := False;
           ImageValue.Opacity := ImageLayer.Opacity;
@@ -124,6 +141,7 @@ begin
         begin
           TextLayer := TVectArtTextLayer(ADocument[I]);
           TextValue := CaptureVectArtTextData(TextLayer);
+          TextValue.GroupId := DuplicateGroupId;
           TextValue.Name := CopyName(TextLayer.Name, UsedNames);
           TextValue.Locked := False;
           TextValue.Bounds.Offset(DUPLICATE_OFFSET, DUPLICATE_OFFSET);
@@ -132,6 +150,8 @@ begin
         else
         begin
           RectangleLayer := TVectArtRectangleLayer(ADocument[I]);
+          RectangleData := Default(TVectArtRectangleData);
+          RectangleData.GroupId := DuplicateGroupId;
           RectangleData.Bounds := RectangleLayer.Bounds;
           RectangleData.Bounds.Offset(DUPLICATE_OFFSET, DUPLICATE_OFFSET);
           RectangleData.FillColor := RectangleLayer.FillColor;

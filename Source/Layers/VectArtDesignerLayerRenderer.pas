@@ -5,9 +5,20 @@ interface
 
 uses
   System.Generics.Collections, System.SysUtils, System.Types, Vcl.Direct2D,
-  Vcl.Graphics, Vcl.Imaging.pngimage, VectArtDesignerDocument;
+  Vcl.Graphics, Vcl.Imaging.pngimage, VectArtDesignerDocument,
+  VectArtDesignerRenderer;
 
 type
+  TVectArtLayerThumbnailBackground = (vltbWhite, vltbCheckerboard);
+
+  TVectArtLayerDisplayEntry = record
+    GroupId: TVectArtGroupId;
+    IsGroupHeader: Boolean;
+    IsGroupMember: Boolean;
+    LayerIndex: Integer;
+    MemberCount: Integer;
+  end;
+
   TVectArtImageThumbnailCacheEntry = class
   public
     Image: TPngImage;
@@ -15,18 +26,49 @@ type
     destructor Destroy; override;
   end;
 
+  TVectArtGroupThumbnailCacheEntry = class
+  public
+    Bitmap: Vcl.Graphics.TBitmap;
+    Signature: UInt64;
+    destructor Destroy; override;
+  end;
+
   TVectArtLayerRenderer = class
   private
     FDocument: TVectArtDocument;
+    FEntries: TArray<TVectArtLayerDisplayEntry>;
+    FEntriesRelationRevision: Int64;
+    FExpandedGroups: TDictionary<TVectArtGroupId, Byte>;
+    FGroupThumbnailBuffer: TVectArtRenderBuffer;
+    FGroupThumbnails: TObjectDictionary<TVectArtGroupId,
+      TVectArtGroupThumbnailCacheEntry>;
     FImageThumbnails: TObjectDictionary<TVectArtImageLayer,
       TVectArtImageThumbnailCacheEntry>;
+    FThumbnailBackground: TVectArtLayerThumbnailBackground;
     FThumbnailRevision: Int64;
     function ImageDataSignature(const Data: TBytes): UInt64;
     function ImageThumbnail(ImageLayer: TVectArtImageLayer): TPngImage;
+    function GroupThumbnailSignature(GroupId: TVectArtGroupId): UInt64;
+    procedure RebuildEntries;
     procedure SetDocument(const Value: TVectArtDocument);
+    procedure SetThumbnailBackground(
+      const Value: TVectArtLayerThumbnailBackground);
+    procedure SyncEntries;
     procedure SyncThumbnailCache;
+    function ThumbnailBackgroundColor(X, Y: Integer): TColor;
     procedure DrawImageThumbnail(ACanvas: TCustomCanvas;
       const ThumbnailRect: TRect; ImageLayer: TVectArtImageLayer);
+    procedure DrawGroupThumbnail(ACanvas: TCustomCanvas;
+      const ThumbnailRect: TRect; GroupId: TVectArtGroupId);
+    procedure DrawGroupDecoration(ACanvas: TCanvas; const ItemRect: TRect;
+      const Entry: TVectArtLayerDisplayEntry; Selected: Boolean); overload;
+    procedure DrawGroupDecoration(ACanvas: TDirect2DCanvas;
+      const ItemRect: TRect; const Entry: TVectArtLayerDisplayEntry;
+      Selected: Boolean); overload;
+    procedure DrawExpandedGroupFrames(ACanvas: TCanvas;
+      const Bounds: TRect); overload;
+    procedure DrawExpandedGroupFrames(ACanvas: TDirect2DCanvas;
+      const Bounds: TRect); overload;
     procedure DrawLayerItem(ACanvas: TCanvas; const ItemRect: TRect;
       Layer: TVectArtLayer; Selected: Boolean); overload;
     procedure DrawLayerItem(ACanvas: TDirect2DCanvas;
@@ -41,11 +83,21 @@ type
       const Bounds: TRect); overload;
     procedure DrawLayers(ACanvas: TDirect2DCanvas;
       const Bounds: TRect); overload;
+    function DisplayRowCount: Integer;
+    function EntryAt(RowIndex: Integer): TVectArtLayerDisplayEntry;
+    function ExpandButtonRect(const ItemRect: TRect): TRect;
+    function ExpandedGroupFrameRect(const Bounds: TRect;
+      GroupId: TVectArtGroupId): TRect;
+    function GroupExpanded(GroupId: TVectArtGroupId): Boolean;
     function LayerIndexAt(const Bounds: TRect; Y: Integer): Integer;
     function LayerItemRect(const Bounds: TRect; Index: Integer): TRect;
+    function LayerSourceIndexAt(RowIndex: Integer): Integer;
     function LockButtonRect(const ItemRect: TRect): TRect;
     function VisibilityButtonRect(const ItemRect: TRect): TRect;
+    procedure ToggleGroupExpanded(GroupId: TVectArtGroupId);
     property Document: TVectArtDocument read FDocument write SetDocument;
+    property ThumbnailBackground: TVectArtLayerThumbnailBackground
+      read FThumbnailBackground write SetThumbnailBackground;
   end;
 
 function VectArtLineThumbnailStrokeWidth(StrokeWidth: Single): Integer;
@@ -66,6 +118,7 @@ const
   COLOR_ROW_BACKGROUND    = TColor($00272727);
   COLOR_ROW_BORDER        = TColor($00424242);
   COLOR_ROW_SELECTED      = TColor($003D352A);
+  COLOR_GROUP_BORDER      = TColor($00D69C4A);
   COLOR_TEXT_PRIMARY      = TColor($00E6E6E6);
   COLOR_TEXT_SECONDARY    = TColor($00A8A8A8);
   COLOR_THUMB_BORDER      = TColor($00606060);
@@ -85,20 +138,35 @@ const
 constructor TVectArtLayerRenderer.Create;
 begin
   inherited Create;
+  FExpandedGroups := TDictionary<TVectArtGroupId, Byte>.Create;
+  FGroupThumbnailBuffer := TVectArtRenderBuffer.Create;
+  FGroupThumbnails := TObjectDictionary<TVectArtGroupId,
+    TVectArtGroupThumbnailCacheEntry>.Create([doOwnsValues]);
+  FThumbnailBackground := vltbWhite;
   FImageThumbnails := TObjectDictionary<TVectArtImageLayer,
     TVectArtImageThumbnailCacheEntry>.Create([doOwnsValues]);
+  FEntriesRelationRevision := -1;
   FThumbnailRevision := -1;
 end;
 
 destructor TVectArtLayerRenderer.Destroy;
 begin
   FImageThumbnails.Free;
+  FGroupThumbnails.Free;
+  FGroupThumbnailBuffer.Free;
+  FExpandedGroups.Free;
   inherited Destroy;
 end;
 
 destructor TVectArtImageThumbnailCacheEntry.Destroy;
 begin
   Image.Free;
+  inherited Destroy;
+end;
+
+destructor TVectArtGroupThumbnailCacheEntry.Destroy;
+begin
+  Bitmap.Free;
   inherited Destroy;
 end;
 
@@ -116,6 +184,36 @@ begin
     Index := (Int64(I) * (Length(Data) - 1)) div 15;
     Result := (Result xor Data[Index]) * UInt64($100000001B3);
   end;
+end;
+
+function TVectArtLayerRenderer.GroupThumbnailSignature(
+  GroupId: TVectArtGroupId): UInt64;
+var
+  Index: Integer;
+  Layer: TVectArtLayer;
+begin
+  Result := UInt64($CBF29CE484222325) xor GroupId;
+  if FDocument = nil then
+    Exit;
+  for Index in FDocument.GetGroupLayerIndices(GroupId) do
+  begin
+    Layer := FDocument[Index];
+    Result := (Result xor Layer.LayerId) * UInt64($100000001B3);
+    Result := (Result xor UInt64(Layer.Revision)) * UInt64($100000001B3);
+  end;
+  Result := (Result xor UInt64(FDocument.LayerRelationRevision)) *
+    UInt64($100000001B3);
+end;
+
+function TVectArtLayerRenderer.ThumbnailBackgroundColor(X,
+  Y: Integer): TColor;
+begin
+  if (FThumbnailBackground = vltbCheckerboard) and
+    Odd((X div THUMBNAIL_CHECKER_SIZE) +
+      (Y div THUMBNAIL_CHECKER_SIZE)) then
+    Result := TColor($00B8B8B8)
+  else
+    Result := clWhite;
 end;
 
 function TVectArtLayerRenderer.ImageThumbnail(
@@ -372,6 +470,69 @@ begin
   ACanvas.StretchDraw(ImageRect, PngImage);
 end;
 
+procedure TVectArtLayerRenderer.DrawGroupThumbnail(ACanvas: TCustomCanvas;
+  const ThumbnailRect: TRect; GroupId: TVectArtGroupId);
+var
+  Alpha: Cardinal;
+  BackgroundColor: TColor;
+  BackgroundValue: Cardinal;
+  Destination: PByte;
+  Entry: TVectArtGroupThumbnailCacheEntry;
+  Signature: UInt64;
+  Source: PVectArtRgbaPixel;
+  X: Integer;
+  Y: Integer;
+begin
+  if (ACanvas = nil) or (FDocument = nil) or
+    (GroupId = VECTART_NO_GROUP) or (ThumbnailRect.Width <= 0) or
+    (ThumbnailRect.Height <= 0) then
+    Exit;
+  Signature := GroupThumbnailSignature(GroupId);
+  if FGroupThumbnails.TryGetValue(GroupId, Entry) and
+    (Entry.Signature = Signature) and
+    (Entry.Bitmap.Width = ThumbnailRect.Width) and
+    (Entry.Bitmap.Height = ThumbnailRect.Height) then
+  begin
+    ACanvas.Draw(ThumbnailRect.Left, ThumbnailRect.Top, Entry.Bitmap);
+    Exit;
+  end;
+  FGroupThumbnails.Remove(GroupId);
+  RenderVectArtGroupThumbnail(FDocument, GroupId, FGroupThumbnailBuffer,
+    ThumbnailRect.Width, ThumbnailRect.Height);
+  Entry := TVectArtGroupThumbnailCacheEntry.Create;
+  try
+    Entry.Bitmap := Vcl.Graphics.TBitmap.Create;
+    Entry.Bitmap.PixelFormat := pf32bit;
+    Entry.Bitmap.SetSize(ThumbnailRect.Width, ThumbnailRect.Height);
+    Entry.Signature := Signature;
+    Source := FGroupThumbnailBuffer.Data;
+    for Y := 0 to ThumbnailRect.Height - 1 do
+    begin
+      Destination := Entry.Bitmap.ScanLine[Y];
+      for X := 0 to ThumbnailRect.Width - 1 do
+      begin
+        BackgroundColor := ThumbnailBackgroundColor(X, Y);
+        BackgroundValue := ColorToRGB(BackgroundColor);
+        Alpha := Source^.A;
+        Destination[0] := (Cardinal(Source^.B) * Alpha +
+          Cardinal(GetBValue(BackgroundValue)) * (255 - Alpha) + 127) div 255;
+        Destination[1] := (Cardinal(Source^.G) * Alpha +
+          Cardinal(GetGValue(BackgroundValue)) * (255 - Alpha) + 127) div 255;
+        Destination[2] := (Cardinal(Source^.R) * Alpha +
+          Cardinal(GetRValue(BackgroundValue)) * (255 - Alpha) + 127) div 255;
+        Destination[3] := 255;
+        Inc(Destination, 4);
+        Inc(Source);
+      end;
+    end;
+    ACanvas.Draw(ThumbnailRect.Left, ThumbnailRect.Top, Entry.Bitmap);
+    FGroupThumbnails.Add(GroupId, Entry);
+    Entry := nil;
+  finally
+    Entry.Free;
+  end;
+end;
+
 procedure TVectArtLayerRenderer.DrawLayerItem(ACanvas: TCanvas;
   const ItemRect: TRect; Layer: TVectArtLayer; Selected: Boolean);
 var
@@ -444,10 +605,9 @@ begin
             ThumbnailRect.Right),
           Min(ThumbnailRect.Top + (Row + 1) * THUMBNAIL_CHECKER_SIZE,
             ThumbnailRect.Bottom));
-        if Odd(Row + Column) then
-          ACanvas.Brush.Color := TColor($00B8B8B8)
-        else
-          ACanvas.Brush.Color := clWhite;
+        ACanvas.Brush.Color := ThumbnailBackgroundColor(
+          Column * THUMBNAIL_CHECKER_SIZE,
+          Row * THUMBNAIL_CHECKER_SIZE);
         ACanvas.FillRect(CellRect);
         Inc(Column);
       end;
@@ -736,10 +896,9 @@ begin
             ThumbnailRect.Right),
           Min(ThumbnailRect.Top + (Row + 1) * THUMBNAIL_CHECKER_SIZE,
             ThumbnailRect.Bottom));
-        if Odd(Row + Column) then
-          ACanvas.Brush.Color := TColor($00B8B8B8)
-        else
-          ACanvas.Brush.Color := clWhite;
+        ACanvas.Brush.Color := ThumbnailBackgroundColor(
+          Column * THUMBNAIL_CHECKER_SIZE,
+          Row * THUMBNAIL_CHECKER_SIZE);
         ACanvas.FillRect(CellRect);
         Inc(Column);
       end;
@@ -965,8 +1124,21 @@ begin
   if FDocument = Value then
     Exit;
   FDocument := Value;
+  SetLength(FEntries, 0);
+  FEntriesRelationRevision := -1;
+  FExpandedGroups.Clear;
+  FGroupThumbnails.Clear;
   FImageThumbnails.Clear;
   FThumbnailRevision := -1;
+end;
+
+procedure TVectArtLayerRenderer.SetThumbnailBackground(
+  const Value: TVectArtLayerThumbnailBackground);
+begin
+  if FThumbnailBackground = Value then
+    Exit;
+  FThumbnailBackground := Value;
+  FGroupThumbnails.Clear;
 end;
 
 procedure TVectArtLayerRenderer.SyncThumbnailCache;
@@ -1004,48 +1176,372 @@ begin
   FThumbnailRevision := FDocument.Revision;
 end;
 
-procedure TVectArtLayerRenderer.DrawLayers(ACanvas: TCanvas;
-  const Bounds: TRect);
+procedure TVectArtLayerRenderer.RebuildEntries;
 var
+  Entries: TList<TVectArtLayerDisplayEntry>;
+  Entry: TVectArtLayerDisplayEntry;
+  GroupId: TVectArtGroupId;
+  GroupMembers: TArray<Integer>;
+  I: Integer;
+  MemberIndex: Integer;
+  SeenGroups: TDictionary<TVectArtGroupId, Byte>;
+begin
+  SetLength(FEntries, 0);
+  FGroupThumbnails.Clear;
+  if FDocument = nil then
+  begin
+    FEntriesRelationRevision := -1;
+    Exit;
+  end;
+  Entries := TList<TVectArtLayerDisplayEntry>.Create;
+  SeenGroups := TDictionary<TVectArtGroupId, Byte>.Create;
+  try
+    for I := 1 to FDocument.LayerCount - 1 do
+    begin
+      GroupId := FDocument[I].GroupId;
+      if GroupId = VECTART_NO_GROUP then
+      begin
+        Entry := Default(TVectArtLayerDisplayEntry);
+        Entry.LayerIndex := I;
+        Entries.Add(Entry);
+        Continue;
+      end;
+      if SeenGroups.ContainsKey(GroupId) then
+        Continue;
+      SeenGroups.Add(GroupId, 0);
+      GroupMembers := FDocument.GetGroupLayerIndices(GroupId);
+      // 一覧はIndexが大きい行ほど画面上側へ積むため、子行を先に追加して
+      // グループ見出しの下方向へ展開される表示順にする。
+      if FExpandedGroups.ContainsKey(GroupId) then
+        for MemberIndex in GroupMembers do
+        begin
+          Entry := Default(TVectArtLayerDisplayEntry);
+          Entry.GroupId := GroupId;
+          Entry.IsGroupMember := True;
+          Entry.LayerIndex := MemberIndex;
+          Entries.Add(Entry);
+        end;
+      Entry := Default(TVectArtLayerDisplayEntry);
+      Entry.GroupId := GroupId;
+      Entry.IsGroupHeader := True;
+      Entry.LayerIndex := I;
+      Entry.MemberCount := Length(GroupMembers);
+      Entries.Add(Entry);
+    end;
+    FEntries := Entries.ToArray;
+    FEntriesRelationRevision := FDocument.LayerRelationRevision;
+  finally
+    SeenGroups.Free;
+    Entries.Free;
+  end;
+end;
+
+procedure TVectArtLayerRenderer.SyncEntries;
+begin
+  if FDocument = nil then
+  begin
+    SetLength(FEntries, 0);
+    Exit;
+  end;
+  if FEntriesRelationRevision <> FDocument.LayerRelationRevision then
+    RebuildEntries;
+end;
+
+function TVectArtLayerRenderer.DisplayRowCount: Integer;
+begin
+  SyncEntries;
+  Result := Length(FEntries);
+end;
+
+function TVectArtLayerRenderer.EntryAt(
+  RowIndex: Integer): TVectArtLayerDisplayEntry;
+begin
+  SyncEntries;
+  Result := Default(TVectArtLayerDisplayEntry);
+  Result.LayerIndex := -1;
+  if (RowIndex > 0) and (RowIndex <= Length(FEntries)) then
+    Result := FEntries[RowIndex - 1];
+end;
+
+function TVectArtLayerRenderer.GroupExpanded(
+  GroupId: TVectArtGroupId): Boolean;
+begin
+  Result := (GroupId <> VECTART_NO_GROUP) and
+    FExpandedGroups.ContainsKey(GroupId);
+end;
+
+procedure TVectArtLayerRenderer.ToggleGroupExpanded(
+  GroupId: TVectArtGroupId);
+begin
+  if GroupId = VECTART_NO_GROUP then
+    Exit;
+  if FExpandedGroups.ContainsKey(GroupId) then
+    FExpandedGroups.Remove(GroupId)
+  else
+    FExpandedGroups.Add(GroupId, 0);
+  FEntriesRelationRevision := -1;
+end;
+
+procedure TVectArtLayerRenderer.DrawGroupDecoration(ACanvas: TCanvas;
+  const ItemRect: TRect; const Entry: TVectArtLayerDisplayEntry;
+  Selected: Boolean);
+var
+  ButtonRect: TRect;
+  CenterX: Integer;
+  CenterY: Integer;
+  TextRect: TRect;
+begin
+  if Entry.IsGroupMember then
+  begin
+    ACanvas.Pen.Color := COLOR_TEXT_SECONDARY;
+    ACanvas.MoveTo(ItemRect.Left + 27, ItemRect.Top + 4);
+    ACanvas.LineTo(ItemRect.Left + 27, ItemRect.Bottom - 4);
+    Exit;
+  end;
+  if not Entry.IsGroupHeader then
+    Exit;
+  ButtonRect := ExpandButtonRect(ItemRect);
+  CenterX := (ButtonRect.Left + ButtonRect.Right) div 2;
+  CenterY := (ButtonRect.Top + ButtonRect.Bottom) div 2;
+  ACanvas.Brush.Style := bsSolid;
+  if Selected then
+    ACanvas.Brush.Color := COLOR_ROW_SELECTED
+  else
+    ACanvas.Brush.Color := COLOR_ROW_BACKGROUND;
+  ACanvas.Pen.Color := COLOR_TEXT_SECONDARY;
+  ACanvas.Rectangle(ButtonRect);
+  ACanvas.Pen.Color := COLOR_TEXT_PRIMARY;
+  ACanvas.MoveTo(ButtonRect.Left + 3, CenterY);
+  ACanvas.LineTo(ButtonRect.Right - 3, CenterY);
+  if not GroupExpanded(Entry.GroupId) then
+  begin
+    ACanvas.MoveTo(CenterX, ButtonRect.Top + 3);
+    ACanvas.LineTo(CenterX, ButtonRect.Bottom - 3);
+  end;
+  TextRect := Rect(ItemRect.Left + 134, ItemRect.Top + 8,
+    ItemRect.Right - 4, ItemRect.Bottom - 5);
+  if Selected then
+    ACanvas.Brush.Color := COLOR_ROW_SELECTED
+  else
+    ACanvas.Brush.Color := COLOR_ROW_BACKGROUND;
+  ACanvas.FillRect(TextRect);
+  ACanvas.Brush.Style := bsClear;
+  ACanvas.Font.Name := 'Segoe UI';
+  ACanvas.Font.Height := -13;
+  ACanvas.Font.Color := COLOR_TEXT_PRIMARY;
+  ACanvas.TextOut(TextRect.Left, ItemRect.Top + 20, 'グループ');
+  ACanvas.Font.Height := -11;
+  ACanvas.Font.Color := COLOR_TEXT_SECONDARY;
+  ACanvas.TextOut(TextRect.Left, ItemRect.Top + 43,
+    Format('%d レイヤー', [Entry.MemberCount]));
+end;
+
+procedure TVectArtLayerRenderer.DrawGroupDecoration(
+  ACanvas: TDirect2DCanvas; const ItemRect: TRect;
+  const Entry: TVectArtLayerDisplayEntry; Selected: Boolean);
+var
+  ButtonRect: TRect;
+  CenterX: Integer;
+  CenterY: Integer;
+  TextRect: TRect;
+begin
+  if Entry.IsGroupMember then
+  begin
+    ACanvas.Pen.Color := COLOR_TEXT_SECONDARY;
+    ACanvas.MoveTo(ItemRect.Left + 27, ItemRect.Top + 4);
+    ACanvas.LineTo(ItemRect.Left + 27, ItemRect.Bottom - 4);
+    Exit;
+  end;
+  if not Entry.IsGroupHeader then
+    Exit;
+  ButtonRect := ExpandButtonRect(ItemRect);
+  CenterX := (ButtonRect.Left + ButtonRect.Right) div 2;
+  CenterY := (ButtonRect.Top + ButtonRect.Bottom) div 2;
+  ACanvas.Brush.Style := bsSolid;
+  if Selected then
+    ACanvas.Brush.Color := COLOR_ROW_SELECTED
+  else
+    ACanvas.Brush.Color := COLOR_ROW_BACKGROUND;
+  ACanvas.Pen.Color := COLOR_TEXT_SECONDARY;
+  ACanvas.Rectangle(ButtonRect);
+  ACanvas.Pen.Color := COLOR_TEXT_PRIMARY;
+  ACanvas.MoveTo(ButtonRect.Left + 3, CenterY);
+  ACanvas.LineTo(ButtonRect.Right - 3, CenterY);
+  if not GroupExpanded(Entry.GroupId) then
+  begin
+    ACanvas.MoveTo(CenterX, ButtonRect.Top + 3);
+    ACanvas.LineTo(CenterX, ButtonRect.Bottom - 3);
+  end;
+  TextRect := Rect(ItemRect.Left + 134, ItemRect.Top + 8,
+    ItemRect.Right - 4, ItemRect.Bottom - 5);
+  if Selected then
+    ACanvas.Brush.Color := COLOR_ROW_SELECTED
+  else
+    ACanvas.Brush.Color := COLOR_ROW_BACKGROUND;
+  ACanvas.FillRect(TextRect);
+  ACanvas.Brush.Style := bsClear;
+  ACanvas.Font.Name := 'Segoe UI';
+  ACanvas.Font.Height := -13;
+  ACanvas.Font.Color := COLOR_TEXT_PRIMARY;
+  ACanvas.TextOut(TextRect.Left, ItemRect.Top + 20, 'グループ');
+  ACanvas.Font.Height := -11;
+  ACanvas.Font.Color := COLOR_TEXT_SECONDARY;
+  ACanvas.TextOut(TextRect.Left, ItemRect.Top + 43,
+    Format('%d レイヤー', [Entry.MemberCount]));
+end;
+
+function TVectArtLayerRenderer.ExpandedGroupFrameRect(
+  const Bounds: TRect; GroupId: TVectArtGroupId): TRect;
+var
+  Entry: TVectArtLayerDisplayEntry;
   I: Integer;
   ItemRect: TRect;
 begin
+  Result := TRect.Empty;
+  if not GroupExpanded(GroupId) then
+    Exit;
+  SyncEntries;
+  for I := 1 to Length(FEntries) do
+  begin
+    Entry := FEntries[I - 1];
+    if Entry.GroupId <> GroupId then
+      Continue;
+    ItemRect := LayerItemRect(Bounds, I);
+    if Result.IsEmpty then
+      Result := ItemRect
+    else
+    begin
+      Result.Left := Min(Result.Left, ItemRect.Left);
+      Result.Top := Min(Result.Top, ItemRect.Top);
+      Result.Right := Max(Result.Right, ItemRect.Right);
+      Result.Bottom := Max(Result.Bottom, ItemRect.Bottom);
+    end;
+  end;
+  if not Result.IsEmpty then
+  begin
+    InflateRect(Result, 3, 3);
+    IntersectRect(Result, Result, Bounds);
+  end;
+end;
+
+procedure TVectArtLayerRenderer.DrawExpandedGroupFrames(ACanvas: TCanvas;
+  const Bounds: TRect);
+var
+  Entry: TVectArtLayerDisplayEntry;
+  FrameRect: TRect;
+  I: Integer;
+begin
+  for I := 0 to High(FEntries) do
+  begin
+    Entry := FEntries[I];
+    if not Entry.IsGroupHeader or not GroupExpanded(Entry.GroupId) then
+      Continue;
+    FrameRect := ExpandedGroupFrameRect(Bounds, Entry.GroupId);
+    if FrameRect.IsEmpty then
+      Continue;
+    ACanvas.Brush.Style := bsClear;
+    ACanvas.Pen.Color := COLOR_GROUP_BORDER;
+    ACanvas.Pen.Width := 2;
+    ACanvas.Rectangle(FrameRect);
+    ACanvas.Pen.Width := 1;
+  end;
+end;
+
+procedure TVectArtLayerRenderer.DrawExpandedGroupFrames(
+  ACanvas: TDirect2DCanvas; const Bounds: TRect);
+var
+  Entry: TVectArtLayerDisplayEntry;
+  FrameRect: TRect;
+  I: Integer;
+begin
+  for I := 0 to High(FEntries) do
+  begin
+    Entry := FEntries[I];
+    if not Entry.IsGroupHeader or not GroupExpanded(Entry.GroupId) then
+      Continue;
+    FrameRect := ExpandedGroupFrameRect(Bounds, Entry.GroupId);
+    if FrameRect.IsEmpty then
+      Continue;
+    ACanvas.Brush.Style := bsClear;
+    ACanvas.Pen.Color := COLOR_GROUP_BORDER;
+    ACanvas.Pen.Width := 2;
+    ACanvas.Rectangle(FrameRect);
+    ACanvas.Pen.Width := 1;
+  end;
+end;
+
+procedure TVectArtLayerRenderer.DrawLayers(ACanvas: TCanvas;
+  const Bounds: TRect);
+var
+  Entry: TVectArtLayerDisplayEntry;
+  I: Integer;
+  ItemRect: TRect;
+  ThumbnailRect: TRect;
+begin
   SyncThumbnailCache;
+  SyncEntries;
   ACanvas.Brush.Style := bsSolid;
   ACanvas.Brush.Color := COLOR_LIST_BACKGROUND;
   ACanvas.FillRect(Bounds);
   if FDocument = nil then
     Exit;
-  for I := 1 to FDocument.LayerCount - 1 do
+  for I := 1 to Length(FEntries) do
   begin
     ItemRect := LayerItemRect(Bounds, I);
     if ItemRect.Bottom <= Bounds.Top then
       Break;
-    DrawLayerItem(ACanvas, ItemRect, FDocument[I],
-      FDocument.IsLayerSelected(I));
+    Entry := FEntries[I - 1];
+    DrawLayerItem(ACanvas, ItemRect, FDocument[Entry.LayerIndex],
+      FDocument.IsLayerSelected(Entry.LayerIndex));
+    if Entry.IsGroupHeader then
+    begin
+      ThumbnailRect := Rect(ItemRect.Left + 30,
+        ItemRect.Top + (ItemRect.Height - THUMBNAIL_HEIGHT) div 2,
+        Min(ItemRect.Left + 30 + THUMBNAIL_WIDTH, ItemRect.Right - 8),
+        ItemRect.Top + (ItemRect.Height + THUMBNAIL_HEIGHT) div 2);
+      DrawGroupThumbnail(ACanvas, ThumbnailRect, Entry.GroupId);
+    end;
+    DrawGroupDecoration(ACanvas, ItemRect, Entry,
+      FDocument.IsLayerSelected(Entry.LayerIndex));
   end;
+  DrawExpandedGroupFrames(ACanvas, Bounds);
 end;
 
 procedure TVectArtLayerRenderer.DrawLayers(ACanvas: TDirect2DCanvas;
   const Bounds: TRect);
 var
+  Entry: TVectArtLayerDisplayEntry;
   I: Integer;
   ItemRect: TRect;
+  ThumbnailRect: TRect;
 begin
   SyncThumbnailCache;
+  SyncEntries;
   ACanvas.Brush.Style := bsSolid;
   ACanvas.Brush.Color := COLOR_LIST_BACKGROUND;
   ACanvas.FillRect(Bounds);
   if FDocument = nil then
     Exit;
-  for I := 1 to FDocument.LayerCount - 1 do
+  for I := 1 to Length(FEntries) do
   begin
     ItemRect := LayerItemRect(Bounds, I);
     if ItemRect.Bottom <= Bounds.Top then
       Break;
-    DrawLayerItem(ACanvas, ItemRect, FDocument[I],
-      FDocument.IsLayerSelected(I));
+    Entry := FEntries[I - 1];
+    DrawLayerItem(ACanvas, ItemRect, FDocument[Entry.LayerIndex],
+      FDocument.IsLayerSelected(Entry.LayerIndex));
+    if Entry.IsGroupHeader then
+    begin
+      ThumbnailRect := Rect(ItemRect.Left + 30,
+        ItemRect.Top + (ItemRect.Height - THUMBNAIL_HEIGHT) div 2,
+        Min(ItemRect.Left + 30 + THUMBNAIL_WIDTH, ItemRect.Right - 8),
+        ItemRect.Top + (ItemRect.Height + THUMBNAIL_HEIGHT) div 2);
+      DrawGroupThumbnail(ACanvas, ThumbnailRect, Entry.GroupId);
+    end;
+    DrawGroupDecoration(ACanvas, ItemRect, Entry,
+      FDocument.IsLayerSelected(Entry.LayerIndex));
   end;
+  DrawExpandedGroupFrames(ACanvas, Bounds);
 end;
 
 function TVectArtLayerRenderer.FitThumbnailRect(
@@ -1076,12 +1572,19 @@ begin
   Result := -1;
   if FDocument = nil then
     Exit;
-  for I := 1 to FDocument.LayerCount - 1 do
+  SyncEntries;
+  for I := 1 to Length(FEntries) do
   begin
     ItemRect := LayerItemRect(Bounds, I);
     if (Y >= ItemRect.Top) and (Y < ItemRect.Bottom) then
       Exit(I);
   end;
+end;
+
+function TVectArtLayerRenderer.LayerSourceIndexAt(
+  RowIndex: Integer): Integer;
+begin
+  Result := EntryAt(RowIndex).LayerIndex;
 end;
 
 function TVectArtLayerRenderer.LayerItemRect(const Bounds: TRect;
@@ -1096,6 +1599,13 @@ begin
   Result := Rect(Bounds.Left + LAYER_LIST_PADDING,
     ItemBottom - LAYER_ROW_HEIGHT,
     Bounds.Right - LAYER_LIST_PADDING, ItemBottom);
+end;
+
+function TVectArtLayerRenderer.ExpandButtonRect(
+  const ItemRect: TRect): TRect;
+begin
+  Result := Rect(ItemRect.Left + 27, ItemRect.Top + 31,
+    ItemRect.Left + 43, ItemRect.Top + 47);
 end;
 
 function TVectArtLayerRenderer.LockButtonRect(
