@@ -112,8 +112,8 @@ begin
       (Ord(Toolbar.DetailsButton.Caption[1]) = $8A73) and
       (Ord(Toolbar.DetailsButton.Caption[2]) = $7D30) and
       (Toolbar.DetailsPanel <> nil) and
-      (Toolbar.StrokeWidthTrackBar.Parent = Toolbar.DetailsPanel) and
-      (Toolbar.StrokeWidthEdit.Parent = Toolbar.DetailsPanel) and
+      (Toolbar.StrokeWidthTrackBar.Parent.Parent = Toolbar.DetailsPanel) and
+      (Toolbar.StrokeWidthEdit.Parent.Parent = Toolbar.DetailsPanel) and
       (Toolbar.StrokeStyleCombo.Parent = Toolbar.DetailsPanel) and
       Toolbar.LineCapButton(vlcButt).Selected and
       not Toolbar.LineCapButton(vlcSquare).Selected and

@@ -1,5 +1,26 @@
 ﻿# VectArtDesigner 実装ノート
 
+## 2026-09-08 塗りの適用・保存接続
+
+- 単一選択のRectangle／Ellipse／閉じたPathの塗りを、共通ポップアップから即時適用。
+  ベタ・横／縦の線形グラデーション・放射グラデーション・埋め込みPNGテクスチャを扱う。
+  変更はUndo／Redoに対応。再度開くと方式・2色・画像を復元する。文字色・線色・複数選択はベタのみ。
+- 共通Skia描画とレイヤー一覧のGDI／D2Dサムネイルへ反映。グループ描画も共通Rendererを使用。
+  サムネイルはRevisionでキャッシュする。画像は図形の塗り領域へ引き伸ばす方式。
+- MIF：追加サンプル `mif/四角_グラデーション.mif` の `texture object type=gradation linear`、
+  `texture color1=8454143`、`texture color2=41215`、`texture angle=90`を解析。
+  画像は上から下への色変化。線形の横0度／縦90度をネイティブ属性で出力し、編集可能な図形のまま再読込。
+  オブジェクトPNG・塗りPNG・合成PNGにもグラデーションを描画。独自MIFキーは追加しない。
+  90度は提供サンプルで確認、0度は同じ角度属性として実装。書き出したMIFのWebArt本体での表示確認は未実施。
+- 放射／画像テクスチャはMIF属性の実例がまだなく、MIF保存は非対応として明示して停止する。
+  SVGの標準linearGradient／radialGradient／pattern＋埋め込みimageへ保存・再読込できる。
+  MIF画像化への変更は行っていない。次は放射と画像テクスチャのWebArt製MIFを解析する。
+- JSON、Rectangle複製、削除Undoのデータにも塗り設定を保持する。
+- FillIntegrationTests：グラデーション画素・Path・テクスチャ、Undo、JSON／SVG／MIF往復、提供MIF読込をPASS。
+  SettingsUiTests、MainFormLifecycleTests、MifDocumentRoundTrip、MifClosedPathRoundTrip、PathStylePropertiesTestsもPASS。
+  Debug／Releaseは警告・エラーなし。確認用EXEはWin64/UiBuildDebugとWin64/UiBuildRelease。
+
+
 ## 2026-09-08 設定UIの初期実装
 
 ユーザー指定の「UIを先に揃え、対応済み項目から動かす」に従った第一段階。
@@ -1165,3 +1186,106 @@ VectArtDesigner における図形オブジェクト・文字オブジェクト�
 11. 色・塗り設定UIを小型プレビューと共通非モーダルポップアップへ統一し、塗り一式と単色の再利用を実装する。
 12. 初期検討から引き継いだ追加候補をMIF互換性と必要性で評価し、対応範囲を順次確定する。
 13. 図形・文字オブジェクト設定の項目表に沿って、影・縁取り・効果・文字配置等を調査し、共通設定UIへ統合する。
+
+## 2026-09-08 情報欄の省スペース化
+
+- X／Y、幅／高さをラベルと入力の横並び2行に変更。px欄は整数表示とし小数の確定を拒否。負の位置は入力可能。
+- タブ領域のサイズを再計算し、親の背景描画をヘッダー範囲へ限定して子入力欄の上描きを防止。
+- SettingsUiTestsで小数拒否・負数・Undo・リサイズを検証。Debug／Releaseも別出力先でビルド成功（通常のEXEが使用中のため）。
+
+## 2026-09-08 情報欄の実画面描画と終了処理の修正
+
+- 情報Control／PageControl／ScrollBoxの二重バッファ継承を無効化し、子のネイティブ描画と背景転送の干渉を避ける。フォント色・ScrollBox背景も明示。
+- FormDestroyでOnResizeを解除し、DockManagerはFreeAndNil。破棄中のFormResizeも除外する。
+- SettingsUiTestsの可視フォームは実ウィンドウDCから画像取得するよう変更。MainFormLifecycleTestsを追加し、実メイン画面の起動・リサイズ・破棄3回をPASS。既存レイアウト設定は検証後に復元する。
+- Debug／ReleaseはWin64/UiBuildDebug、Win64/UiBuildReleaseへビルド成功。通常EXEは使用中のため未更新。
+
+- 線タブの表示欠け追加対策：共通ラベルをTStaticTextへ変更。TabSheetもバッファ継承を無効化し、切替／配置更新時はアクティブページと全子ウィンドウを再描画。実メイン画面で可視タブを3巡して線タブの表示を確認。SettingsUiTests／MainFormLifecycleTestsがPASS。
+
+- 図形設定タブを線→線の色→塗り色→影→情報へ並べ替え。設定フォントを11px、通常設定欄の高さ／縦間隔を約90%に縮小。実メイン画面の切替・表示確認とDebug／Releaseビルド成功。
+
+- ページ内部の文字を10pxへ統一。独自Fontを持つラベル・入力欄にも明示適用し、タブ見出しのサイズは維持。
+
+- 通常ページの文字は影などのページと同じ親フォントを継承し、VCLスタイルによるフォント上書きを除外。色見本の自前描画もControl.FontをCanvasへ適用する。
+
+- 統一後のページ文字が小さすぎたため、共通フォント高さを10pxから12pxへ調整。テーマのフォント上書き除外と統一は維持。
+
+- ページ内の共通フォント高さを12pxから13pxへ微調整。
+
+- 色プレビューを高速化：Canvas.Pixelsの全画素GDI呼出しを撤去。ベタはFillRect、グラデーションは既存Skiaの線形／放射ShaderからBGRAビットマップへ一括描画。テクスチャの縮小結果もキャッシュし、再表示は画像転送のみ。色／方式／画像／サイズ変更時に再生成。CPU raster SkiaでありGPU対応とはしない。
+- SettingsUiTests PASS。338×68のグラデーション色変更＋フォーム再描画100回が359.5ms（この環境で約3.6ms/回、旧実装との倍率比較ではない）。Debug／Releaseビルド成功。
+
+## 2026-09-08 初期塗りと作成色の引継ぎ
+
+- 初期状態の枠のみ／線幅0を枠＋塗り／線幅1へ変更。初回作成から既定の青が塗られる。
+- EditorStateへ塗り方式を保持し、設定で選んだグラデーション／画像を次のRectangle・Ellipse・閉じたPath・テンプレ図形へ引き継ぐ。
+- 塗り色見本もSkiaでグラデーション／テクスチャを表示。テンプレ図形の色選択は共通の塗りポップアップへ接続し、一覧プレビューへも反映。
+- SettingsUiTestsで作成図形への色・グラデーション引継ぎ、RoundedRectangleCreationTestsで初期モードと切替、FillIntegrationTestsで保存と描画をPASS。Debug／Releaseビルド成功。
+
+- 初回塗りの再報告を確認。通常EXEは12:26更新、修正済み確認用EXEは12:32更新で差があったため、通常出力先をWin64 Debugでフルビルド更新。SettingsUiTestsへ起動直後の四角ドラッグ作成を追加し、Filled・設定色・ベタ方式・不透明度1を確認。今後は通常出力先も更新し、使用中で更新不可の場合は明示する。
+
+## 2026-09-08 区切りのユニット整理
+
+- MifDocumentからPNGチャンク／waDAメタデータ処理をMifPngMetadataへ分離（約520行）。図形変換とバイナリ操作を別責務にした。
+- SvgDocumentからSVG文字列生成をSvgWriterへ、名前空間・装飾名・PNG検証をSvgPrimitivesへ分離（合計約560行）。既存のSVG公開関数とファイル保存の窓口は維持。
+- RendererからFillPaintを分離。キャンバス、MIFラスタライズ、テンプレート、色見本で同じ塗りを使い、色UIからDocument全体の描画処理への依存をなくした。
+- ObjectProperties/ColorへPaintPopupを移動し、ColorSwatchを独立。色の編集窓とキャッシュ付き表示部品を分けた。DPR/DPROJと利用ユニットを更新。
+- 他の既存フォルダーは機能別に分類済み（最大Core/Commandsの9ユニット）のため、無理な細分化はしない。今後も図形モデル、操作、描画、保存形式の責務を跨ぐ処理から抽出する。
+- ユニット冒頭に目的・担当範囲、実装箇所にキャッシュ、透明度、バイト境界検証、Undo通知の意図・制約を記載。
+- FillIntegrationTests、SettingsUiTests、MainFormLifecycleTests、SvgDocumentRoundTrip、MifDocumentRoundTrip、MifClosedPathRoundTrip、RoundedRectangleCreationTestsの7件PASS。初回塗り、グラデーション、Undo、保存往復、終了処理を確認。
+- Win64 Debug／Releaseとも警告0・エラー0でビルド成功。最後に通常出力先のVectArtDesigner.exeをDebugで更新。
+
+## 2026-09-08 線形グラデーションの任意角度
+
+- FillStyleへ整数Angleを追加。既存の横0度／縦90度データを維持し、線形塗りを任意角度で描画・MIF読書きできるようにした。
+- 共通色ポップアップの線形方式の横へ角度欄を追加。Enterまたはフォーカス移動で適用し、整数値を0～359度へ正規化。不正入力は元値へ戻す。
+- プレビューも共通FillPaintを使用。角度をJSON／SVG、Undo／Redo、新規図形の既定塗りへ引き継ぐ。
+- FillIntegrationTestsで45／135／180／270／315度の保存往復、45度画素、Undo／Redo、提供45度MIFを確認。SettingsUiTestsで入力、無効値、Undo／Redo、再表示、新規図形への引継ぎを確認。
+- テスト成果物と画面PNGはTestOutput配下。WebArt本体での書出し結果の目視比較は未実施。
+
+## 2026-09-08 色ポップアップの省スペース化
+
+- 「最近使った塗り」、下部説明文、「閉じる」ボタンを削除。最近色の蓄積処理も撤去し、使用色とプリセットを表示する。
+- 色1／色2の選択欄を48pxから32pxへ縮小し、上部と後続欄の間隔を短縮。グラデーション時のClientHeightを630pxから466pxへ縮小。単色・テクスチャ時も不要な欄の空間を詰める。
+- SettingsUiTests PASS、画面PNGで配置確認。Debug／Release警告・エラー0、通常EXE更新済み。
+
+- 色1／色2の切れを修正：低いTRadioGroupはVCLスタイルの内部余白で文字が切れるため、枠なしの標準TRadioButton 2個へ置換。フォーム高さは維持。画面確認・SettingsUiTests PASS、Debug／Releaseビルド成功。
+- 上記修正の通常EXE更新はF2039（ファイルを作成できない）で失敗。DebugはTestOutput/AppDebug、ReleaseはTestOutput/AppReleaseで成功。通常EXEはアプリ終了後に更新する必要がある。
+
+## 2026-09-08 色UIの配置と単色専用呼出し
+
+- 上から色表示、方式コンボ、グラデーション種別、角度、色1／色2、使用された色の順へ変更。種別と角度をそれぞれ1行に配置。
+- HEX／RGB入力を撤去。「プリセット」表記を削除し、既存色チップは維持。色一覧の下に将来のカラーピッカー用の160pxを確保（ピッカー本体は未実装）。
+- ShowVectArtColorPopupは単色専用へ固定してAllowPaint引数を削除。方式コンボも隠す。ShowVectArtFillPopupのみ方式選択を有効にし、同じフォームを共有。文字・線・装飾等の呼出しを更新。
+- SettingsUiTestsは色チップ操作へ変更しPASS。単色専用とグラデーションの画面PNGを確認。Debug／Release警告・エラー0、通常EXE更新済み。
+
+## 2026-09-08 色選択の同期とカラーピッカー
+
+- 色1／色2の右側に四角い色見本を追加。使用された色の選択枠は編集中の色とのRGB一致で決め、一致色がなければ表示しない。グリッド既定のフォーカス枠は使用しない。
+- SYNC_ScreenLayout/Lib/ColorPickerの3ソースとMIT LICENSEをLib/ColorPickerへコピーし、SV領域と色相バーを共通ポップアップへ接続。色変更は現在の色1／色2へ適用してUndo対象にする。単色専用でも同じピッカーを使用。
+- SettingsUiTestsで色切替時の選択同期、一覧外色での選択解除、ピッカーの色2適用をPASS。画面PNGを確認。Debug／Releaseは警告・エラー0、通常EXE更新済み。
+
+- ピッカーのちらつき対策：フォームを二重バッファ化し、SV面の背景を色相・サイズ単位でキャッシュ。操作中のRGB→HSV再同期を止め、彩度・明度操作で背景色相を変えない。テクスチャ時は使用された色とピッカーを非表示にして高さを短縮。SettingsUiTests PASS、Debug／Release成功、通常EXE更新済み。
+
+- ピッカーちらつき再対策：SV／色相バーをTPaintBoxから独立HWNDのTCustomControlへ変更し、各コントロールで二重バッファ化。色変更は旧・新カーソル周辺のみInvalidateRect（背景消去なし）。SV背景は色相・サイズ、色相バー背景はサイズでキャッシュし、通常のカーソル移動では背景を再生成しない。SettingsUiTests PASS。
+
+- 塗り色ページのちらつき対策：LayoutSettingsがDocument通知のたびに行っていたページ全体と子コントロールのRDW_ERASEを、タブ切替・サイズ変更時へ限定。塗り見本は一時的な単色リセットをせず最終設定を一度だけ代入し、同値設定は再描画しない。色見本自体も二重バッファ化。SettingsUiTests PASS。
+
+## 2026-09-08 数値スライダーの共通UI化
+
+- Source/UI/VectArtDesignerNumericSlider.pasにTVectArtNumericSliderを追加。独自横トラックバーと右側の数値入力を所有し、サイズに追従して配置する。Document・Undoは呼出し側の責務。
+- CreateForParent(Owner, Parent)で生成。Configure(最小値,最大値,スライダー刻み幅,小数桁数)、SetSliderRange(最小,最大)で設定。入力範囲とドラッグ範囲を分離できる。
+- SetDisplay(Value, Mixed)は通知なしでモデルを同期し、混在値は入力欄を空にする。OnChangeはスライダー操作または入力確定時。Enter／フォーカス離脱で確定、Escapeで復元。不正・範囲外・非有限数を拒否する。
+- TrackBarを通じてSmallChange／LargeChange、マウス開始・終了イベントを設定できる。線ツール詳細の太さへ採用し、既存ドラッグ1回のUndo処理と選択・ロック処理を維持。
+- 線幅は入力0.1～10000、小数2桁、スライダー1～100（内部0.1単位、通常操作1刻み）。ほかの設定へは後続作業で同じ部品を再利用する。
+- NumericSliderTests（負数、小数、入力拒否、混在、Escape、範囲分離、リサイズ）、LineToolbarTestsともPASS。Debug／Release警告・エラー0、通常EXE更新済み。テスト成果物はTestOutput配下。
+
+- 線形グラデーション角度にTVectArtNumericSliderを採用（0～359度、1度刻み、Page操作15度）。プレビューへ白黒の方向矢印を重ね、角度変更と同期。矢印は編集UIだけに描き、Document／MIF／SVGの画像には含めない。SettingsUiTests PASS、画面確認、Debug／Release成功、通常EXE更新済み。
+
+## 2026-09-08 色UI完成後の責務分割とコメント整理
+
+- ユーザー確認済みの色UIを一区切りとした。PaintPopupから画像生成・方向矢印をColor/VectArtDesignerPaintPreviewへ分離し、フォーム側は配置・選択・適用通知・キャッシュ更新判断を担当する。
+- Rendering/VectArtDesignerGradientGeometryへ線形グラデーションの端点計算を集約し、Skia描画とSvgWriterで共有。座標計算の修正が片方だけに反映されることを防ぐ。
+- Sourceのフォルダは最大Core/Commandsの9ユニットで既に機能別。色UIはObjectProperties/Color、共通数値UIはSource/UI、ピッカーはLib/ColorPickerに収まり、追加の細分化は不要と判断。
+- 今回の追加・変更ユニットの冒頭へ目的と担当範囲を記載。移植元のTPaintBox前提の説明を整理し、背景キャッシュ、カーソル部分更新、HSV再同期抑制、通知なしのモデル同期などの理由・制約をコメントに残した。MIT LICENSEを維持。
+- NumericSliderTests、LineToolbarTests、SettingsUiTests、FillIntegrationTestsがPASS。Debug／Releaseは警告・エラー0でビルド成功。通常のVectArtDesigner.exeをDebugで更新。テスト出力はTestOutputへ統一。

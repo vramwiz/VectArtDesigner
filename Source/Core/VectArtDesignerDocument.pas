@@ -9,6 +9,14 @@ uses
   Vcl.Graphics;
 
 type
+  TVectArtFillKind = (vfkSolid, vfkLinearHorizontal, vfkLinearVertical, vfkRadial, vfkTexture);
+  TVectArtFillStyle = record
+    Kind: TVectArtFillKind;
+    Color2: TColor;
+    // Absolute degrees for horizontal/angled linear fills; legacy vertical remains 90.
+    Angle: Integer;
+    TexturePng: TBytes;
+  end;
   TVectArtLayerId = UInt64;
   TVectArtGroupId = UInt64;
 
@@ -73,6 +81,7 @@ type
   private
     FBounds: TRectF;
     FFillColor: TColor;
+    FFillStyle: TVectArtFillStyle;
     FFilled: Boolean;
     FRotationDegrees: Single;
     FShape: TVectArtPrimitiveShape;
@@ -84,6 +93,7 @@ type
       AFillColor: TColor);
     property Bounds: TRectF read FBounds write FBounds;
     property FillColor: TColor read FFillColor write FFillColor;
+    property FillStyle: TVectArtFillStyle read FFillStyle write FFillStyle;
     property Filled: Boolean read FFilled write FFilled;
     property RotationDegrees: Single read FRotationDegrees
       write FRotationDegrees;
@@ -96,6 +106,7 @@ type
 
   TVectArtRectangleData = record
     Bounds: TRectF;                         // 回転前の基本矩形。
+    FillStyle: TVectArtFillStyle;
     FillColor: TColor;                      // 内部の塗り色。
     Filled: Boolean;                        // 内部を塗る状態。
     GroupId: TVectArtGroupId;               // フラットなグループ所属。0は未所属。
@@ -171,6 +182,7 @@ type
     FEndMarker: TVectArtLineMarker;
     FEndMarkerSize: Single;
     FFillColor: TColor;
+    FFillStyle: TVectArtFillStyle;
     FFilled: Boolean;
     FLineCap: TVectArtLineCap;
     FLineJoin: TVectArtLineJoin;
@@ -190,6 +202,7 @@ type
     property EndMarker: TVectArtLineMarker read FEndMarker write FEndMarker;
     property EndMarkerSize: Single read FEndMarkerSize write FEndMarkerSize;
     property FillColor: TColor read FFillColor write FFillColor;
+    property FillStyle: TVectArtFillStyle read FFillStyle write FFillStyle;
     property Filled: Boolean read FFilled write FFilled;
     property LineCap: TVectArtLineCap read FLineCap write FLineCap;
     property LineJoin: TVectArtLineJoin read FLineJoin write FLineJoin;
@@ -211,6 +224,7 @@ type
     Closed: Boolean;                        // 終点と始点を閉じる状態。
     EndMarker: TVectArtLineMarker;          // 開いたPathの終点マーカー。
     EndMarkerSize: Single;                  // 終点マーカー倍率。
+    FillStyle: TVectArtFillStyle;
     FillColor: TColor;                      // 閉領域の塗り色。
     Filled: Boolean;                        // 閉領域を塗る状態。
     LineCap: TVectArtLineCap;               // 開いたPathの線端形状。
@@ -818,6 +832,7 @@ begin
   Result := EnsureRange(Index, 1, FLayers.Count);
   RectangleLayer := TVectArtRectangleLayer.Create(Data.Name, Data.Bounds,
     Data.FillColor);
+  RectangleLayer.FillStyle := Data.FillStyle;
   RectangleLayer.Filled := Data.Filled;
   RectangleLayer.FGroupId := Data.GroupId;
   if Data.GroupId >= FNextGroupId then
@@ -891,6 +906,7 @@ begin
   PathLayer.BoundsEditing := Data.BoundsEditing;
   PathLayer.EndMarker := Data.EndMarker;
   PathLayer.EndMarkerSize := Max(Data.EndMarkerSize, 1.0);
+  PathLayer.FillStyle := Data.FillStyle;
   PathLayer.FillColor := Data.FillColor;
   PathLayer.Filled := Data.Filled;
   PathLayer.LineCap := Data.LineCap;
@@ -1014,6 +1030,7 @@ begin
     Exit;
   RectangleLayer := TVectArtRectangleLayer(FLayers[Index]);
   Data.Bounds := RectangleLayer.Bounds;
+  Data.FillStyle := RectangleLayer.FillStyle;
   Data.FillColor := RectangleLayer.FillColor;
   Data.Filled := RectangleLayer.Filled;
   Data.GroupId := RectangleLayer.GroupId;
@@ -1106,6 +1123,7 @@ begin
   Data.Closed := PathLayer.Closed;
   Data.EndMarker := PathLayer.EndMarker;
   Data.EndMarkerSize := PathLayer.EndMarkerSize;
+  Data.FillStyle := PathLayer.FillStyle;
   Data.FillColor := PathLayer.FillColor;
   Data.Filled := PathLayer.Filled;
   Data.LineCap := PathLayer.LineCap;

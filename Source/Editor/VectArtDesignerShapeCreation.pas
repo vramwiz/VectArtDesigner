@@ -218,6 +218,7 @@ begin
   else
     Data.Filled := Closed;
   Data.FillColor := FEditorState.RectangleFillColor;
+    Data.FillStyle := FEditorState.RectangleFillStyle;
   Data.LineCap := FEditorState.PathLineCap;
   Data.LineJoin := FEditorState.PathLineJoin;
   Data.AntiAlias := FEditorState.PathAntiAlias;
@@ -317,6 +318,7 @@ begin
   Data.Bounds := TRectF.Create(LogicalLeft, LogicalTop, LogicalRight,
     LogicalBottom);
   Data.FillColor := FEditorState.RectangleFillColor;
+    Data.FillStyle := FEditorState.RectangleFillStyle;
   Data.Filled := VectArtRectangleModeHasFill(FEditorState.RectangleMode);
   Data.Locked := False;
   if FCreationTool = vetEllipse then

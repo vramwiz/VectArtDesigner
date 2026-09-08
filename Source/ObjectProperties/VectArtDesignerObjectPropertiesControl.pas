@@ -5,7 +5,7 @@ unit VectArtDesignerObjectPropertiesControl;
 interface
 
 uses
-  System.Classes, System.Types, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Forms, Vcl.Graphics, VectArtDesignerPaintPopup,
+  System.Classes, System.Types, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Forms, Vcl.Graphics, VectArtDesignerColorSwatch, VectArtDesignerPaintPopup,
   VectArtDesignerDocument, VectArtDesignerEditCommands,
   VectArtDesignerEditHistory, VectArtDesignerEditorState,
   VectArtDesignerLineStyleControls, VectArtDesignerStrokeStyleCombo;
@@ -23,7 +23,7 @@ type
     FFontChecks: array[0..3] of TCheckBox;
     FAspectCheck: TCheckBox;
     FAppearanceMode: TComboBox;
-    FTypeLabel: TLabel;
+    FTypeLabel: TStaticText;
     FPopupStroke: Boolean;
     FPopupSelection: TArray<Integer>;
     FColorEdit: TEdit;
@@ -61,6 +61,7 @@ type
     procedure RefreshSettingsUI;
     procedure OpenColor(Sender: TObject);
     procedure PopupColorChanged(Sender: TObject; Color: TColor);
+    procedure PopupFillChanged(Sender: TObject; Color: TColor; const Fill: TVectArtFillStyle);
     procedure TextSettingsChanged(Sender: TObject);
     procedure ApplyColor;
     procedure ApplyGeometry;
@@ -78,6 +79,7 @@ type
     procedure ApplyVerticalText(Sender: TObject);
     procedure ClearEditValue(Edit: TEdit);
     procedure EditExit(Sender: TObject);
+    procedure PixelKeyPress(Sender: TObject; var Key: Char);
     procedure EditKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     function GetSelectedFillIndices: TArray<Integer>;
     function GetSelectedOpacityIndices: TArray<Integer>;
@@ -119,7 +121,7 @@ implementation
 
 uses
   System.Generics.Collections, System.Math, System.SysUtils, Winapi.Windows,
-  VectArtDesignerAppearanceModeCommand, VectArtDesignerSettingsDrafts, VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
+  VectArtDesignerFillCommand, VectArtDesignerAppearanceModeCommand, VectArtDesignerSettingsDrafts, VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
   VectArtDesignerTextGeometry;
 
 const
@@ -138,7 +140,11 @@ begin
   inherited Create(AOwner);
   Color := COLOR_BACKGROUND;
   ParentBackground := False;
-  DoubleBuffered := True;
+  ParentDoubleBuffered := False;
+  DoubleBuffered := False;
+  Font.Color := COLOR_TEXT;
+  Font.Name := 'Segoe UI';
+  Font.Height := -11;
   FXEdit := NewDarkEdit;
   FYEdit := NewDarkEdit;
   FWidthEdit := NewDarkEdit;
@@ -177,7 +183,7 @@ begin
   FPathStartMarkerCombo := TVectArtLineMarkerCombo.Create(Self);
   FPathStartMarkerCombo.Parent := Self;
   FPathStartMarkerCombo.Style := csOwnerDrawFixed;
-  FPathStartMarkerCombo.ItemHeight := 22;
+  FPathStartMarkerCombo.ItemHeight := 19;
   FPathStartMarkerCombo.DropDownCount := 10;
   FPathStartMarkerCombo.Color := COLOR_EDIT;
   FPathStartMarkerCombo.Font.Color := COLOR_TEXT;
@@ -186,7 +192,7 @@ begin
   FPathEndMarkerCombo := TVectArtLineMarkerCombo.Create(Self);
   FPathEndMarkerCombo.Parent := Self;
   FPathEndMarkerCombo.Style := csOwnerDrawFixed;
-  FPathEndMarkerCombo.ItemHeight := 22;
+  FPathEndMarkerCombo.ItemHeight := 19;
   FPathEndMarkerCombo.DropDownCount := 10;
   FPathEndMarkerCombo.Color := COLOR_EDIT;
   FPathEndMarkerCombo.Font.Color := COLOR_TEXT;
@@ -1222,9 +1228,25 @@ begin
     FEditorState.RectangleOpacity := NewValue;
 end;
 
-procedure TVectArtObjectPropertiesControl.EditExit(Sender: TObject);
-var Bounds: TRectF; Value: Double;
+procedure TVectArtObjectPropertiesControl.PixelKeyPress(Sender: TObject; var Key: Char);
 begin
+  if (Sender = FXEdit) or (Sender = FYEdit) or (Sender = FWidthEdit) or
+    (Sender = FHeightEdit) or (Sender = FStrokeWidthEdit) or
+    (Sender = FPathStartMarkerSizeEdit) or (Sender = FPathEndMarkerSizeEdit) then
+    if (Key >= #32) and not CharInSet(Key, ['0'..'9', '-']) then Key := #0;
+end;
+
+procedure TVectArtObjectPropertiesControl.EditExit(Sender: TObject);
+var Bounds: TRectF; Value: Double; IntegerValue: Integer;
+begin
+  if ((Sender = FXEdit) or (Sender = FYEdit) or (Sender = FWidthEdit) or
+    (Sender = FHeightEdit) or (Sender = FStrokeWidthEdit) or
+    (Sender = FPathStartMarkerSizeEdit) or (Sender = FPathEndMarkerSizeEdit)) and
+    not TryStrToInt(Trim(TEdit(Sender).Text), IntegerValue) then
+  begin
+    RefreshFromDocument;
+    Exit;
+  end;
   if (FAspectCheck <> nil) and FAspectCheck.Checked and
     ((Sender = FWidthEdit) or (Sender = FHeightEdit)) and
     (FDocument <> nil) and (FDocument.SelectionCount = 1) then
@@ -1236,8 +1258,8 @@ begin
     else
       Bounds := TRectF.Empty;
     if (Bounds.Width > 0) and (Bounds.Height > 0) and TryStrToFloat(TEdit(Sender).Text, Value) then
-      if Sender = FWidthEdit then FHeightEdit.Text := FloatToStr(Value * Bounds.Height / Bounds.Width)
-      else FWidthEdit.Text := FloatToStr(Value * Bounds.Width / Bounds.Height);
+      if Sender = FWidthEdit then FHeightEdit.Text := FormatFloat('0', Value * Bounds.Height / Bounds.Width)
+      else FWidthEdit.Text := FormatFloat('0', Value * Bounds.Width / Bounds.Height);
   end;
   if Sender = FPathStartMarkerSizeEdit then
     ApplyPathMarkerSize(True)
@@ -1264,11 +1286,11 @@ begin
   Result := TVectArtStrokeStyleCombo.Create(Self);
   Result.Parent := Self;
   Result.Style := csOwnerDrawFixed;
-  Result.ItemHeight := 22;
+  Result.ItemHeight := 19;
   Result.DropDownCount := 9;
   Result.Color := COLOR_EDIT;
   Result.Font.Name := 'Segoe UI';
-  Result.Font.Height := -12;
+  Result.Font.Height := -11;
   Result.Font.Color := COLOR_TEXT;
   Result.ParentColor := False;
   Result.ParentFont := False;
@@ -1298,11 +1320,12 @@ begin
   Result.Height := EDIT_HEIGHT;
   Result.Color := COLOR_EDIT;
   Result.Font.Name := 'Segoe UI';
-  Result.Font.Height := -12;
+  Result.Font.Height := -11;
   Result.Font.Color := COLOR_TEXT;
   Result.ParentColor := False;
   Result.ParentFont := False;
   Result.OnExit := EditExit;
+  Result.OnKeyPress := PixelKeyPress;
   Result.OnKeyDown := EditKeyDown;
 end;
 
@@ -1416,10 +1439,10 @@ begin
       RectangleLayer := TVectArtRectangleLayer(
         FDocument[FDocument.SelectedIndex]);
       Bounds := RectangleLayer.Bounds;
-      FXEdit.Text := FormatFloat('0.##', Bounds.Left);
-      FYEdit.Text := FormatFloat('0.##', Bounds.Top);
-      FWidthEdit.Text := FormatFloat('0.##', Bounds.Width);
-      FHeightEdit.Text := FormatFloat('0.##', Bounds.Height);
+      FXEdit.Text := FormatFloat('0', Bounds.Left);
+      FYEdit.Text := FormatFloat('0', Bounds.Top);
+      FWidthEdit.Text := FormatFloat('0', Bounds.Width);
+      FHeightEdit.Text := FormatFloat('0', Bounds.Height);
       ColorValue := ColorToRGB(RectangleLayer.FillColor);
       FColorEdit.Text := Format('#%.2x%.2x%.2x', [GetRValue(ColorValue),
         GetGValue(ColorValue), GetBValue(ColorValue)]);
@@ -1428,7 +1451,7 @@ begin
       FStrokeColorEdit.Text := Format('#%.2x%.2x%.2x',
         [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
          GetBValue(StrokeColorValue)]);
-      FStrokeWidthEdit.Text := FormatFloat('0.##', RectangleLayer.StrokeWidth);
+      FStrokeWidthEdit.Text := FormatFloat('0', RectangleLayer.StrokeWidth);
       FStrokeStyleCombo.SetPendingItemIndex(
         Ord(RectangleLayer.StrokeStyle));
       SetEditorsEnabled(True);
@@ -1449,10 +1472,10 @@ begin
     begin
       TextLayer := TVectArtTextLayer(FDocument[FDocument.SelectedIndex]);
       Bounds := TextLayer.Bounds;
-      FXEdit.Text := FormatFloat('0.##', Bounds.Left);
-      FYEdit.Text := FormatFloat('0.##', Bounds.Top);
-      FWidthEdit.Text := FormatFloat('0.##', Bounds.Width);
-      FHeightEdit.Text := FormatFloat('0.##', Bounds.Height);
+      FXEdit.Text := FormatFloat('0', Bounds.Left);
+      FYEdit.Text := FormatFloat('0', Bounds.Top);
+      FWidthEdit.Text := FormatFloat('0', Bounds.Width);
+      FHeightEdit.Text := FormatFloat('0', Bounds.Height);
       ColorValue := ColorToRGB(TextLayer.TextColor);
       FColorEdit.Text := Format('#%.2x%.2x%.2x', [GetRValue(ColorValue),
         GetGValue(ColorValue), GetBValue(ColorValue)]);
@@ -1487,12 +1510,12 @@ begin
       (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer) then
     begin
       ImageLayer := TVectArtImageLayer(FDocument[FDocument.SelectedIndex]);
-      FXEdit.Text := FormatFloat('0.##', ImageLayer.Points[0].X);
-      FYEdit.Text := FormatFloat('0.##', ImageLayer.Points[0].Y);
-      FWidthEdit.Text := FormatFloat('0.##', Hypot(
+      FXEdit.Text := FormatFloat('0', ImageLayer.Points[0].X);
+      FYEdit.Text := FormatFloat('0', ImageLayer.Points[0].Y);
+      FWidthEdit.Text := FormatFloat('0', Hypot(
         ImageLayer.Points[1].X - ImageLayer.Points[0].X,
         ImageLayer.Points[1].Y - ImageLayer.Points[0].Y));
-      FHeightEdit.Text := FormatFloat('0.##', Hypot(
+      FHeightEdit.Text := FormatFloat('0', Hypot(
         ImageLayer.Points[3].X - ImageLayer.Points[0].X,
         ImageLayer.Points[3].Y - ImageLayer.Points[0].Y));
       ClearEditValue(FColorEdit);
@@ -1520,10 +1543,10 @@ begin
       PathLayer := TVectArtPathLayer(FDocument[FDocument.SelectedIndex]);
       Bounds := PointsBounds(BuildPathDisplayPolyline(PathLayer.Points,
         PathLayer.Bezier, PathLayer.Closed, 16));
-      FXEdit.Text := FormatFloat('0.##', Bounds.Left);
-      FYEdit.Text := FormatFloat('0.##', Bounds.Top);
-      FWidthEdit.Text := FormatFloat('0.##', Bounds.Width);
-      FHeightEdit.Text := FormatFloat('0.##', Bounds.Height);
+      FXEdit.Text := FormatFloat('0', Bounds.Left);
+      FYEdit.Text := FormatFloat('0', Bounds.Top);
+      FWidthEdit.Text := FormatFloat('0', Bounds.Width);
+      FHeightEdit.Text := FormatFloat('0', Bounds.Height);
       ColorValue := ColorToRGB(PathLayer.FillColor);
       FColorEdit.Text := Format('#%.2x%.2x%.2x', [GetRValue(ColorValue),
         GetGValue(ColorValue), GetBValue(ColorValue)]);
@@ -1532,7 +1555,7 @@ begin
       FStrokeColorEdit.Text := Format('#%.2x%.2x%.2x',
         [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
          GetBValue(StrokeColorValue)]);
-      FStrokeWidthEdit.Text := FormatFloat('0.##', PathLayer.StrokeWidth);
+      FStrokeWidthEdit.Text := FormatFloat('0', PathLayer.StrokeWidth);
       FStrokeStyleCombo.SetPendingItemIndex(Ord(PathLayer.StrokeStyle));
       SetPathStyleControlsVisible(True);
       FPathLineCapButtons[vlcButt].Selected := PathLayer.LineCap = vlcButt;
@@ -1543,10 +1566,10 @@ begin
       FPathLineJoinButtons[vljRound].Selected := PathLayer.LineJoin = vljRound;
       FPathAntiAliasButton.Selected := PathLayer.AntiAlias;
       FPathStartMarkerCombo.SetPendingMarker(PathLayer.StartMarker, True);
-      FPathStartMarkerSizeEdit.Text := FormatFloat('0.##',
+      FPathStartMarkerSizeEdit.Text := FormatFloat('0',
         PathLayer.StartMarkerSize);
       FPathEndMarkerCombo.SetPendingMarker(PathLayer.EndMarker, True);
-      FPathEndMarkerSizeEdit.Text := FormatFloat('0.##',
+      FPathEndMarkerSizeEdit.Text := FormatFloat('0',
         PathLayer.EndMarkerSize);
       SetEditorsEnabled(True);
       FPathStartMarkerCombo.Enabled := not PathLayer.Closed;
@@ -1582,17 +1605,17 @@ begin
       (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
     begin
       LineLayer := TVectArtLineLayer(FDocument[FDocument.SelectedIndex]);
-      FXEdit.Text := FormatFloat('0.##', LineLayer.StartPoint.X);
-      FYEdit.Text := FormatFloat('0.##', LineLayer.StartPoint.Y);
-      FWidthEdit.Text := FormatFloat('0.##', LineLayer.EndPoint.X);
-      FHeightEdit.Text := FormatFloat('0.##', LineLayer.EndPoint.Y);
+      FXEdit.Text := FormatFloat('0', LineLayer.StartPoint.X);
+      FYEdit.Text := FormatFloat('0', LineLayer.StartPoint.Y);
+      FWidthEdit.Text := FormatFloat('0', LineLayer.EndPoint.X);
+      FHeightEdit.Text := FormatFloat('0', LineLayer.EndPoint.Y);
       ClearEditValue(FColorEdit);
       FOpacityEdit.Text := FormatFloat('0.##', LineLayer.Opacity * 100);
       StrokeColorValue := ColorToRGB(LineLayer.StrokeColor);
       FStrokeColorEdit.Text := Format('#%.2x%.2x%.2x',
         [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
          GetBValue(StrokeColorValue)]);
-      FStrokeWidthEdit.Text := FormatFloat('0.##', LineLayer.StrokeWidth);
+      FStrokeWidthEdit.Text := FormatFloat('0', LineLayer.StrokeWidth);
       FStrokeStyleCombo.SetPendingItemIndex(Ord(LineLayer.StrokeStyle));
       SetEditorsEnabled(True);
       FXEdit.Enabled := False;
@@ -1611,8 +1634,8 @@ begin
       FPathAntiAliasButton.Selected := LineLayer.AntiAlias;
       FPathStartMarkerCombo.SetPendingMarker(LineLayer.StartMarker, True);
       FPathEndMarkerCombo.SetPendingMarker(LineLayer.EndMarker, True);
-      FPathStartMarkerSizeEdit.Text := FloatToStr(LineLayer.StartMarkerSize);
-      FPathEndMarkerSizeEdit.Text := FloatToStr(LineLayer.EndMarkerSize);
+      FPathStartMarkerSizeEdit.Text := FormatFloat('0', LineLayer.StartMarkerSize);
+      FPathEndMarkerSizeEdit.Text := FormatFloat('0', LineLayer.EndMarkerSize);
       FPathStartMarkerSizeEdit.Enabled := not LineLayer.Locked and (LineLayer.StartMarker <> vlmNone);
       FPathEndMarkerSizeEdit.Enabled := not LineLayer.Locked and (LineLayer.EndMarker <> vlmNone);
       if LineLayer.Locked then
@@ -1625,10 +1648,10 @@ begin
     else if (FDocument <> nil) and (FDocument.SelectionCount > 1) and
       SelectedBounds(Bounds) then
     begin
-      FXEdit.Text := FormatFloat('0.##', Bounds.Left);
-      FYEdit.Text := FormatFloat('0.##', Bounds.Top);
-      FWidthEdit.Text := FormatFloat('0.##', Bounds.Width);
-      FHeightEdit.Text := FormatFloat('0.##', Bounds.Height);
+      FXEdit.Text := FormatFloat('0', Bounds.Left);
+      FYEdit.Text := FormatFloat('0', Bounds.Top);
+      FWidthEdit.Text := FormatFloat('0', Bounds.Width);
+      FHeightEdit.Text := FormatFloat('0', Bounds.Height);
       LayerIndices := GetSelectedRectangleIndices;
       RectangleLayer := TVectArtRectangleLayer(FDocument[LayerIndices[0]]);
       ColorValue := RectangleLayer.FillColor;
@@ -1677,7 +1700,7 @@ begin
       else
         ClearEditValue(FStrokeColorEdit);
       if CommonStrokeWidth then
-        FStrokeWidthEdit.Text := FormatFloat('0.##', StrokeWidthValue)
+        FStrokeWidthEdit.Text := FormatFloat('0', StrokeWidthValue)
       else
         ClearEditValue(FStrokeWidthEdit);
       if CommonStrokeStyle then

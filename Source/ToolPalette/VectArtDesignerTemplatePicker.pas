@@ -4,7 +4,7 @@ unit VectArtDesignerTemplatePicker;
 interface
 
 uses System.Classes, System.Types, Vcl.Graphics, Vcl.Forms, Vcl.StdCtrls, Vcl.Grids, Vcl.Controls,
-  VectArtDesignerEditorState, VectArtDesignerPaintPopup;
+  VectArtDesignerDocument, VectArtDesignerEditorState, VectArtDesignerColorSwatch, VectArtDesignerPaintPopup;
 
 type
   TVectArtTemplatePicker = class(TForm)
@@ -23,6 +23,7 @@ type
     procedure ModeChanged(Sender: TObject);
     procedure OpenColor(Sender: TObject);
     procedure ColorChanged(Sender: TObject; Color: TColor);
+    procedure FillChanged(Sender: TObject; Color: TColor; const Fill: TVectArtFillStyle);
   public
     constructor Create(AOwner: TComponent); override;
     procedure Open(State: TVectArtEditorState);
@@ -31,7 +32,7 @@ type
 
 implementation
 
-uses System.Math, VectArtDesignerTemplateGeometry;
+uses System.Math, System.Skia, VectArtDesignerFillPaint, VectArtDesignerTemplateGeometry;
 
 constructor TVectArtTemplatePicker.Create(AOwner: TComponent);
 var L: TLabel;
@@ -79,6 +80,7 @@ procedure TVectArtTemplatePicker.Refresh;
 begin
   if FState = nil then Exit;
   FFill.Value := FState.RectangleFillColor;
+  FFill.FillStyle := FState.RectangleFillStyle;
   FStroke.Value := FState.RectangleStrokeColor;
   FMode.ItemIndex := Ord(FState.RectangleMode);
   FGrid.Invalidate;
@@ -98,6 +100,7 @@ end;
 procedure TVectArtTemplatePicker.DrawCell(Sender: TObject; ACol, ARow: Longint;
   Rect: TRect; State: TGridDrawState);
 var I,J: Integer; P: TArray<TPointF>; ScreenPoints: TArray<TPoint>; Bounds: TRectF;
+  Bitmap: TBitmap; Surface: ISkSurface; Paint: ISkPaint; Builder: ISkPathBuilder; Path: ISkPath;
 begin
   FGrid.Canvas.Brush.Color := TColor($00333333); FGrid.Canvas.FillRect(Rect);
   I := ARow*3+ACol;
@@ -110,6 +113,28 @@ begin
   FGrid.Canvas.Pen.Color := FState.RectangleStrokeColor;
   FGrid.Canvas.Pen.Width := EnsureRange(Round(FState.RectangleStrokeWidth),1,5);
   if not VectArtRectangleModeHasStroke(FState.RectangleMode) then FGrid.Canvas.Pen.Style := psClear;
+  if VectArtRectangleModeHasFill(FState.RectangleMode) and
+    (FState.RectangleFillStyle.Kind <> vfkSolid) then
+  begin
+    Bitmap := TBitmap.Create;
+    try
+      Bitmap.PixelFormat := pf32bit; Bitmap.SetSize(Rect.Width,Rect.Height);
+      Surface := TSkSurface.MakeRasterDirect(
+        TSkImageInfo.Create(Bitmap.Width,Bitmap.Height,TSkColorType.BGRA8888,TSkAlphaType.Premul),
+        Bitmap.ScanLine[Bitmap.Height-1],Bitmap.Width*4);
+      Surface.Canvas.Clear($FF333333);
+      Surface.Canvas.Translate(0,Bitmap.Height); Surface.Canvas.Scale(1,-1);
+      Surface.Canvas.Translate(-Rect.Left,-Rect.Top);
+      Builder := TSkPathBuilder.Create; Builder.MoveTo(P[0]);
+      for J := 1 to High(P) do Builder.LineTo(P[J]);
+      Builder.Close; Path := Builder.Detach;
+      Paint := TSkPaint.Create; Paint.AntiAlias := True;
+      SetFillPaint(Paint,FState.RectangleFillColor,FState.RectangleFillStyle,Bounds,1);
+      Surface.Canvas.DrawPath(Path,Paint); Surface := nil;
+      FGrid.Canvas.Draw(Rect.Left,Rect.Top,Bitmap);
+    finally Bitmap.Free; end;
+    FGrid.Canvas.Brush.Style := bsClear;
+  end;
   FGrid.Canvas.Polygon(ScreenPoints);
   FGrid.Canvas.Pen.Style := psSolid; FGrid.Canvas.Pen.Width := 1;
   FGrid.Canvas.Brush.Style := bsClear; FGrid.Canvas.Font.Color := clWhite;
@@ -135,9 +160,20 @@ begin if FState <> nil then begin FState.RectangleMode := TVectArtRectangleMode(
 procedure TVectArtTemplatePicker.OpenColor(Sender: TObject);
 begin
   FStrokeEditing := Sender = FStroke;
-  ShowVectArtColorPopup(Self,'テンプレ図形の色',TVectArtColorSwatch(Sender).Value,nil,False,ColorChanged);
+  if FState = nil then Exit;
+  if FStrokeEditing then
+    ShowVectArtColorPopup(Self,'テンプレ図形の線色',FStroke.Value,nil,ColorChanged)
+  else ShowVectArtFillPopup(Self,FFill.Value,FState.RectangleFillStyle,nil,FillChanged);
 end;
 
+procedure TVectArtTemplatePicker.FillChanged(Sender: TObject; Color: TColor;
+  const Fill: TVectArtFillStyle);
+begin
+  if FState = nil then Exit;
+  FState.SetRectangleFill(Color,Fill);
+  if FState.RectangleMode = vrmOutline then FState.RectangleMode := vrmFillAndOutline;
+  Refresh;
+end;
 procedure TVectArtTemplatePicker.ColorChanged(Sender: TObject; Color: TColor);
 begin
   if FState = nil then Exit;

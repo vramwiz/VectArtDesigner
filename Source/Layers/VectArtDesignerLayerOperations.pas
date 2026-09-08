@@ -63,6 +63,7 @@ begin
   if FEditorState <> nil then
   begin
     Data.FillColor := FEditorState.RectangleFillColor;
+    Data.FillStyle := FEditorState.RectangleFillStyle;
     Data.Filled := VectArtRectangleModeHasFill(FEditorState.RectangleMode);
   end
   else

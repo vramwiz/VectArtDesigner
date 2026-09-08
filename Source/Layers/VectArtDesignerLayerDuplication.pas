@@ -154,6 +154,7 @@ begin
           RectangleData.GroupId := DuplicateGroupId;
           RectangleData.Bounds := RectangleLayer.Bounds;
           RectangleData.Bounds.Offset(DUPLICATE_OFFSET, DUPLICATE_OFFSET);
+          RectangleData.FillStyle := RectangleLayer.FillStyle;
           RectangleData.FillColor := RectangleLayer.FillColor;
           RectangleData.Filled := RectangleLayer.Filled;
           RectangleData.Locked := False;

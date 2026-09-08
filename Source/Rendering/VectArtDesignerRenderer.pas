@@ -5,7 +5,7 @@ unit VectArtDesignerRenderer;
 interface
 
 uses
-  System.SysUtils, VectArtDesignerDocument;
+  System.SysUtils, System.Types, System.Skia, Vcl.Graphics, VectArtDesignerDocument;
 
 type
   TVectArtRgbaPixel = packed record
@@ -48,28 +48,20 @@ procedure RenderVectArtGroupThumbnail(Document: TVectArtDocument;
 procedure CompositeVectArtRgba(const Source: TVectArtRenderBuffer;
   Destination: PVectArtRgbaPixel; Width, Height: Integer);
 
+
+procedure RenderVectArtFillThumbnail(Document: TVectArtDocument; Index: Integer;
+  Target: TVectArtRenderBuffer; Width, Height: Integer);
+
 implementation
 
 uses
-  System.Math, System.Skia, System.Types, System.UITypes,
-  TextRendererSkiaRuntime, Vcl.Graphics, Winapi.Windows,
-  VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
+  System.Math, System.Math.Vectors, System.UITypes,
+  TextRendererSkiaRuntime, Winapi.Windows,
+  VectArtDesignerFillPaint, VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
   VectArtDesignerTextGeometry;
 
 const
   MAX_RENDER_DIMENSION = 16384;
-
-function VclColorToAlphaColor(Color: TColor; Opacity: Single): TAlphaColor;
-var
-  RGBColor: TColor;
-begin
-  RGBColor := ColorToRGB(Color);
-  Result := TAlphaColor(
-    (Cardinal(EnsureRange(Round(Opacity * 255), 0, 255)) shl 24) or
-    (Cardinal(GetRValue(RGBColor)) shl 16) or
-    (Cardinal(GetGValue(RGBColor)) shl 8) or
-    Cardinal(GetBValue(RGBColor)));
-end;
 
 { TVectArtRenderBuffer }
 
@@ -117,7 +109,7 @@ end;
 procedure RenderVectArtDocumentRegion(Document: TVectArtDocument;
   Target: TVectArtRenderBuffer; Width, Height: Integer;
   const LogicalBounds: TRectF; GroupId: TVectArtGroupId;
-  MinimumStrokeWidth: Single; ShowHiddenLayers: Boolean);
+  MinimumStrokeWidth: Single; ShowHiddenLayers: Boolean; LayerIndex: Integer = -1);
 var
   Canvas: ISkCanvas;
   Control1: TPointF;
@@ -218,7 +210,9 @@ begin
   Canvas.Translate(-LogicalBounds.Left, -LogicalBounds.Top);
   for I := 1 to Document.LayerCount - 1 do
   begin
+    if (LayerIndex >= 0) and (I <> LayerIndex) then Continue;
     Layer := Document[I];
+    Paint.Shader := nil;
     if (GroupId <> VECTART_NO_GROUP) and (Layer.GroupId <> GroupId) then
       Continue;
     if not Layer.Visible and not ShowHiddenLayers then
@@ -380,6 +374,8 @@ begin
       begin
         Paint.Color := VclColorToAlphaColor(PathLayer.FillColor,
           PathLayer.Opacity * LayerOpacityMultiplier);
+        SetFillPaint(Paint,PathLayer.FillColor,PathLayer.FillStyle,Path.Bounds,
+          PathLayer.Opacity * LayerOpacityMultiplier);
         Canvas.DrawPath(Path, Paint);
       end;
       if PathLayer.StrokeWidth > 0 then
@@ -438,6 +434,8 @@ begin
         (RectangleLayer.Bounds.Top + RectangleLayer.Bounds.Bottom) * 0.5);
       if RectangleLayer.Filled then
       begin
+        SetFillPaint(Paint,RectangleLayer.FillColor,RectangleLayer.FillStyle,
+          RectangleLayer.Bounds,RectangleLayer.Opacity * LayerOpacityMultiplier);
         if RectangleLayer.Shape = vpsEllipse then
           Canvas.DrawOval(RectangleLayer.Bounds, Paint)
         else
@@ -473,6 +471,20 @@ begin
   Surface.Flush;
 end;
 
+procedure RenderVectArtFillThumbnail(Document: TVectArtDocument; Index: Integer;
+  Target: TVectArtRenderBuffer; Width, Height: Integer);
+var Bounds: TRectF; Scale: Single; Center: TPointF;
+begin
+  if Document[Index] is TVectArtRectangleLayer then
+    Bounds := QuadBounds(RectangleCorners(TVectArtRectangleLayer(Document[Index]).Bounds,
+      TVectArtRectangleLayer(Document[Index]).RotationDegrees))
+  else Bounds := PointsBounds(TVectArtPathLayer(Document[Index]).Points);
+  Scale := Min((Width-4)/Max(1,Bounds.Width),(Height-4)/Max(1,Bounds.Height));
+  Center := Bounds.CenterPoint;
+  Bounds := RectF(Center.X-Width/Scale/2,Center.Y-Height/Scale/2,
+    Center.X+Width/Scale/2,Center.Y+Height/Scale/2);
+  RenderVectArtDocumentRegion(Document,Target,Width,Height,Bounds,VECTART_NO_GROUP,0,True,Index);
+end;
 procedure RenderVectArtDocument(Document: TVectArtDocument;
   Target: TVectArtRenderBuffer; Width, Height: Integer;
   MinimumStrokeWidth: Single);
@@ -526,7 +538,9 @@ begin
   ContentBounds := TRectF.Empty;
   for I in Document.GetGroupLayerIndices(GroupId) do
   begin
+
     Layer := Document[I];
+
     if Layer is TVectArtTextLayer then
     begin
       TextLayer := TVectArtTextLayer(Layer);

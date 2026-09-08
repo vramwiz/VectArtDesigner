@@ -16,7 +16,7 @@
 入力と出力は指定できる。相対パスは呼び出した時点の現在フォルダーを基準に解決される。
 
 ```powershell
-.\Tools\Invoke-MifDiagnostics.ps1 -InputPath .\mif -OutputPath .\Win64\MifDiagnostics\manual -Hex
+.\Tools\Invoke-MifDiagnostics.ps1 -InputPath .\mif -OutputPath .\TestOutput\MifDiagnostics\manual -Hex
 ```
 
 ## 出力
@@ -29,5 +29,4 @@
 - `hex/*.hex.txt`: `-Hex`指定時だけ作る、元データと保存データの完全な16進ダンプ。
 
 終了コードは、全件一致が`0`、読込または保存エラーが`1`、バイト差分ありが`2`となる。
-通常の出力先は`Win64/MifDiagnostics/runs/<実行日時>`であり、過去の診断結果を上書きしない。
-
+通常の出力先は`TestOutput/MifDiagnostics/runs/<実行日時>`であり、過去の診断結果を上書きしない。

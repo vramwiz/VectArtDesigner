@@ -1,4 +1,4 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{6ACF092C-3927-4E2D-9C26-F5EB35BA02BF}</ProjectGuid>
         <ProjectVersion>20.4</ProjectVersion>
@@ -128,6 +128,17 @@
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
+        <DCCReference Include="Source\ObjectProperties\Color\VectArtDesignerPaintPreview.pas"/>
+        <DCCReference Include="Source\Rendering\VectArtDesignerGradientGeometry.pas"/>
+        <DCCReference Include="Source\UI\VectArtDesignerNumericSlider.pas"/>
+        <DCCReference Include="Lib\ColorPicker\ColorPickerColorMath.pas"/>
+        <DCCReference Include="Lib\ColorPicker\ColorPickerHueBar.pas"/>
+        <DCCReference Include="Lib\ColorPicker\ColorPickerSVArea.pas"/>
+        <DCCReference Include="Source\Rendering\VectArtDesignerFillPaint.pas"/>
+        <DCCReference Include="Source\Persistence\Mif\VectArtDesignerMifPngMetadata.pas"/>
+        <DCCReference Include="Source\ObjectProperties\Color\VectArtDesignerColorSwatch.pas"/>
+        <DCCReference Include="Source\Persistence\Svg\VectArtDesignerSvgWriter.pas"/>
+        <DCCReference Include="Source\Persistence\Svg\VectArtDesignerSvgPrimitives.pas"/>
         <DCCReference Include="Lib\TextRenderer\TextRendererSkiaBootstrap.pas"/>
         <DCCReference Include="Lib\TextRenderer\TextRendererTypes.pas"/>
         <DCCReference Include="Lib\TextRenderer\TextRenderer.pas"/>
@@ -185,6 +196,18 @@
         <DCCReference Include="Source\ObjectProperties\VectArtDesignerObjectPropertiesFrame.pas"/>
         <DCCReference Include="Source\ToolPalette\VectArtDesignerToolPaletteFrame.pas"/>
         <DCCReference Include="Source\ToolPalette\VectArtDesignerToolPalette.pas"/>
+        <DCCReference Include="Source\Core\VectArtDesignerTextGeometry.pas"/>
+        <DCCReference Include="Source\Core\Commands\VectArtDesignerLayerGroupOperations.pas"/>
+        <DCCReference Include="Source\Editor\Import\VectArtDesignerImageFileImport.pas"/>
+        <DCCReference Include="Source\Editor\Input\VectArtDesignerTextEditing.pas"/>
+        <DCCReference Include="Source\Editor\Input\WindowsImeController.pas"/>
+        <DCCReference Include="Source\Editor\Geometry\VectArtDesignerSnapGeometry.pas"/>
+        <DCCReference Include="Source\Core\Commands\VectArtDesignerFillCommand.pas"/>
+        <DCCReference Include="Source\Core\Commands\VectArtDesignerAppearanceModeCommand.pas"/>
+        <DCCReference Include="Source\ObjectProperties\Color\VectArtDesignerPaintPopup.pas"/>
+        <DCCReference Include="Source\ObjectProperties\VectArtDesignerSettingsDrafts.pas"/>
+        <DCCReference Include="Source\Editor\Geometry\VectArtDesignerTemplateGeometry.pas"/>
+        <DCCReference Include="Source\ToolPalette\VectArtDesignerTemplatePicker.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

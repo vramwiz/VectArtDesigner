@@ -11,14 +11,14 @@ $inputDirectory = if ($InputPath) {
 } else {
     Join-Path $projectRoot 'mif'
 }
-$runRoot = Join-Path $projectRoot 'Win64\MifDiagnostics\runs'
+$runRoot = Join-Path $projectRoot 'TestOutput\MifDiagnostics\runs'
 if ($OutputPath) {
     $outputDirectory = [System.IO.Path]::GetFullPath($OutputPath)
 } else {
     $runId = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
     $outputDirectory = Join-Path $runRoot $runId
 }
-$buildDirectory = Join-Path $projectRoot 'Win64\MifDiagnostics\bin'
+$buildDirectory = Join-Path $projectRoot 'TestOutput\MifDiagnostics\bin'
 $dcuDirectory = Join-Path $buildDirectory 'DCU'
 $sourceFile = Join-Path $projectRoot 'Tools\MifDiagnostics\MifDiagnostics.dpr'
 $executable = Join-Path $buildDirectory 'MifDiagnostics.exe'

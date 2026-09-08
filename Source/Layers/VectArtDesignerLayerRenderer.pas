@@ -36,6 +36,8 @@ type
   TVectArtLayerRenderer = class
   private
     FDocument: TVectArtDocument;
+    FFillThumbnails: TObjectDictionary<TVectArtLayer,TVectArtGroupThumbnailCacheEntry>;
+
     FEntries: TArray<TVectArtLayerDisplayEntry>;
     FEntriesRelationRevision: Int64;
     FExpandedGroups: TDictionary<TVectArtGroupId, Byte>;
@@ -46,6 +48,7 @@ type
       TVectArtImageThumbnailCacheEntry>;
     FThumbnailBackground: TVectArtLayerThumbnailBackground;
     FThumbnailRevision: Int64;
+    procedure DrawFillThumbnail(ACanvas: TCustomCanvas; const Bounds: TRect; Layer: TVectArtLayer);
     function ImageDataSignature(const Data: TBytes): UInt64;
     function ImageThumbnail(ImageLayer: TVectArtImageLayer): TPngImage;
     function GroupThumbnailSignature(GroupId: TVectArtGroupId): UInt64;
@@ -138,6 +141,7 @@ const
 constructor TVectArtLayerRenderer.Create;
 begin
   inherited Create;
+  FFillThumbnails := TObjectDictionary<TVectArtLayer,TVectArtGroupThumbnailCacheEntry>.Create([doOwnsValues]);
   FExpandedGroups := TDictionary<TVectArtGroupId, Byte>.Create;
   FGroupThumbnailBuffer := TVectArtRenderBuffer.Create;
   FGroupThumbnails := TObjectDictionary<TVectArtGroupId,
@@ -151,6 +155,7 @@ end;
 
 destructor TVectArtLayerRenderer.Destroy;
 begin
+  FFillThumbnails.Free;
   FImageThumbnails.Free;
   FGroupThumbnails.Free;
   FGroupThumbnailBuffer.Free;
@@ -533,6 +538,46 @@ begin
   end;
 end;
 
+procedure TVectArtLayerRenderer.DrawFillThumbnail(ACanvas: TCustomCanvas;
+  const Bounds: TRect; Layer: TVectArtLayer);
+var Entry: TVectArtGroupThumbnailCacheEntry; I,X,Y: Integer;
+    Source: PVectArtRgbaPixel; Dest: PByte; C: LongWord; A: Cardinal;
+begin
+  if (Bounds.Width <= 4) or (Bounds.Height <= 4) then Exit;
+  if FFillThumbnails.TryGetValue(Layer,Entry) and
+    (Entry.Signature = UInt64(Layer.Revision)) and
+    (Entry.Bitmap.Width = Bounds.Width) and (Entry.Bitmap.Height = Bounds.Height) then
+  begin ACanvas.Draw(Bounds.Left,Bounds.Top,Entry.Bitmap); Exit; end;
+  FFillThumbnails.Remove(Layer);
+  for I := 1 to FDocument.LayerCount-1 do
+    if FDocument[I] = Layer then
+    begin
+      RenderVectArtFillThumbnail(FDocument,I,FGroupThumbnailBuffer,Bounds.Width,Bounds.Height);
+      Entry := TVectArtGroupThumbnailCacheEntry.Create;
+      try
+        Entry.Bitmap := Vcl.Graphics.TBitmap.Create;
+        Entry.Bitmap.PixelFormat := pf32bit;
+        Entry.Bitmap.SetSize(Bounds.Width,Bounds.Height);
+        Entry.Signature := UInt64(Layer.Revision);
+        Source := FGroupThumbnailBuffer.Data;
+        for Y := 0 to Bounds.Height-1 do
+        begin
+          Dest := Entry.Bitmap.ScanLine[Y];
+          for X := 0 to Bounds.Width-1 do
+          begin
+            C := ColorToRGB(ThumbnailBackgroundColor(X,Y)); A := Source^.A;
+            Dest[0] := (Cardinal(Source^.B)*A+GetBValue(C)*(255-A)+127) div 255;
+            Dest[1] := (Cardinal(Source^.G)*A+GetGValue(C)*(255-A)+127) div 255;
+            Dest[2] := (Cardinal(Source^.R)*A+GetRValue(C)*(255-A)+127) div 255;
+            Dest[3] := 255; Inc(Dest,4); Inc(Source);
+          end;
+        end;
+        ACanvas.Draw(Bounds.Left,Bounds.Top,Entry.Bitmap);
+        FFillThumbnails.Add(Layer,Entry); Entry := nil;
+      finally Entry.Free; end;
+      Exit;
+    end;
+end;
 procedure TVectArtLayerRenderer.DrawLayerItem(ACanvas: TCanvas;
   const ItemRect: TRect; Layer: TVectArtLayer; Selected: Boolean);
 var
@@ -614,7 +659,10 @@ begin
       Inc(Row);
     end;
   end;
-  if Layer is TVectArtRectangleLayer then
+  if ((Layer is TVectArtRectangleLayer) and (TVectArtRectangleLayer(Layer).FillStyle.Kind <> vfkSolid)) or
+    ((Layer is TVectArtPathLayer) and (TVectArtPathLayer(Layer).FillStyle.Kind <> vfkSolid)) then
+    DrawFillThumbnail(ACanvas,ThumbnailRect,Layer)
+  else if Layer is TVectArtRectangleLayer then
   begin
     RectangleLayer := TVectArtRectangleLayer(Layer);
     RectangleRect := FitThumbnailRect(ThumbnailRect,
@@ -905,7 +953,10 @@ begin
       Inc(Row);
     end;
   end;
-  if Layer is TVectArtRectangleLayer then
+  if ((Layer is TVectArtRectangleLayer) and (TVectArtRectangleLayer(Layer).FillStyle.Kind <> vfkSolid)) or
+    ((Layer is TVectArtPathLayer) and (TVectArtPathLayer(Layer).FillStyle.Kind <> vfkSolid)) then
+    DrawFillThumbnail(ACanvas,ThumbnailRect,Layer)
+  else if Layer is TVectArtRectangleLayer then
   begin
     RectangleLayer := TVectArtRectangleLayer(Layer);
     RectangleRect := FitThumbnailRect(ThumbnailRect,
@@ -1127,7 +1178,9 @@ begin
   SetLength(FEntries, 0);
   FEntriesRelationRevision := -1;
   FExpandedGroups.Clear;
+  FFillThumbnails.Clear;
   FGroupThumbnails.Clear;
+  FFillThumbnails.Clear;
   FImageThumbnails.Clear;
   FThumbnailRevision := -1;
 end;
@@ -1138,6 +1191,7 @@ begin
   if FThumbnailBackground = Value then
     Exit;
   FThumbnailBackground := Value;
+  FFillThumbnails.Clear;
   FGroupThumbnails.Clear;
 end;
 
@@ -1151,7 +1205,8 @@ var
 begin
   if FDocument = nil then
   begin
-    FImageThumbnails.Clear;
+    FFillThumbnails.Clear;
+  FImageThumbnails.Clear;
     FThumbnailRevision := -1;
     Exit;
   end;
@@ -1187,6 +1242,7 @@ var
   SeenGroups: TDictionary<TVectArtGroupId, Byte>;
 begin
   SetLength(FEntries, 0);
+  FFillThumbnails.Clear;
   FGroupThumbnails.Clear;
   if FDocument = nil then
   begin

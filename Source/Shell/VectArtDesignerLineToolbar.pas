@@ -7,7 +7,7 @@ interface
 uses
   System.Classes, System.Types, Vcl.Controls, Vcl.ExtCtrls,
   Vcl.StdCtrls, Vcl.AppEvnts,
-  HorizontalTrackBarControl, VectArtDesignerDocument, VectArtDesignerEditHistory,
+  VectArtDesignerNumericSlider, HorizontalTrackBarControl, VectArtDesignerDocument, VectArtDesignerEditHistory,
   VectArtDesignerEditorState, VectArtDesignerLineStyleControls,
   VectArtDesignerStrokeStyleCombo;
 
@@ -31,6 +31,7 @@ type
     FStrokeStyleCombo: TVectArtStrokeStyleCombo;
     FLineCapButtons: array[TVectArtLineCap] of TVectArtLineCapButton;
     FLineJoinButtons: array[TVectArtLineJoin] of TVectArtLineJoinButton;
+    FStrokeWidthControl: TVectArtNumericSlider;
     FStrokeWidthTrackBar: THorizontalTrackBarControl;
     FStrokeWidthEdit: TEdit;
     FTrackDocumentUpdateActive: Boolean;
@@ -51,9 +52,6 @@ type
     procedure BuildControls;
     procedure CommitTrackGesture;
     procedure CommitMarkerTrackGesture;
-    procedure EditExit(Sender: TObject);
-    procedure EditKeyDown(Sender: TObject; var Key: Word;
-      Shift: TShiftState);
     procedure DetailsClick(Sender: TObject);
     function IsDetailsControl(Control: TControl): Boolean;
     procedure LineCapClick(Sender: TObject);
@@ -138,9 +136,6 @@ const
   COLOR_EDIT = TColor($00353535);
   COLOR_LABEL = TColor($00C8C8C8);
   COLOR_TEXT = TColor($00EEEEEE);
-  STROKE_WIDTH_SCALE = 10;
-  STROKE_WIDTH_TRACK_MIN = 10;
-  STROKE_WIDTH_TRACK_MAX = 1000;
   MARKER_SIZE_TRACK_MIN = 1;
   MARKER_SIZE_TRACK_MAX = 100;
 
@@ -200,31 +195,17 @@ var
   Join: TVectArtLineJoin;
   ParentForm: TCustomForm;
 begin
-  FStrokeWidthTrackBar := THorizontalTrackBarControl.Create(Self);
-  FStrokeWidthTrackBar.Parent := Self;
-  FStrokeWidthTrackBar.BackgroundColor := COLOR_BACKGROUND;
-  FStrokeWidthTrackBar.ChannelColor := TColor($00505050);
-  FStrokeWidthTrackBar.FillColor := TColor($00D77800);
-  FStrokeWidthTrackBar.ThumbColor := COLOR_EDIT;
-  FStrokeWidthTrackBar.ThumbBorderColor := COLOR_TEXT;
-  FStrokeWidthTrackBar.ShowTicks := False;
-  FStrokeWidthTrackBar.SetRange(STROKE_WIDTH_TRACK_MIN,
-    STROKE_WIDTH_TRACK_MAX);
+  FStrokeWidthControl := TVectArtNumericSlider.CreateForParent(Self,Self);
+  FStrokeWidthControl.Parent := Self;
+  FStrokeWidthControl.Configure(0.1,10000,0.1,2);
+  FStrokeWidthControl.SetSliderRange(1,100);
+  FStrokeWidthControl.OnChange := TrackBarChanged;
+  FStrokeWidthTrackBar := FStrokeWidthControl.TrackBar;
+  FStrokeWidthEdit := FStrokeWidthControl.Edit;
   FStrokeWidthTrackBar.SmallChange := 10;
   FStrokeWidthTrackBar.LargeChange := 100;
-  FStrokeWidthTrackBar.OnChange := TrackBarChanged;
   FStrokeWidthTrackBar.OnMouseDown := TrackBarMouseDown;
   FStrokeWidthTrackBar.OnMouseUp := TrackBarMouseUp;
-
-  FStrokeWidthEdit := TEdit.Create(Self);
-  FStrokeWidthEdit.Parent := Self;
-  FStrokeWidthEdit.Color := COLOR_EDIT;
-  FStrokeWidthEdit.Font.Color := COLOR_TEXT;
-  FStrokeWidthEdit.Font.Name := 'Segoe UI';
-  FStrokeWidthEdit.Font.Height := -12;
-  FStrokeWidthEdit.OnExit := EditExit;
-  FStrokeWidthEdit.OnKeyDown := EditKeyDown;
-
   FStrokeStyleCombo := TVectArtStrokeStyleCombo.Create(Self);
   FStrokeStyleCombo.Parent := Self;
   FStrokeStyleCombo.Style := csOwnerDrawFixed;
@@ -250,10 +231,8 @@ begin
   FDetailsPanel.SetBounds(0, 0, 420, 310);
   FDetailsPanel.Visible := False;
 
-  FStrokeWidthTrackBar.Parent := FDetailsPanel;
-  FStrokeWidthTrackBar.SetBounds(78, 3, 190, 34);
-  FStrokeWidthEdit.Parent := FDetailsPanel;
-  FStrokeWidthEdit.SetBounds(278, 8, 60, 25);
+  FStrokeWidthControl.Parent := FDetailsPanel;
+  FStrokeWidthControl.SetBounds(78,3,260,34);
   FStrokeStyleCombo.Parent := FDetailsPanel;
   FStrokeStyleCombo.SetBounds(78, 47, 260, 25);
 
@@ -890,33 +869,6 @@ begin
   end;
 end;
 
-procedure TVectArtLineToolbarControl.EditExit(Sender: TObject);
-var
-  Value: Single;
-begin
-  if FUpdating then
-    Exit;
-  if TryStrToFloat(Trim(FStrokeWidthEdit.Text), Value) and (Value > 0) then
-    ApplyStrokeWidth(Value)
-  else
-    RefreshState;
-end;
-
-procedure TVectArtLineToolbarControl.EditKeyDown(Sender: TObject;
-  var Key: Word; Shift: TShiftState);
-begin
-  if Key = VK_RETURN then
-  begin
-    EditExit(Sender);
-    Key := 0;
-  end
-  else if Key = VK_ESCAPE then
-  begin
-    RefreshState;
-    Key := 0;
-  end;
-end;
-
 procedure TVectArtLineToolbarControl.DetailsClick(Sender: TObject);
 var
   Position: TPoint;
@@ -1131,15 +1083,7 @@ begin
         CommonLineJoin := CommonLineJoin and
           (Layer.LineJoin = LineJoinValue);
       end;
-      if CommonWidth then
-      begin
-        FStrokeWidthEdit.Text := FormatFloat('0.##', WidthValue)
-      end
-      else
-        FStrokeWidthEdit.Text := '';
-      FStrokeWidthTrackBar.Position := EnsureRange(
-        Round(WidthValue * STROKE_WIDTH_SCALE), STROKE_WIDTH_TRACK_MIN,
-        STROKE_WIDTH_TRACK_MAX);
+      FStrokeWidthControl.SetDisplay(WidthValue,not CommonWidth);
       if CommonStyle then
         FStrokeStyleCombo.SetPendingItemIndex(Ord(StyleValue))
       else
@@ -1196,11 +1140,7 @@ begin
     begin
       Visible := True;
       FContextText := 'Next Line';
-      FStrokeWidthEdit.Text := FormatFloat('0.##',
-        FEditorState.LineStrokeWidth);
-      FStrokeWidthTrackBar.Position := EnsureRange(
-        Round(FEditorState.LineStrokeWidth * STROKE_WIDTH_SCALE),
-        STROKE_WIDTH_TRACK_MIN, STROKE_WIDTH_TRACK_MAX);
+      FStrokeWidthControl.SetDisplay(FEditorState.LineStrokeWidth);
       FStrokeStyleCombo.SetPendingItemIndex(
         Ord(FEditorState.LineStrokeStyle));
       for Cap := Low(TVectArtLineCap) to High(TVectArtLineCap) do
@@ -1294,8 +1234,7 @@ procedure TVectArtLineToolbarControl.TrackBarChanged(Sender: TObject);
 begin
   if FUpdating then
     Exit;
-  ApplyStrokeWidthInternal(FStrokeWidthTrackBar.Position /
-    STROKE_WIDTH_SCALE, not FTrackGestureActive);
+  ApplyStrokeWidthInternal(FStrokeWidthControl.Value, not FTrackGestureActive);
 end;
 
 procedure TVectArtLineToolbarControl.TrackBarMouseDown(Sender: TObject;

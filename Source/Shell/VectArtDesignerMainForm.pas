@@ -645,7 +645,8 @@ begin
   SaveLayoutSettings;
   FreeAndNil(FShortcuts);
   FreeAndNil(FLineToolbar);
-  FDockManager.Free;
+  OnResize := nil;
+  FreeAndNil(FDockManager);
   if FDocument <> nil then
     FDocument.OnChanged := nil;
   if FEditorFrame <> nil then
@@ -1013,7 +1014,7 @@ end;
 
 procedure TMainForm.FormResize(Sender: TObject);
 begin
-  if FDockManager <> nil then
+  if (FDockManager <> nil) and not (csDestroying in ComponentState) then
     FDockManager.Resize;
 end;
 

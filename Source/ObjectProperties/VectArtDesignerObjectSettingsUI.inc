@@ -1,4 +1,5 @@
 ﻿// 設定カテゴリの配置と、新しいUIから既存の編集コマンドへの接続。
+type TControlFontAccess = class(TControl);
 procedure TVectArtObjectPropertiesControl.BuildSettingsUI;
 var
   PageBody: TScrollBox;
@@ -6,28 +7,46 @@ var
   C: TComboBox;
   Check: TCheckBox;
   Draft: TVectArtSettingsDraft;
+  LastLabel: TStaticText;
   function Page(const Caption: string; out Tab: TTabSheet): TScrollBox;
   begin
     Tab := TTabSheet.Create(Self);
     Tab.PageControl := FPages;
     Tab.Caption := Caption;
+    Tab.ParentDoubleBuffered := False;
+    Tab.DoubleBuffered := False;
     Result := TScrollBox.Create(Self);
     Result.Parent := Tab;
     Result.Align := alClient;
+    Result.Font.Assign(Font);
+    Result.Font.Height := -13;
     Result.BorderStyle := bsNone;
+    Result.ParentBackground := False;
+    Result.Color := COLOR_BACKGROUND;
+    Result.ParentDoubleBuffered := False;
+    Result.DoubleBuffered := False;
     Result.HorzScrollBar.Visible := False;
   end;
   procedure Put(Control: TControl; X, Y, W, H: Integer);
   begin
     Control.Parent := PageBody;
-    Control.SetBounds(X, Y, W, H);
+    // Use the same inherited font as the draft pages; prevent the VCL style
+    // from substituting its own font for native static labels and edits.
+    TControlFontAccess(Control).ParentFont := True;
+    Control.StyleElements := Control.StyleElements - [seFont];
+    Control.SetBounds(X, MulDiv(Y, 9, 10), W, MulDiv(H, 9, 10));
     if W >= 200 then Control.Tag := 240;
     Control.Anchors := [akLeft, akTop];
   end;
   procedure LabelAt(const Caption: string; Y: Integer);
-  var L: TLabel;
+  var L: TStaticText;
   begin
-    L := TLabel.Create(Self);
+    L := TStaticText.Create(Self);
+    LastLabel := L;
+    L.AutoSize := False;
+    L.ParentColor := False;
+    L.Color := COLOR_BACKGROUND;
+    L.Font.Color := COLOR_TEXT;
     L.Caption := Caption;
     Put(L, 12, Y, 240, 22);
   end;
@@ -45,24 +64,31 @@ var
 begin
   FPages := TPageControl.Create(Self);
   FPages.Parent := Self;
+  FPages.ParentDoubleBuffered := False;
+  FPages.DoubleBuffered := False;
   FPages.MultiLine := True;
   FPages.OnChange := LayoutSettings;
   FPages.Width := 284;
   FPages.Height := 620;
   PageBody := Page('情報', FInfoPage);
-  FTypeLabel := TLabel.Create(Self);
+  FTypeLabel := TStaticText.Create(Self);
+  FTypeLabel.AutoSize := False;
   FTypeLabel.Caption := '種類';
   Put(FTypeLabel, 12, 12, 240, 24);
-  LabelAt('位置 X / Y', 50);
-  Put(FXEdit, 12, 74, 112, 26); Put(FYEdit, 140, 74, 112, 26);
-  LabelAt('幅 / 高さ', 112);
-  Put(FWidthEdit, 12, 136, 112, 26); Put(FHeightEdit, 140, 136, 112, 26);
+  LabelAt('位置・サイズ (px)', 42);
+  LabelAt('X', 76); LastLabel.Tag := 0; LastLabel.Width := 96;
+  Put(FXEdit, 44, 72, 80, 26); FXEdit.Tag := 243;
+  LabelAt('Y', 76); LastLabel.Tag := 245;
+  Put(FYEdit, 172, 72, 80, 26); FYEdit.Tag := 244;
+  LabelAt('幅', 108); LastLabel.Tag := 0; LastLabel.Width := 96;
+  Put(FWidthEdit, 44, 104, 80, 26); FWidthEdit.Tag := 243;
+  LabelAt('高さ', 108); LastLabel.Tag := 245;
+  Put(FHeightEdit, 172, 104, 80, 26); FHeightEdit.Tag := 244;
   FAspectCheck := TCheckBox.Create(Self);
   FAspectCheck.Caption := '縦横比を保持';
-  Put(FAspectCheck, 12, 174, 240, 26);
-  LabelAt('不透明度 (%)', 218);
-  Put(FOpacityEdit, 12, 242, 240, 26);
-
+  Put(FAspectCheck, 44, 136, 180, 26);
+  LabelAt('不透明度 (%)', 174); LastLabel.Tag := 0; LastLabel.Width := 96;
+  Put(FOpacityEdit, 112, 170, 140, 26); FOpacityEdit.Tag := 242;
   PageBody := Page('文字', FTextPage);
   LabelAt('文字列', 12);
   FTextMemo := TMemo.Create(Self);
@@ -131,8 +157,8 @@ begin
   Put(FFillSwatch, 12, 38, 240, 38);
   Put(FColorEdit, 12, 90, 240, 26); FColorEdit.Visible := False;
   LabelAt('クリックして色・塗りを編集', 92);
-  LabelAt('グラデーション・テクスチャは', 132);
-  LabelAt('ポップアップ内でプレビューできます。', 154);
+  LabelAt('閉じた図形の塗りに対応', 132);
+  LabelAt('変更は図形へ即時反映します。', 154);
 
   PageBody := Page('線の色', FStrokePage);
   LabelAt('現在の線色', 12);
@@ -148,6 +174,11 @@ begin
   Draft := TVectArtSettingsDraft.CreateKind(Self, PageBody, 1); Draft.Parent := PageBody; Draft.Align := alClient;
   PageBody := Page('効果', FEffectsPage);
   Draft := TVectArtSettingsDraft.CreateKind(Self, PageBody, 2); Draft.Parent := PageBody; Draft.Align := alClient;
+  FLinePage.PageIndex := 0;
+  FStrokePage.PageIndex := 1;
+  FFillPage.PageIndex := 2;
+  FShadowPage.PageIndex := 3;
+  FInfoPage.PageIndex := 4;
   FPages.ActivePage := FInfoPage;
   Resize;
 end;
@@ -160,6 +191,7 @@ var
   TextLayer: TVectArtTextLayer;
   SameSelection, Filled: Boolean;
   StrokeWidth: Single;
+  CurrentFill: TVectArtFillStyle;
   Cap: TVectArtLineCap;
   Join: TVectArtLineJoin;
 begin
@@ -175,7 +207,7 @@ begin
     FLinePage.TabVisible := not IsText;
     FStrokePage.TabVisible := not IsText;
     FShadowPage.TabVisible := not IsText;
-    if not FPages.ActivePage.TabVisible then FPages.ActivePage := FInfoPage;
+    if (FPages.ActivePage = nil) or not FPages.ActivePage.TabVisible then FPages.ActivePage := FInfoPage;
     if IsText then FFillPage.Caption := '文字色' else FFillPage.Caption := '塗り色';
     FTypeLabel.Caption := '種類：未選択';
     if (FDocument <> nil) and (FDocument.SelectionCount > 0) then
@@ -232,6 +264,15 @@ begin
     S := StringReplace(FColorEdit.Text, '#', '', [rfReplaceAll]);
     FFillSwatch.Empty := not TryStrToInt('$' + S, N);
     if not FFillSwatch.Empty then FFillSwatch.Value := RGB((N shr 16) and 255, (N shr 8) and 255, N and 255);
+    CurrentFill := Default(TVectArtFillStyle);
+    if (FDocument <> nil) and (FDocument.SelectionCount = 1) then
+    begin
+      if FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer then
+        CurrentFill := TVectArtRectangleLayer(FDocument[FDocument.SelectedIndex]).FillStyle
+      else if FDocument[FDocument.SelectedIndex] is TVectArtPathLayer then
+        CurrentFill := TVectArtPathLayer(FDocument[FDocument.SelectedIndex]).FillStyle;
+    end;
+    FFillSwatch.FillStyle := CurrentFill;
     S := StringReplace(FStrokeColorEdit.Text, '#', '', [rfReplaceAll]);
     FStrokeSwatch.Empty := not TryStrToInt('$' + S, N);
     if not FStrokeSwatch.Empty then FStrokeSwatch.Value := RGB((N shr 16) and 255, (N shr 8) and 255, N and 255);
@@ -267,7 +308,7 @@ begin
 end;
 
 procedure TVectArtObjectPropertiesControl.OpenColor(Sender: TObject);
-var Colors: TArray<TColor>; I: Integer; Layer: TVectArtLayer; Value: TColor;
+var Colors: TArray<TColor>; I: Integer; Layer: TVectArtLayer; Value: TColor; Fill: TVectArtFillStyle;
 begin
   if (FDocument = nil) or SelectedLayersHaveLock then Exit;
   FPopupStroke := Sender = FStrokeSwatch;
@@ -284,9 +325,30 @@ begin
       Colors := Colors + [TVectArtPathLayer(Layer).FillColor, TVectArtPathLayer(Layer).StrokeColor];
   end;
   FPopupSelection := FDocument.GetSelectedLayerIndices;
-  ShowVectArtColorPopup(Self, '色・塗りを編集', Value, Colors, True, PopupColorChanged);
+  if not FPopupStroke and (FDocument.SelectionCount = 1) then
+  begin
+    Layer := FDocument[FDocument.SelectedIndex];
+    if Layer is TVectArtRectangleLayer then Fill := TVectArtRectangleLayer(Layer).FillStyle
+    else if (Layer is TVectArtPathLayer) and TVectArtPathLayer(Layer).Closed then
+      Fill := TVectArtPathLayer(Layer).FillStyle
+    else
+    begin ShowVectArtColorPopup(Self,'色を編集',Value,Colors,PopupColorChanged); Exit; end;
+    ShowVectArtFillPopup(Self,Value,Fill,Colors,PopupFillChanged);
+  end
+  else ShowVectArtColorPopup(Self,'色を編集',Value,Colors,PopupColorChanged);
 end;
 
+procedure TVectArtObjectPropertiesControl.PopupFillChanged(Sender: TObject; Color: TColor;
+  const Fill: TVectArtFillStyle);
+var Command: TVectArtFillCommand;
+begin
+  if (FDocument = nil) or (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock then Exit;
+  Command := TVectArtFillCommand.Create(FDocument,FDocument.SelectedIndex,Color,Fill);
+  Command.Execute;
+  if FEditorState <> nil then FEditorState.SetRectangleFill(Color,Fill);
+  if FEditHistory <> nil then FEditHistory.AddApplied(Command) else Command.Free;
+  RefreshFromDocument;
+end;
 procedure TVectArtObjectPropertiesControl.PopupColorChanged(Sender: TObject; Color: TColor);
 var S: string;
 begin
@@ -342,9 +404,12 @@ begin
   RefreshFromDocument;
 end;
 procedure TVectArtObjectPropertiesControl.LayoutSettings(Sender: TObject);
-var I,J: Integer; Body: TWinControl; Control: TControl;
+var I,J: Integer; Body: TWinControl; Control: TControl; LayoutChanged: Boolean;
 begin
   if FPages = nil then Exit;
+  LayoutChanged := (Sender <> nil) or (FPages.Width <> ClientWidth) or
+    (FPages.Height <> Max(0,ClientHeight-34));
+  FPages.SetBounds(0, 34, ClientWidth, Max(0, ClientHeight - 34));
   for I := 0 to FPages.PageCount-1 do
     if FPages.Pages[I].ControlCount > 0 then
     begin
@@ -353,6 +418,15 @@ begin
       begin
         Control := Body.Controls[J];
         if Control.Tag = 240 then Control.Width := Max(100,Body.ClientWidth-24);
+        if Control.Tag = 242 then Control.Width := Max(40,Body.ClientWidth-Control.Left-12);
+        if Control.Tag = 243 then Control.Width := Max(30,Body.ClientWidth div 2-56);
+        if Control.Tag = 244 then
+          Control.SetBounds(Body.ClientWidth div 2+36,Control.Top,Max(30,Body.ClientWidth div 2-48),Control.Height);
+        if Control.Tag = 245 then Control.SetBounds(Body.ClientWidth div 2+4,Control.Top,32,22);
       end;
     end;
+  // Color notifications do not change layout and must not erase every child.
+  if LayoutChanged and (FPages.ActivePage <> nil) and FPages.ActivePage.HandleAllocated then
+    RedrawWindow(FPages.ActivePage.Handle, nil, 0,
+      RDW_INVALIDATE or RDW_ERASE or RDW_ALLCHILDREN);
 end;

@@ -65,6 +65,8 @@ begin
   Interaction := TVectArtCanvasInteraction.Create;
   Creation := TVectArtShapeCreation.Create;
   try
+    Require(EditorState.RectangleMode = vrmFillAndOutline,'Default shape must have visible fill');
+    EditorState.RectangleMode := vrmOutline;
     EditorState.RectangleStrokeWidth := 2.0;
     EditorState.SelectRoundedRectangleToolGroup;
     Creation.Configure(Document, History, EditorState,

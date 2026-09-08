@@ -36,6 +36,7 @@ type
     FPathStartMarker: TVectArtLineMarker;
     FPathStartMarkerSize: Single;
     FRectangleFillColor: TColor;
+    FRectangleFillStyle: TVectArtFillStyle;
     FRectangleMode: TVectArtRectangleMode;
     FRectangleOpacity: Single;
     FRectangleStrokeColor: TColor;
@@ -68,6 +69,8 @@ type
     procedure SetRectangleStrokeWidth(const Value: Single);
   public
     constructor Create;
+    procedure SetRectangleFill(Color: TColor; const Fill: TVectArtFillStyle);
+    property RectangleFillStyle: TVectArtFillStyle read FRectangleFillStyle;
     procedure SelectClosedBezierToolGroup;
     procedure SelectClosedPathToolGroup;
     procedure SelectFreehandToolGroup;
@@ -171,11 +174,11 @@ begin
   FPathStartMarker := vlmNone;
   FPathStartMarkerSize := 4.0;
   FRectangleFillColor := DEFAULT_RECTANGLE_COLOR;
-  FRectangleMode := vrmOutline;
+  FRectangleMode := vrmFillAndOutline;
   FRectangleOpacity := 1.0;
   FRectangleStrokeColor := clBlack;
   FRectangleStrokeStyle := vssSolid;
-  FRectangleStrokeWidth := 0.0;
+  FRectangleStrokeWidth := 1.0;
 end;
 
 procedure TVectArtEditorState.SelectRectangleToolGroup;
@@ -466,6 +469,12 @@ begin
     FOnChanged(Self);
 end;
 
+procedure TVectArtEditorState.SetRectangleFill(Color: TColor; const Fill: TVectArtFillStyle);
+begin
+  FRectangleFillColor := Color;
+  FRectangleFillStyle := Fill;
+  if Assigned(FOnChanged) then FOnChanged(Self);
+end;
 procedure TVectArtEditorState.SetRectangleFillColor(const Value: TColor);
 begin
   if FRectangleFillColor = Value then

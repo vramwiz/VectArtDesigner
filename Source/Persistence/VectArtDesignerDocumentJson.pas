@@ -100,6 +100,24 @@ begin
   Result := TJSONString(Value).Value;
 end;
 
+procedure WriteFill(Json: TJSONObject; const Fill: TVectArtFillStyle);
+begin
+  Json.AddPair('fillKind',TJSONNumber.Create(Ord(Fill.Kind)));
+  Json.AddPair('fillAngle',TJSONNumber.Create(Fill.Angle));
+  Json.AddPair('fillColor2',TJSONNumber.Create(Integer(Fill.Color2)));
+  Json.AddPair('fillTexture',TNetEncoding.Base64.EncodeBytesToString(Fill.TexturePng));
+end;
+function ReadFill(Json: TJSONObject): TVectArtFillStyle;
+var K: Integer;
+begin
+  Result := Default(TVectArtFillStyle);
+  K := Round(ReadOptionalSingle(Json,'fillKind',0));
+  if (K < 0) or (K > Ord(High(TVectArtFillKind))) then raise EConvertError.Create('Invalid fill kind');
+  Result.Kind := TVectArtFillKind(K);
+  Result.Angle := Round(ReadOptionalSingle(Json,'fillAngle',0));
+  Result.Color2 := TColor(Round(ReadOptionalSingle(Json,'fillColor2',0)));
+  Result.TexturePng := TNetEncoding.Base64.DecodeStringToBytes(ReadOptionalString(Json,'fillTexture',''));
+end;
 function SerializeVectArtDocument(Document: TVectArtDocument): string;
 var
   Canvas: TVectArtCanvasLayer;
@@ -252,6 +270,7 @@ begin
         PathJson.AddPair('filled', TJSONBool.Create(Path.Filled));
         PathJson.AddPair('fillColor',
           TJSONNumber.Create(Integer(Path.FillColor)));
+        WriteFill(PathJson,Path.FillStyle);
         PathJson.AddPair('opacity', TJSONNumber.Create(Path.Opacity));
         PathJson.AddPair('strokeColor',
           TJSONNumber.Create(Integer(Path.StrokeColor)));
@@ -303,6 +322,7 @@ begin
         TJSONNumber.Create(Rectangle.Bounds.Bottom));
       RectangleJson.AddPair('fillColor',
         TJSONNumber.Create(Integer(Rectangle.FillColor)));
+      WriteFill(RectangleJson,Rectangle.FillStyle);
       RectangleJson.AddPair('filled', TJSONBool.Create(Rectangle.Filled));
       RectangleJson.AddPair('opacity', TJSONNumber.Create(Rectangle.Opacity));
       RectangleJson.AddPair('rotation',
@@ -555,6 +575,7 @@ begin
           PathValue.Closed := ReadBoolean(LayerJson, 'closed');
           PathValue.Filled := ReadBoolean(LayerJson, 'filled');
           PathValue.FillColor := TColor(ReadInteger(LayerJson, 'fillColor'));
+          PathValue.FillStyle := ReadFill(LayerJson);
           PathValue.Opacity := ReadSingle(LayerJson, 'opacity');
           PathValue.StrokeColor := TColor(ReadInteger(LayerJson,
             'strokeColor'));
@@ -642,6 +663,7 @@ begin
           ReadSingle(LayerJson, 'right'),
           ReadSingle(LayerJson, 'bottom'));
         Data.FillColor := TColor(ReadInteger(LayerJson, 'fillColor'));
+        Data.FillStyle := ReadFill(LayerJson);
         Data.Filled := True;
         if LayerJson.GetValue('filled') is TJSONBool then
           Data.Filled := TJSONBool(LayerJson.GetValue('filled')).AsBoolean;

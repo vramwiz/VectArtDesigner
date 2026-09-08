@@ -1,6 +1,17 @@
 ﻿program VectArtDesigner;
 
 uses
+  VectArtDesignerPaintPreview in 'Source\ObjectProperties\Color\VectArtDesignerPaintPreview.pas',
+  VectArtDesignerGradientGeometry in 'Source\Rendering\VectArtDesignerGradientGeometry.pas',
+  VectArtDesignerNumericSlider in 'Source\UI\VectArtDesignerNumericSlider.pas',
+  ColorPickerColorMath in 'Lib\ColorPicker\ColorPickerColorMath.pas',
+  ColorPickerHueBar in 'Lib\ColorPicker\ColorPickerHueBar.pas',
+  ColorPickerSVArea in 'Lib\ColorPicker\ColorPickerSVArea.pas',
+  VectArtDesignerFillPaint in 'Source\Rendering\VectArtDesignerFillPaint.pas',
+  VectArtDesignerMifPngMetadata in 'Source\Persistence\Mif\VectArtDesignerMifPngMetadata.pas',
+  VectArtDesignerColorSwatch in 'Source\ObjectProperties\Color\VectArtDesignerColorSwatch.pas',
+  VectArtDesignerSvgWriter in 'Source\Persistence\Svg\VectArtDesignerSvgWriter.pas',
+  VectArtDesignerSvgPrimitives in 'Source\Persistence\Svg\VectArtDesignerSvgPrimitives.pas',
   Vcl.Forms,
   Vcl.Themes,
   Vcl.Styles,
@@ -61,8 +72,9 @@ uses
   VectArtDesignerLayerPanelFrame in 'Source\Layers\VectArtDesignerLayerPanelFrame.pas',
   VectArtDesignerDockManager in 'Source\Layout\VectArtDesignerDockManager.pas',
   VectArtDesignerToolFrames in 'Source\Layout\VectArtDesignerToolFrames.pas',
+  VectArtDesignerFillCommand in 'Source\Core\Commands\VectArtDesignerFillCommand.pas',
   VectArtDesignerAppearanceModeCommand in 'Source\Core\Commands\VectArtDesignerAppearanceModeCommand.pas',
-  VectArtDesignerPaintPopup in 'Source\ObjectProperties\VectArtDesignerPaintPopup.pas',
+  VectArtDesignerPaintPopup in 'Source\ObjectProperties\Color\VectArtDesignerPaintPopup.pas',
   VectArtDesignerSettingsDrafts in 'Source\ObjectProperties\VectArtDesignerSettingsDrafts.pas',
   VectArtDesignerObjectPropertiesControl in 'Source\ObjectProperties\VectArtDesignerObjectPropertiesControl.pas',
   VectArtDesignerObjectPropertiesFrame in 'Source\ObjectProperties\VectArtDesignerObjectPropertiesFrame.pas',

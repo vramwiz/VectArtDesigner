@@ -4,7 +4,7 @@ unit VectArtDesignerSettingsDrafts;
 interface
 
 uses System.Classes, Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.Graphics,
-  VectArtDesignerPaintPopup;
+  VectArtDesignerColorSwatch, VectArtDesignerPaintPopup;
 
 type
   TVectArtSettingsDraft = class(TScrollBox)
@@ -145,7 +145,7 @@ procedure TVectArtSettingsDraft.ChooseColor(Sender: TObject);
 begin
   FFields.Tag := NativeInt(Sender);
   ShowVectArtColorPopup(Self, '装飾色のプレビュー', TVectArtColorSwatch(Sender).Value,
-    nil, False, ColorChanged);
+    nil, ColorChanged);
 end;
 
 procedure TVectArtSettingsDraft.ColorChanged(Sender: TObject; Color: TColor);
