@@ -10,7 +10,7 @@ uses
 type
   TVectArtEditorTool = (vetSelect, vetRectangle, vetEllipse,
     vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine, vetPath,
-    vetBezier, vetFreehandLine, vetFreehandBezier, vetText);
+    vetBezier, vetFreehandLine, vetFreehandBezier, vetText, vetTemplate);
   TVectArtRectangleMode = (vrmOutline, vrmFill, vrmFillAndOutline);
 
   TVectArtEditorState = class
@@ -21,6 +21,7 @@ type
     FLineStartMarker: TVectArtLineMarker;
     FLineStartMarkerSize: Single;
     FCurrentTool: TVectArtEditorTool;
+    FTemplateIndex: Integer;
     FLineCap: TVectArtLineCap;
     FLineJoin: TVectArtLineJoin;
     FLineStrokeColor: TColor;
@@ -41,6 +42,7 @@ type
     FRectangleStrokeStyle: TVectArtStrokeStyle;
     FRectangleStrokeWidth: Single;
     procedure CycleRectangleMode;
+    procedure SetRectangleMode(Value: TVectArtRectangleMode);
     procedure SetCurrentTool(const Value: TVectArtEditorTool);
     procedure SetLineCap(const Value: TVectArtLineCap);
     procedure SetLineAntiAlias(const Value: Boolean);
@@ -107,7 +109,8 @@ type
       write SetPathStartMarkerSize;
     property RectangleFillColor: TColor read FRectangleFillColor
       write SetRectangleFillColor;
-    property RectangleMode: TVectArtRectangleMode read FRectangleMode;
+    property TemplateIndex: Integer read FTemplateIndex write FTemplateIndex;
+    property RectangleMode: TVectArtRectangleMode read FRectangleMode write SetRectangleMode;
     property RectangleOpacity: Single read FRectangleOpacity
       write SetRectangleOpacity;
     property RectangleStrokeColor: TColor read FRectangleStrokeColor
@@ -123,8 +126,15 @@ function VectArtRectangleModeHasStroke(Mode: TVectArtRectangleMode): Boolean;
 
 implementation
 
-uses
-  System.Math;
+uses System.Math;
+
+procedure TVectArtEditorState.SetRectangleMode(Value: TVectArtRectangleMode);
+begin
+  if FRectangleMode = Value then Exit;
+  FRectangleMode := Value;
+  if Assigned(FOnChanged) then FOnChanged(Self);
+end;
+
 
 function VectArtRectangleModeHasFill(Mode: TVectArtRectangleMode): Boolean;
 begin

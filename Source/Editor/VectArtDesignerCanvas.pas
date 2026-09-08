@@ -1161,7 +1161,7 @@ begin
     if (FEditorState <> nil) and
       (FEditorState.CurrentTool in [vetRectangle, vetEllipse,
         vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine,
-        vetPath, vetBezier, vetFreehandLine, vetFreehandBezier, vetText]) then
+        vetPath, vetBezier, vetFreehandLine, vetFreehandBezier, vetText, vetTemplate]) then
     begin
       if FEditorState.CurrentTool = vetText then
         Cursor := crIBeam
@@ -1219,7 +1219,7 @@ begin
   if (FEditorState <> nil) and
     (FEditorState.CurrentTool in [vetRectangle, vetEllipse,
       vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine,
-      vetPath, vetBezier, vetFreehandLine, vetFreehandBezier, vetText]) then
+      vetPath, vetBezier, vetFreehandLine, vetFreehandBezier, vetText, vetTemplate]) then
   begin
     if FEditorState.CurrentTool = vetText then
       Cursor := crIBeam

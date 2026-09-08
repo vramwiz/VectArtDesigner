@@ -29,6 +29,7 @@ type
     procedure CreatePath(Closed: Boolean);
     procedure CreateRectangle;
     procedure CreateRoundedRectangle;
+    procedure CreateTemplate;
     function NextLineName: string;
     function NextPathName: string;
     function NextRectangleName: string;
@@ -59,7 +60,7 @@ uses
   System.Math, System.SysUtils,
   VectArtDesignerBezierGeometry,
   VectArtDesignerFreehandGeometry,
-  VectArtDesignerRoundedRectangleGeometry,
+  VectArtDesignerRoundedRectangleGeometry, VectArtDesignerTemplateGeometry,
   VectArtDesignerLayerStructureCommands;
 
 const
@@ -135,7 +136,7 @@ begin
   Result := ClampToCanvas(Point(Round(FCanvasBounds.Left + Logical.X * FZoom),
     Round(FCanvasBounds.Top + Logical.Y * FZoom)));
   // 正方形・中心基準作成はPreviewRectで最終補正するため候補線を残さない。
-  if FEditorState.CurrentTool in [vetRectangle, vetEllipse, vetRoundedRectangle] then
+  if FEditorState.CurrentTool in [vetRectangle, vetEllipse, vetRoundedRectangle, vetTemplate] then
     if (ssShift in Shift) or (ssAlt in Shift) then
       FSnapGuides := nil;
 end;
@@ -196,7 +197,7 @@ var
 begin
   if Length(FPathPoints) < 2 then
     Exit;
-  if FCreationTool in [vetRoundedRectangle, vetClosedPath,
+  if FCreationTool in [vetTemplate, vetRoundedRectangle, vetClosedPath,
     vetClosedBezier] then
     Closed := True;
   if Closed and (Length(FPathPoints) < 3) then
@@ -211,7 +212,7 @@ begin
   Data.BoundsEditing := FCreationTool = vetRoundedRectangle;
   Data.Closed := Closed;
   // 面を持つ専用ツールだけがパレットの3状態を使用し、従来Pathの挙動は維持する。
-  if FCreationTool in [vetRoundedRectangle, vetClosedPath,
+  if FCreationTool in [vetTemplate, vetRoundedRectangle, vetClosedPath,
     vetClosedBezier] then
     Data.Filled := VectArtRectangleModeHasFill(FEditorState.RectangleMode)
   else
@@ -229,7 +230,7 @@ begin
   Data.StartMarkerSize := FEditorState.PathStartMarkerSize;
   Data.StrokeColor := FEditorState.RectangleStrokeColor;
   Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
-  if not (FCreationTool in [vetRoundedRectangle, vetClosedPath,
+  if not (FCreationTool in [vetTemplate, vetRoundedRectangle, vetClosedPath,
     vetClosedBezier]) or
     VectArtRectangleModeHasStroke(FEditorState.RectangleMode) then
     Data.StrokeWidth := Max(FEditorState.RectangleStrokeWidth, 1.0)
@@ -269,6 +270,17 @@ begin
   FZoom := AZoom;
 end;
 
+procedure TVectArtShapeCreation.CreateTemplate;
+var P: TArray<TPointF>; I: Integer; R: TRect;
+begin
+  R := PreviewRect;
+  if (R.Width < MIN_DRAG_SIZE) or (R.Height < MIN_DRAG_SIZE) then Exit;
+  P := VectArtTemplatePoints(FEditorState.TemplateIndex, RectF(R.Left,R.Top,R.Right,R.Bottom));
+  SetLength(FPathPoints, Length(P));
+  for I := 0 to High(P) do FPathPoints[I] := Point(Round(P[I].X),Round(P[I].Y));
+  CreatePath(True);
+  FPathPoints := nil;
+end;
 procedure TVectArtShapeCreation.CreateRoundedRectangle;
 var
   Bounds: TRect;
@@ -339,7 +351,7 @@ begin
     (FEditorState <> nil) and
     (FEditorState.CurrentTool in [vetRectangle, vetEllipse,
       vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine, vetPath,
-      vetBezier, vetFreehandLine, vetFreehandBezier]) and
+      vetBezier, vetFreehandLine, vetFreehandBezier, vetTemplate]) and
     (FZoom > 0) and
     PtInRect(FCanvasBounds, Point(X, Y));
   if not Result then
@@ -454,7 +466,9 @@ begin
     CancelPath;
     Exit;
   end;
-  if FCreationTool = vetLine then
+  if FCreationTool = vetTemplate then
+    CreateTemplate
+  else if FCreationTool = vetLine then
     CreateLine
   else if FCreationTool = vetRoundedRectangle then
     CreateRoundedRectangle
@@ -528,7 +542,17 @@ end;
 
 function TVectArtShapeCreation.PreviewPath(
   out Points: TArray<TPoint>): Boolean;
+var P: TArray<TPointF>; I: Integer; R: TRect;
 begin
+  if FActive and (FCreationTool = vetTemplate) and (FEditorState <> nil) then
+  begin
+    R := PreviewRect;
+    P := VectArtTemplatePoints(FEditorState.TemplateIndex, RectF(R.Left,R.Top,R.Right,R.Bottom));
+    SetLength(Points,Length(P)+1);
+    for I := 0 to High(P) do Points[I] := Point(Round(P[I].X),Round(P[I].Y));
+    Points[High(Points)] := Points[0];
+    Exit(True);
+  end;
   if FActive and (FEditorState <> nil) and
     (FEditorState.CurrentTool in [vetFreehandLine,
       vetFreehandBezier]) and
@@ -630,7 +654,7 @@ var
 begin
   if not FActive or (FEditorState = nil) or
     not (FCreationTool in [vetRectangle, vetEllipse,
-      vetRoundedRectangle]) then
+      vetRoundedRectangle, vetTemplate]) then
     Exit(TRect.Empty);
   DeltaX := FCurrentPoint.X - FStartPoint.X;
   DeltaY := FCurrentPoint.Y - FStartPoint.Y;

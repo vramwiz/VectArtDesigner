@@ -5,7 +5,7 @@ unit VectArtDesignerObjectPropertiesControl;
 interface
 
 uses
-  System.Classes, System.Types, Vcl.Controls, Vcl.StdCtrls,
+  System.Classes, System.Types, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Forms, Vcl.Graphics, VectArtDesignerPaintPopup,
   VectArtDesignerDocument, VectArtDesignerEditCommands,
   VectArtDesignerEditHistory, VectArtDesignerEditorState,
   VectArtDesignerLineStyleControls, VectArtDesignerStrokeStyleCombo;
@@ -13,6 +13,19 @@ uses
 type
   TVectArtObjectPropertiesControl = class(TCustomControl)
   private
+    FPages: TPageControl;
+    FInfoPage, FTextPage, FLinePage, FFillPage, FStrokePage: TTabSheet;
+    FShadowPage, FOutlinePage, FEffectsPage: TTabSheet;
+    FFillSwatch, FStrokeSwatch: TVectArtColorSwatch;
+    FTextMemo: TMemo;
+    FFontCombo: TComboBox;
+    FFontSize: TEdit;
+    FFontChecks: array[0..3] of TCheckBox;
+    FAspectCheck: TCheckBox;
+    FAppearanceMode: TComboBox;
+    FTypeLabel: TLabel;
+    FPopupStroke: Boolean;
+    FPopupSelection: TArray<Integer>;
     FColorEdit: TEdit;
     FDocument: TVectArtDocument;
     FEditHistory: TVectArtEditHistory;
@@ -36,6 +49,19 @@ type
     FWidthEdit: TEdit;
     FXEdit: TEdit;
     FYEdit: TEdit;
+    procedure ApplySelectedLineCap(Sender: TObject);
+    procedure ApplySelectedLineJoin(Sender: TObject);
+    procedure ApplySelectedLineAntiAlias(Sender: TObject);
+    procedure ApplySelectedLineEndMarker(Sender: TObject);
+    procedure ApplySelectedLineStartMarker(Sender: TObject);
+    procedure ApplySelectedLineMarkerSize(StartMarker: Boolean);
+    procedure AppearanceChanged(Sender: TObject);
+    procedure LayoutSettings(Sender: TObject);
+    procedure BuildSettingsUI;
+    procedure RefreshSettingsUI;
+    procedure OpenColor(Sender: TObject);
+    procedure PopupColorChanged(Sender: TObject; Color: TColor);
+    procedure TextSettingsChanged(Sender: TObject);
     procedure ApplyColor;
     procedure ApplyGeometry;
     procedure ApplyOpacity;
@@ -66,6 +92,8 @@ type
     procedure SetPathStyleControlsVisible(Value: Boolean);
     procedure SetTextSpacingControlsVisible(Value: Boolean);
   protected
+    procedure CreateWnd; override;
+    procedure SetParent(AParent: TWinControl); override;
     procedure Paint; override;
     procedure Resize; override;
   public
@@ -91,7 +119,7 @@ implementation
 
 uses
   System.Generics.Collections, System.Math, System.SysUtils, Winapi.Windows,
-  Vcl.Graphics, VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
+  VectArtDesignerAppearanceModeCommand, VectArtDesignerSettingsDrafts, VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
   VectArtDesignerTextGeometry;
 
 const
@@ -175,6 +203,12 @@ var
   OldValue: TVectArtLineMarker;
   PathLayer: TVectArtPathLayer;
 begin
+  if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
+    (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+  begin
+    ApplySelectedLineEndMarker(Sender);
+    Exit;
+  end;
   if FUpdating or (FDocument = nil) or
     (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
     not (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
@@ -194,6 +228,29 @@ begin
     FEditorState.PathEndMarker := NewValue;
 end;
 
+procedure TVectArtObjectPropertiesControl.ApplySelectedLineEndMarker(Sender: TObject);
+var
+  NewValue: TVectArtLineMarker;
+  OldValue: TVectArtLineMarker;
+  LineLayer: TVectArtLineLayer;
+begin
+  if FUpdating or (FDocument = nil) or
+    (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
+    not (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+    Exit;
+  LineLayer := TVectArtLineLayer(FDocument[FDocument.SelectedIndex]);
+  OldValue := LineLayer.EndMarker;
+  NewValue := FPathEndMarkerCombo.SelectedMarker;
+  if OldValue = NewValue then
+    Exit;
+  FDocument.SetLineEndMarker(FDocument.SelectedIndex, NewValue);
+  if FEditHistory <> nil then
+    FEditHistory.AddApplied(TVectArtLineEndMarkerCommand.Create(FDocument,
+      FDocument.SelectedIndex, OldValue, NewValue));
+  if FEditorState <> nil then
+    FEditorState.LineEndMarker := NewValue;
+end;
+
 procedure TVectArtObjectPropertiesControl.ApplyPathMarkerSize(
   StartMarker: Boolean);
 var
@@ -201,6 +258,12 @@ var
   OldValue: Single;
   PathLayer: TVectArtPathLayer;
 begin
+  if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
+    (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+  begin
+    ApplySelectedLineMarkerSize(StartMarker);
+    Exit;
+  end;
   if FUpdating or (FDocument = nil) or
     (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
     not (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
@@ -239,6 +302,49 @@ begin
       FDocument.SelectedIndex, StartMarker, OldValue, NewValue));
 end;
 
+procedure TVectArtObjectPropertiesControl.ApplySelectedLineMarkerSize(
+  StartMarker: Boolean);
+var
+  NewValue: Double;
+  OldValue: Single;
+  LineLayer: TVectArtLineLayer;
+begin
+  if FUpdating or (FDocument = nil) or
+    (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
+    not (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+    Exit;
+  LineLayer := TVectArtLineLayer(FDocument[FDocument.SelectedIndex]);
+  if StartMarker then
+  begin
+    if not TryStrToFloat(Trim(FPathStartMarkerSizeEdit.Text), NewValue) then
+    begin
+      RefreshFromDocument;
+      Exit;
+    end;
+    OldValue := LineLayer.StartMarkerSize;
+    NewValue := Max(NewValue, 1.0);
+    FDocument.SetLineStartMarkerSize(FDocument.SelectedIndex, NewValue);
+    if FEditorState <> nil then
+      FEditorState.LineStartMarkerSize := NewValue;
+  end
+  else
+  begin
+    if not TryStrToFloat(Trim(FPathEndMarkerSizeEdit.Text), NewValue) then
+    begin
+      RefreshFromDocument;
+      Exit;
+    end;
+    OldValue := LineLayer.EndMarkerSize;
+    NewValue := Max(NewValue, 1.0);
+    FDocument.SetLineEndMarkerSize(FDocument.SelectedIndex, NewValue);
+    if FEditorState <> nil then
+      FEditorState.LineEndMarkerSize := NewValue;
+  end;
+  if (FEditHistory <> nil) and not SameValue(OldValue, NewValue) then
+    FEditHistory.AddApplied(TVectArtLineMarkerSizeCommand.Create(FDocument,
+      FDocument.SelectedIndex, StartMarker, OldValue, NewValue));
+end;
+
 procedure TVectArtObjectPropertiesControl.ApplyPathStartMarker(
   Sender: TObject);
 var
@@ -246,6 +352,12 @@ var
   OldValue: TVectArtLineMarker;
   PathLayer: TVectArtPathLayer;
 begin
+  if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
+    (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+  begin
+    ApplySelectedLineStartMarker(Sender);
+    Exit;
+  end;
   if FUpdating or (FDocument = nil) or
     (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
     not (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
@@ -265,6 +377,30 @@ begin
     FEditorState.PathStartMarker := NewValue;
 end;
 
+procedure TVectArtObjectPropertiesControl.ApplySelectedLineStartMarker(
+  Sender: TObject);
+var
+  NewValue: TVectArtLineMarker;
+  OldValue: TVectArtLineMarker;
+  LineLayer: TVectArtLineLayer;
+begin
+  if FUpdating or (FDocument = nil) or
+    (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
+    not (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+    Exit;
+  LineLayer := TVectArtLineLayer(FDocument[FDocument.SelectedIndex]);
+  OldValue := LineLayer.StartMarker;
+  NewValue := FPathStartMarkerCombo.SelectedMarker;
+  if OldValue = NewValue then
+    Exit;
+  FDocument.SetLineStartMarker(FDocument.SelectedIndex, NewValue);
+  if FEditHistory <> nil then
+    FEditHistory.AddApplied(TVectArtLineStartMarkerCommand.Create(FDocument,
+      FDocument.SelectedIndex, OldValue, NewValue));
+  if FEditorState <> nil then
+    FEditorState.LineStartMarker := NewValue;
+end;
+
 procedure TVectArtObjectPropertiesControl.ApplyPathAntiAlias(
   Sender: TObject);
 var
@@ -272,6 +408,12 @@ var
   OldValue: Boolean;
   PathLayer: TVectArtPathLayer;
 begin
+  if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
+    (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+  begin
+    ApplySelectedLineAntiAlias(Sender);
+    Exit;
+  end;
   if FUpdating or (FDocument = nil) or
     (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
     not (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
@@ -287,12 +429,40 @@ begin
     FEditorState.PathAntiAlias := NewValue;
 end;
 
+procedure TVectArtObjectPropertiesControl.ApplySelectedLineAntiAlias(
+  Sender: TObject);
+var
+  NewValue: Boolean;
+  OldValue: Boolean;
+  LineLayer: TVectArtLineLayer;
+begin
+  if FUpdating or (FDocument = nil) or
+    (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
+    not (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+    Exit;
+  LineLayer := TVectArtLineLayer(FDocument[FDocument.SelectedIndex]);
+  OldValue := LineLayer.AntiAlias;
+  NewValue := not OldValue;
+  FDocument.SetLineAntiAlias(FDocument.SelectedIndex, NewValue);
+  if FEditHistory <> nil then
+    FEditHistory.AddApplied(TVectArtLineAntiAliasCommand.Create(FDocument,
+      FDocument.SelectedIndex, OldValue, NewValue));
+  if FEditorState <> nil then
+    FEditorState.LineAntiAlias := NewValue;
+end;
+
 procedure TVectArtObjectPropertiesControl.ApplyPathLineCap(Sender: TObject);
 var
   NewValue: TVectArtLineCap;
   OldValue: TVectArtLineCap;
   PathLayer: TVectArtPathLayer;
 begin
+  if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
+    (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+  begin
+    ApplySelectedLineCap(Sender);
+    Exit;
+  end;
   if FUpdating or (FDocument = nil) or
     (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
     not (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) or
@@ -311,12 +481,42 @@ begin
     FEditorState.PathLineCap := NewValue;
 end;
 
+procedure TVectArtObjectPropertiesControl.ApplySelectedLineCap(Sender: TObject);
+var
+  NewValue: TVectArtLineCap;
+  OldValue: TVectArtLineCap;
+  LineLayer: TVectArtLineLayer;
+begin
+  if FUpdating or (FDocument = nil) or
+    (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
+    not (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) or
+    not (Sender is TVectArtLineCapButton) then
+    Exit;
+  LineLayer := TVectArtLineLayer(FDocument[FDocument.SelectedIndex]);
+  OldValue := LineLayer.LineCap;
+  NewValue := TVectArtLineCapButton(Sender).LineCap;
+  if OldValue = NewValue then
+    Exit;
+  FDocument.SetLineCap(FDocument.SelectedIndex, NewValue);
+  if FEditHistory <> nil then
+    FEditHistory.AddApplied(TVectArtLineCapCommand.Create(FDocument,
+      FDocument.SelectedIndex, OldValue, NewValue));
+  if FEditorState <> nil then
+    FEditorState.LineCap := NewValue;
+end;
+
 procedure TVectArtObjectPropertiesControl.ApplyPathLineJoin(Sender: TObject);
 var
   NewValue: TVectArtLineJoin;
   OldValue: TVectArtLineJoin;
   PathLayer: TVectArtPathLayer;
 begin
+  if (FDocument <> nil) and (FDocument.SelectionCount = 1) and
+    (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) then
+  begin
+    ApplySelectedLineJoin(Sender);
+    Exit;
+  end;
   if FUpdating or (FDocument = nil) or
     (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
     not (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) or
@@ -333,6 +533,30 @@ begin
       FDocument.SelectedIndex, OldValue, NewValue));
   if FEditorState <> nil then
     FEditorState.PathLineJoin := NewValue;
+end;
+
+procedure TVectArtObjectPropertiesControl.ApplySelectedLineJoin(Sender: TObject);
+var
+  NewValue: TVectArtLineJoin;
+  OldValue: TVectArtLineJoin;
+  LineLayer: TVectArtLineLayer;
+begin
+  if FUpdating or (FDocument = nil) or
+    (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock or
+    not (FDocument[FDocument.SelectedIndex] is TVectArtLineLayer) or
+    not (Sender is TVectArtLineJoinButton) then
+    Exit;
+  LineLayer := TVectArtLineLayer(FDocument[FDocument.SelectedIndex]);
+  OldValue := LineLayer.LineJoin;
+  NewValue := TVectArtLineJoinButton(Sender).LineJoin;
+  if OldValue = NewValue then
+    Exit;
+  FDocument.SetLineJoin(FDocument.SelectedIndex, NewValue);
+  if FEditHistory <> nil then
+    FEditHistory.AddApplied(TVectArtLineJoinCommand.Create(FDocument,
+      FDocument.SelectedIndex, OldValue, NewValue));
+  if FEditorState <> nil then
+    FEditorState.LineJoin := NewValue;
 end;
 
 procedure TVectArtObjectPropertiesControl.ApplyStrokeColor;
@@ -999,7 +1223,22 @@ begin
 end;
 
 procedure TVectArtObjectPropertiesControl.EditExit(Sender: TObject);
+var Bounds: TRectF; Value: Double;
 begin
+  if (FAspectCheck <> nil) and FAspectCheck.Checked and
+    ((Sender = FWidthEdit) or (Sender = FHeightEdit)) and
+    (FDocument <> nil) and (FDocument.SelectionCount = 1) then
+  begin
+    if FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer then
+      Bounds := TVectArtRectangleLayer(FDocument[FDocument.SelectedIndex]).Bounds
+    else if FDocument[FDocument.SelectedIndex] is TVectArtTextLayer then
+      Bounds := TVectArtTextLayer(FDocument[FDocument.SelectedIndex]).Bounds
+    else
+      Bounds := TRectF.Empty;
+    if (Bounds.Width > 0) and (Bounds.Height > 0) and TryStrToFloat(TEdit(Sender).Text, Value) then
+      if Sender = FWidthEdit then FHeightEdit.Text := FloatToStr(Value * Bounds.Height / Bounds.Width)
+      else FWidthEdit.Text := FloatToStr(Value * Bounds.Width / Bounds.Height);
+  end;
   if Sender = FPathStartMarkerSizeEdit then
     ApplyPathMarkerSize(True)
   else if Sender = FPathEndMarkerSizeEdit then
@@ -1119,72 +1358,33 @@ begin
       Exit(True);
 end;
 
+procedure TVectArtObjectPropertiesControl.CreateWnd;
+begin
+  inherited;
+  if FPages = nil then
+  begin
+    BuildSettingsUI;
+    RefreshFromDocument;
+  end;
+end;
+
+procedure TVectArtObjectPropertiesControl.SetParent(AParent: TWinControl);
+begin
+  inherited;
+  if (AParent <> nil) and (GetParentForm(Self) <> nil) and (FPages = nil) then BuildSettingsUI;
+end;
+
 procedure TVectArtObjectPropertiesControl.Paint;
-var
-  ColorValue: TColor;
-  HeaderText: string;
-  HexValue: Integer;
-  SwatchRect: TRect;
+var Title: string;
 begin
   Canvas.Brush.Color := COLOR_BACKGROUND;
   Canvas.FillRect(ClientRect);
-  Canvas.Font.Name := 'Segoe UI';
-  Canvas.Font.Height := -12;
-  Canvas.Font.Color := COLOR_LABEL;
-  if (FDocument = nil) or (FDocument.SelectionCount = 0) then
-    HeaderText := 'No selection'
-  else if FDocument.SelectionCount = 1 then
-    HeaderText := FDocument[FDocument.SelectedIndex].Name
-  else
-    HeaderText := Format('%d objects selected', [FDocument.SelectionCount]);
   Canvas.Font.Color := COLOR_TEXT;
-  Canvas.TextOut(12, 12, HeaderText);
-  Canvas.Font.Color := COLOR_LABEL;
-  Canvas.TextOut(12, 43, 'X');
-  Canvas.TextOut((ClientWidth div 2) + 4, 43, 'Y');
-  Canvas.TextOut(12, 91, 'Width');
-  Canvas.TextOut((ClientWidth div 2) + 4, 91, 'Height');
-  Canvas.TextOut(12, 139, 'Fill color');
-  Canvas.TextOut(12, 190, 'Stroke color');
-  Canvas.TextOut(12, 239, 'Stroke width (0 = none)');
-  Canvas.TextOut((ClientWidth div 2) + 4, 239, 'Stroke style');
-  Canvas.TextOut(12, 288, 'Opacity (%)');
-  if FPathLineCapButtons[vlcButt].Visible then
-  begin
-    Canvas.TextOut(12, 333, 'Line cap');
-    Canvas.TextOut(12, 379, 'Line join');
-    Canvas.TextOut(12, 425, 'Start marker');
-    Canvas.TextOut(12, 471, 'End marker');
-    Canvas.TextOut(ClientWidth - 68, 425, 'Size');
-    Canvas.TextOut(ClientWidth - 68, 471, 'Size');
-  end;
-  if FLetterSpacingEdit.Visible then
-  begin
-    Canvas.TextOut(12, 333, 'Letter spacing (%)');
-    Canvas.TextOut(12, 379, 'Line spacing (%)');
-  end;
-  SwatchRect := Rect(ClientWidth - 42, 158, ClientWidth - 12, 183);
-  ColorValue := COLOR_EDIT;
-  if TryStrToInt('$' + StringReplace(Trim(FColorEdit.Text), '#', '', []),
-    HexValue) and (HexValue >= 0) and (HexValue <= $FFFFFF) then
-    ColorValue := RGB((HexValue shr 16) and $FF,
-      (HexValue shr 8) and $FF, HexValue and $FF);
-  Canvas.Brush.Color := ColorValue;
-  Canvas.FillRect(SwatchRect);
-  Canvas.Brush.Color := COLOR_LABEL;
-  Canvas.FrameRect(SwatchRect);
-  SwatchRect := Rect(ClientWidth - 42, 207, ClientWidth - 12, 232);
-  ColorValue := COLOR_EDIT;
-  if TryStrToInt('$' + StringReplace(Trim(FStrokeColorEdit.Text), '#', '', []),
-    HexValue) and (HexValue >= 0) and (HexValue <= $FFFFFF) then
-    ColorValue := RGB((HexValue shr 16) and $FF,
-      (HexValue shr 8) and $FF, HexValue and $FF);
-  Canvas.Brush.Color := ColorValue;
-  Canvas.FillRect(SwatchRect);
-  Canvas.Brush.Color := COLOR_LABEL;
-  Canvas.FrameRect(SwatchRect);
+  if (FDocument = nil) or (FDocument.SelectionCount = 0) then Title := 'オブジェクトを選択'
+  else if FDocument.SelectionCount = 1 then Title := FDocument[FDocument.SelectedIndex].Name
+  else Title := Format('%d 個のオブジェクト', [FDocument.SelectionCount]);
+  Canvas.TextRect(Rect(12, 0, ClientWidth - 12, 32), 12, 10, Title);
 end;
-
 procedure TVectArtObjectPropertiesControl.RefreshFromDocument;
 var
   Bounds: TRectF;
@@ -1401,6 +1601,20 @@ begin
       FHeightEdit.Enabled := False;
       FColorEdit.Enabled := False;
       FOpacityEdit.Enabled := False;
+      SetPathStyleControlsVisible(True);
+      FPathLineCapButtons[vlcButt].Selected := LineLayer.LineCap = vlcButt;
+      FPathLineCapButtons[vlcSquare].Selected := LineLayer.LineCap = vlcSquare;
+      FPathLineCapButtons[vlcRound].Selected := LineLayer.LineCap = vlcRound;
+      FPathLineJoinButtons[vljMiter].Selected := LineLayer.LineJoin = vljMiter;
+      FPathLineJoinButtons[vljBevel].Selected := LineLayer.LineJoin = vljBevel;
+      FPathLineJoinButtons[vljRound].Selected := LineLayer.LineJoin = vljRound;
+      FPathAntiAliasButton.Selected := LineLayer.AntiAlias;
+      FPathStartMarkerCombo.SetPendingMarker(LineLayer.StartMarker, True);
+      FPathEndMarkerCombo.SetPendingMarker(LineLayer.EndMarker, True);
+      FPathStartMarkerSizeEdit.Text := FloatToStr(LineLayer.StartMarkerSize);
+      FPathEndMarkerSizeEdit.Text := FloatToStr(LineLayer.EndMarkerSize);
+      FPathStartMarkerSizeEdit.Enabled := not LineLayer.Locked and (LineLayer.StartMarker <> vlmNone);
+      FPathEndMarkerSizeEdit.Enabled := not LineLayer.Locked and (LineLayer.EndMarker <> vlmNone);
       if LineLayer.Locked then
       begin
         FStrokeColorEdit.Enabled := False;
@@ -1501,6 +1715,7 @@ begin
   finally
     FUpdating := False;
   end;
+  RefreshSettingsUI;
   Invalidate;
 end;
 
@@ -1535,58 +1750,21 @@ begin
 end;
 
 procedure TVectArtObjectPropertiesControl.Resize;
-var
-  ButtonWidth: Integer;
-  ColumnWidth: Integer;
-  JoinButtonWidth: Integer;
 begin
-  inherited Resize;
-  ColumnWidth := Max((ClientWidth - 36) div 2, 48);
-  FXEdit.SetBounds(12, 59, ColumnWidth, EDIT_HEIGHT);
-  FYEdit.SetBounds((ClientWidth div 2) + 4, 59, ColumnWidth, EDIT_HEIGHT);
-  FWidthEdit.SetBounds(12, 107, ColumnWidth, EDIT_HEIGHT);
-  FHeightEdit.SetBounds((ClientWidth div 2) + 4, 107, ColumnWidth,
-    EDIT_HEIGHT);
-  FColorEdit.SetBounds(12, 158, Max(ClientWidth - 66, 48), EDIT_HEIGHT);
-  FStrokeColorEdit.SetBounds(12, 207, Max(ClientWidth - 66, 48), EDIT_HEIGHT);
-  FStrokeWidthEdit.SetBounds(12, 256, ColumnWidth, EDIT_HEIGHT);
-  FStrokeStyleCombo.SetBounds((ClientWidth div 2) + 4, 256, ColumnWidth,
-    EDIT_HEIGHT);
-  FOpacityEdit.SetBounds(12, 305, Max(ClientWidth - 24, 48), EDIT_HEIGHT);
-  FLetterSpacingEdit.SetBounds(12, 348, Max(ClientWidth - 24, 48),
-    EDIT_HEIGHT);
-  FLineSpacingEdit.SetBounds(12, 394, Max(ClientWidth - 24, 48),
-    EDIT_HEIGHT);
-  FVerticalTextCheck.SetBounds(12, 430, Max(ClientWidth - 24, 48),
-    EDIT_HEIGHT);
-  ButtonWidth := Max((ClientWidth - 40) div 3, 32);
-  FPathLineCapButtons[vlcButt].SetBounds(12, 348, ButtonWidth, 28);
-  FPathLineCapButtons[vlcSquare].SetBounds(16 + ButtonWidth, 348,
-    ButtonWidth, 28);
-  FPathLineCapButtons[vlcRound].SetBounds(20 + ButtonWidth * 2, 348,
-    ButtonWidth, 28);
-  JoinButtonWidth := Max((ClientWidth - 96) div 3, 28);
-  FPathLineJoinButtons[vljMiter].SetBounds(12, 394, JoinButtonWidth, 28);
-  FPathLineJoinButtons[vljBevel].SetBounds(16 + JoinButtonWidth, 394,
-    JoinButtonWidth, 28);
-  FPathLineJoinButtons[vljRound].SetBounds(20 + JoinButtonWidth * 2, 394,
-    JoinButtonWidth, 28);
-  FPathAntiAliasButton.SetBounds(ClientWidth - 60, 394, 48, 28);
-  FPathStartMarkerCombo.SetBounds(12, 440, Max(ClientWidth - 92, 80),
-    EDIT_HEIGHT);
-  FPathStartMarkerSizeEdit.SetBounds(ClientWidth - 68, 440, 56,
-    EDIT_HEIGHT);
-  FPathEndMarkerCombo.SetBounds(12, 486, Max(ClientWidth - 92, 80),
-    EDIT_HEIGHT);
-  FPathEndMarkerSizeEdit.SetBounds(ClientWidth - 68, 486, 56,
-    EDIT_HEIGHT);
+  inherited;
+  if FPages <> nil then
+  begin
+    FPages.SetBounds(0, 34, ClientWidth, Max(0, ClientHeight - 34));
+    LayoutSettings(nil);
+  end;
 end;
-
 procedure TVectArtObjectPropertiesControl.SetDocument(
   const Value: TVectArtDocument);
 begin
   if FDocument = Value then
     Exit;
+  CloseVectArtColorPopup(Self);
+  FPopupSelection := nil;
   FDocument := Value;
   RefreshFromDocument;
 end;
@@ -1642,5 +1820,7 @@ begin
   FVerticalTextCheck.Visible := Value;
   FVerticalTextCheck.Enabled := Value;
 end;
+
+{$I VectArtDesignerObjectSettingsUI.inc}
 
 end.

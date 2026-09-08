@@ -1,4 +1,4 @@
-program PathStylePropertiesTests;
+﻿program PathStylePropertiesTests;
 
 {$APPTYPE CONSOLE}
 
@@ -40,10 +40,18 @@ var
   I: Integer;
 begin
   Result := nil;
+  // 設定カテゴリの子孫から探し、タブの構造に依存しない。
   for I := 0 to Parent.ControlCount - 1 do
+  begin
     if (Parent.Controls[I] is TVectArtLineCapButton) and
       (TVectArtLineCapButton(Parent.Controls[I]).LineCap = Value) then
       Exit(TVectArtLineCapButton(Parent.Controls[I]));
+    if Parent.Controls[I] is TWinControl then
+    begin
+      Result := FindCapButton(TWinControl(Parent.Controls[I]), Value);
+      if Result <> nil then Exit;
+    end;
+  end;
 end;
 
 function FindJoinButton(Parent: TWinControl;
@@ -52,10 +60,18 @@ var
   I: Integer;
 begin
   Result := nil;
+  // 設定カテゴリの子孫から探し、タブの構造に依存しない。
   for I := 0 to Parent.ControlCount - 1 do
+  begin
     if (Parent.Controls[I] is TVectArtLineJoinButton) and
       (TVectArtLineJoinButton(Parent.Controls[I]).LineJoin = Value) then
       Exit(TVectArtLineJoinButton(Parent.Controls[I]));
+    if Parent.Controls[I] is TWinControl then
+    begin
+      Result := FindJoinButton(TWinControl(Parent.Controls[I]), Value);
+      if Result <> nil then Exit;
+    end;
+  end;
 end;
 
 function FindAntiAliasButton(
@@ -64,9 +80,17 @@ var
   I: Integer;
 begin
   Result := nil;
+  // 設定カテゴリの子孫から探し、タブの構造に依存しない。
   for I := 0 to Parent.ControlCount - 1 do
+  begin
     if Parent.Controls[I] is TVectArtAntiAliasButton then
       Exit(TVectArtAntiAliasButton(Parent.Controls[I]));
+    if Parent.Controls[I] is TWinControl then
+    begin
+      Result := FindAntiAliasButton(TWinControl(Parent.Controls[I]));
+      if Result <> nil then Exit;
+    end;
+  end;
 end;
 
 var

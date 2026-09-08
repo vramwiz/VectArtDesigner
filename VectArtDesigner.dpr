@@ -61,9 +61,14 @@ uses
   VectArtDesignerLayerPanelFrame in 'Source\Layers\VectArtDesignerLayerPanelFrame.pas',
   VectArtDesignerDockManager in 'Source\Layout\VectArtDesignerDockManager.pas',
   VectArtDesignerToolFrames in 'Source\Layout\VectArtDesignerToolFrames.pas',
+  VectArtDesignerAppearanceModeCommand in 'Source\Core\Commands\VectArtDesignerAppearanceModeCommand.pas',
+  VectArtDesignerPaintPopup in 'Source\ObjectProperties\VectArtDesignerPaintPopup.pas',
+  VectArtDesignerSettingsDrafts in 'Source\ObjectProperties\VectArtDesignerSettingsDrafts.pas',
   VectArtDesignerObjectPropertiesControl in 'Source\ObjectProperties\VectArtDesignerObjectPropertiesControl.pas',
   VectArtDesignerObjectPropertiesFrame in 'Source\ObjectProperties\VectArtDesignerObjectPropertiesFrame.pas',
   VectArtDesignerToolPaletteFrame in 'Source\ToolPalette\VectArtDesignerToolPaletteFrame.pas',
+  VectArtDesignerTemplateGeometry in 'Source\Editor\Geometry\VectArtDesignerTemplateGeometry.pas',
+  VectArtDesignerTemplatePicker in 'Source\ToolPalette\VectArtDesignerTemplatePicker.pas',
   VectArtDesignerToolPalette in 'Source\ToolPalette\VectArtDesignerToolPalette.pas';
 
 {$R *.res}

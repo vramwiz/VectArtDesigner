@@ -5,13 +5,15 @@ interface
 
 uses
   System.Classes, VectArtDesignerContext, VectArtDesignerToolFrames,
-  VectArtDesignerToolPalette;
+  VectArtDesignerToolPalette, VectArtDesignerTemplatePicker;
 
 type
   TToolPaletteFrame = class(TToolPlaceholderFrame)
   private
+    FTemplatePicker: TVectArtTemplatePicker;
     FToolPalette: TVectArtToolPaletteControl;
     FContext: IVectArtDesignerContext;
+    procedure OpenTemplates(Sender: TObject);
     procedure SetContext(const Value: IVectArtDesignerContext);
   public
     constructor Create(AOwner: TComponent); override;
@@ -38,11 +40,20 @@ begin
   FToolPalette := TVectArtToolPaletteControl.Create(Self);
   FToolPalette.Parent := Self;
   FToolPalette.Align := alClient;
+  FToolPalette.OnTemplates := OpenTemplates;
+end;
+
+procedure TToolPaletteFrame.OpenTemplates(Sender: TObject);
+begin
+  if FContext = nil then Exit;
+  if FTemplatePicker = nil then FTemplatePicker := TVectArtTemplatePicker.Create(Self);
+  FTemplatePicker.Open(FContext.EditorState);
 end;
 
 procedure TToolPaletteFrame.RefreshState;
 begin
   FToolPalette.RefreshState;
+  if FTemplatePicker <> nil then FTemplatePicker.Refresh;
 end;
 
 procedure TToolPaletteFrame.SetContext(const Value: IVectArtDesignerContext);
