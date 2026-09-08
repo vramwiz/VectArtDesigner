@@ -174,6 +174,7 @@ begin
   Data.LineJoin := FEditorState.LineJoin;
   Data.Name := NextLineName;
   Data.Opacity := FEditorState.RectangleOpacity;
+  Data.StrokePaint := FEditorState.LineStrokePaint;
   Data.StrokeColor := FEditorState.LineStrokeColor;
   Data.StrokeStyle := FEditorState.LineStrokeStyle;
   Data.StrokeWidth := FEditorState.LineStrokeWidth;
@@ -229,6 +230,7 @@ begin
   Data.Opacity := FEditorState.RectangleOpacity;
   Data.StartMarker := FEditorState.PathStartMarker;
   Data.StartMarkerSize := FEditorState.PathStartMarkerSize;
+  Data.StrokePaint := FEditorState.RectangleStrokePaint;
   Data.StrokeColor := FEditorState.RectangleStrokeColor;
   Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
   if not (FCreationTool in [vetTemplate, vetRoundedRectangle, vetClosedPath,
@@ -328,6 +330,7 @@ begin
   Data.Name := NextRectangleName;
   Data.Opacity := FEditorState.RectangleOpacity;
   Data.RotationDegrees := 0.0;
+  Data.StrokePaint := FEditorState.RectangleStrokePaint;
   Data.StrokeColor := FEditorState.RectangleStrokeColor;
   Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
   if VectArtRectangleModeHasStroke(FEditorState.RectangleMode) then

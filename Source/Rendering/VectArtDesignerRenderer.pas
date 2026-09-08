@@ -164,6 +164,7 @@ var
     if MarkerGeometry.Filled then
     begin
       Paint.Color := StrokePaint.Color;
+      Paint.Shader := StrokePaint.Shader;
       Paint.AntiAlias := AntiAlias;
       Canvas.DrawPath(MarkerPath, Paint);
     end
@@ -233,7 +234,8 @@ begin
       Font := CreateVectArtTextFont(TextLayer.FontFamily,
         TextLayer.FontSize, TextLayer.FontStyle, TextLayer.Vertical);
       Paint.Style := TSkPaintStyle.Fill;
-      Paint.Color := VclColorToAlphaColor(TextLayer.TextColor,
+      SetTextPaint(Paint,TextLayer.TextColor,TextLayer.FillStyle,
+        TextLayer.Bounds.Width,TextLayer.Bounds.Height,TextLayout.Width,TextLayout.Height,
         TextLayer.Opacity * LayerOpacityMultiplier);
       Canvas.Save;
       try
@@ -309,6 +311,9 @@ begin
         MinimumStrokeWidth);
       StrokePaint.Color := VclColorToAlphaColor(LineLayer.StrokeColor,
         LineLayer.Opacity * LayerOpacityMultiplier);
+      SetStrokePaint(StrokePaint,LineLayer.StrokeColor,LineLayer.StrokePaint,
+        PointsBounds([LineLayer.StartPoint,LineLayer.EndPoint]),LineLayer.StrokeWidth,
+        LineLayer.Opacity*LayerOpacityMultiplier);
       StrokePaint.StrokeWidth := StrokeWidth;
       DashIntervals := VectArtStrokeDashIntervals(LineLayer.StrokeStyle,
         StrokeWidth);
@@ -383,6 +388,8 @@ begin
         StrokeWidth := Max(PathLayer.StrokeWidth, MinimumStrokeWidth);
         StrokePaint.Color := VclColorToAlphaColor(PathLayer.StrokeColor,
           PathLayer.Opacity * LayerOpacityMultiplier);
+        SetStrokePaint(StrokePaint,PathLayer.StrokeColor,PathLayer.StrokePaint,Path.Bounds,
+          PathLayer.StrokeWidth,PathLayer.Opacity*LayerOpacityMultiplier);
         StrokePaint.StrokeWidth := StrokeWidth;
         DashIntervals := VectArtStrokeDashIntervals(PathLayer.StrokeStyle,
           StrokeWidth);
@@ -447,6 +454,8 @@ begin
           MinimumStrokeWidth);
         StrokePaint.Color := VclColorToAlphaColor(RectangleLayer.StrokeColor,
           RectangleLayer.Opacity * LayerOpacityMultiplier);
+        SetStrokePaint(StrokePaint,RectangleLayer.StrokeColor,RectangleLayer.StrokePaint,RectangleLayer.Bounds,
+          RectangleLayer.StrokeWidth,RectangleLayer.Opacity*LayerOpacityMultiplier);
         StrokePaint.StrokeWidth := StrokeWidth;
         DashIntervals := VectArtStrokeDashIntervals(
           RectangleLayer.StrokeStyle, StrokeWidth);
@@ -473,12 +482,38 @@ end;
 
 procedure RenderVectArtFillThumbnail(Document: TVectArtDocument; Index: Integer;
   Target: TVectArtRenderBuffer; Width, Height: Integer);
-var Bounds: TRectF; Scale: Single; Center: TPointF;
+var Bounds: TRectF; Scale,Padding: Single; Center: TPointF;
 begin
   if Document[Index] is TVectArtRectangleLayer then
     Bounds := QuadBounds(RectangleCorners(TVectArtRectangleLayer(Document[Index]).Bounds,
       TVectArtRectangleLayer(Document[Index]).RotationDegrees))
+  else if Document[Index] is TVectArtLineLayer then
+    Bounds := StrokePaintBounds(PointsBounds([TVectArtLineLayer(Document[Index]).StartPoint,
+      TVectArtLineLayer(Document[Index]).EndPoint]),TVectArtLineLayer(Document[Index]).StrokeWidth)
+  else if Document[Index] is TVectArtTextLayer then
+    Bounds := QuadBounds(RectangleCorners(TVectArtTextLayer(Document[Index]).Bounds,
+      TVectArtTextLayer(Document[Index]).RotationDegrees))
   else Bounds := PointsBounds(TVectArtPathLayer(Document[Index]).Points);
+  Padding := 0;
+  if Document[Index] is TVectArtRectangleLayer then Padding := TVectArtRectangleLayer(Document[Index]).StrokeWidth*0.5
+  else if Document[Index] is TVectArtLineLayer then
+    with TVectArtLineLayer(Document[Index]) do
+    begin
+      Padding := StrokeWidth*0.5;
+      if StartMarker <> vlmNone then Padding := Max(Padding,StartMarkerSize*Max(StrokeWidth,2));
+      if EndMarker <> vlmNone then Padding := Max(Padding,EndMarkerSize*Max(StrokeWidth,2));
+    end
+  else if Document[Index] is TVectArtPathLayer then
+    with TVectArtPathLayer(Document[Index]) do
+    begin
+      Padding := StrokeWidth*0.5;
+      if not Closed then
+      begin
+        if StartMarker <> vlmNone then Padding := Max(Padding,StartMarkerSize*Max(StrokeWidth,2));
+        if EndMarker <> vlmNone then Padding := Max(Padding,EndMarkerSize*Max(StrokeWidth,2));
+      end;
+    end;
+  Bounds.Inflate(Padding,Padding);
   Scale := Min((Width-4)/Max(1,Bounds.Width),(Height-4)/Max(1,Bounds.Height));
   Center := Bounds.CenterPoint;
   Bounds := RectF(Center.X-Width/Scale/2,Center.Y-Height/Scale/2,

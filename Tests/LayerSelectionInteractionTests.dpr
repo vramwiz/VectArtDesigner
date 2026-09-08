@@ -30,13 +30,13 @@ uses
   VectArtDesignerEditHistory in
     'Source\Core\VectArtDesignerEditHistory.pas',
   VectArtDesignerLayerFlipOperations in
-    'Source\Core\Commands\VectArtDesignerLayerFlipOperations.pas',
+    'Source\Core\Commands\Transform\VectArtDesignerLayerFlipOperations.pas',
   VectArtDesignerLayerRotationOperations in
-    'Source\Core\Commands\VectArtDesignerLayerRotationOperations.pas',
+    'Source\Core\Commands\Transform\VectArtDesignerLayerRotationOperations.pas',
   VectArtDesignerLayerVisibilityOperations in
-    'Source\Core\Commands\VectArtDesignerLayerVisibilityOperations.pas',
+    'Source\Core\Commands\Structure\VectArtDesignerLayerVisibilityOperations.pas',
   VectArtDesignerLayerGroupOperations in
-    'Source\Core\Commands\VectArtDesignerLayerGroupOperations.pas',
+    'Source\Core\Commands\Structure\VectArtDesignerLayerGroupOperations.pas',
   VectArtDesignerObjectContextMenu in
     'Source\Editor\Menus\VectArtDesignerObjectContextMenu.pas',
   VectArtDesignerLayerRenderer in

@@ -18,7 +18,7 @@ uses
   VectArtDesignerEditCommands in
     'Source\Core\Commands\VectArtDesignerEditCommands.pas',
   VectArtDesignerLayerStructureCommands in
-    'Source\Core\Commands\VectArtDesignerLayerStructureCommands.pas',
+    'Source\Core\Commands\Structure\VectArtDesignerLayerStructureCommands.pas',
   VectArtDesignerEditHistory in
     'Source\Core\VectArtDesignerEditHistory.pas',
   VectArtDesignerBezierGeometry in

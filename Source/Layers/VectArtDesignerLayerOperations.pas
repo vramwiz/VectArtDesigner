@@ -81,6 +81,7 @@ begin
   Data.Shape := vpsRectangle;
   if FEditorState <> nil then
   begin
+    Data.StrokePaint := FEditorState.RectangleStrokePaint;
     Data.StrokeColor := FEditorState.RectangleStrokeColor;
     Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
     if VectArtRectangleModeHasStroke(FEditorState.RectangleMode) then

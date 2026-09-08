@@ -1,4 +1,4 @@
-// Toggles visibility for the current selection as one undoable edit.
+﻿// 選択レイヤーの表示切替を1件のUndo操作として適用する。
 // 混在選択は全件を隠し、全件が非表示の場合だけ再表示へ切り替える。
 unit VectArtDesignerLayerVisibilityOperations;
 

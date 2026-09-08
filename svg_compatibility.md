@@ -63,3 +63,21 @@ SVG保存によってSVG専用の内部データが増えることはない。�
 
 SVG読込レポートは入力時に失われるSVG表現を示す。MIF保存時の座標丸め、透明度丸め、サイズ制限などは
 別途`TMifExportReport`で判定する。
+
+## 2026-09-09 円形グラデーション
+
+円形（MIFのgradation circle）は標準SVGに同じグラデーションがないため、PNGを埋め込んだpatternへ変換する。長辺は最大2048pxで、図形の輪郭はベクターのまま保持する。patternのdata-vad-fill=circle、data-vad-color1、data-vad-color2から本アプリでは編集可能な円形設定を復元する。他アプリでは画像の塗りとして表示される。
+
+- 2026-09-09：角形も同じPNG pattern方式を使用。data-vad-fill=squareと2色の属性から角形の編集設定を復元する。
+
+- 2026-09-09：波状もPNG pattern方式を共有。data-vad-fill=wave、2色、data-vad-wave-countから波状の編集設定を復元する。
+
+- 2026-09-09：線形スペクトルは実座標のlinearGradientと複数の色ストップで保存する。data-vad-fill=spectrum、data-vad-color1、data-vad-angleから開始色と角度の編集設定を復元する。表示はベクターのまま維持する。
+
+## 2026-09-09 線・枠のペイント
+
+線のstrokeにも塗りと独立したペイント参照を保存する。線形・放射・スペクトルは標準グラデーション、円形・角形・波状はPNG patternと編集設定で往復する。実座標の領域を使用し、画像には線幅とマーカーの余白を含める。線の画像テクスチャはUI・MIF保存とも未対応。
+
+## 文字色グラデーション（2026-09-09）
+
+textのfillへ6種類のグラデーション参照を出力し、読込時にTextData.FillStyleへ復元する。線形・放射状・スペクトルは標準gradient、円形・角形・波状は表示PNG patternと既存data-vad属性で再編集情報を保持する。色場は文字オブジェクト全体を基準とする。外部SVGビューアーのフォントメトリクス・文字配置の完全一致は従来どおり保証しない。

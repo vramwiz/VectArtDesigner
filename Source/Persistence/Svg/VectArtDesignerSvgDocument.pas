@@ -374,6 +374,23 @@ begin
   Kind := LocalNodeName(PaintNode);
   if Kind = 'pattern' then
   begin
+    // 表示用PNGへ変換した円形・角形・波状塗りも、編集時はMIF互換の2色設定へ戻す。
+    if TryGetAttribute(PaintNode,'data-vad-fill',S) and ((S = 'circle') or (S = 'square') or (S = 'wave')) then
+    begin
+      Fill.Kind := vfkCircle;
+      if S = 'square' then Fill.Kind := vfkSquare;
+      if S = 'wave' then
+      begin
+        Fill.Kind := vfkWave;
+        if not TryGetAttribute(PaintNode,'data-vad-wave-count',S) or
+          not TryStrToInt(S,Fill.WaveCount) then Exit;
+      end;
+      if not TryGetAttribute(PaintNode,'data-vad-color1',S) or
+        not TryParseSvgColor(S,Color) then Exit;
+      if not TryGetAttribute(PaintNode,'data-vad-color2',S) or
+        not TryParseSvgColor(S,Fill.Color2) then Exit;
+      Exit(True);
+    end;
     for J := 0 to PaintNode.ChildNodes.Count-1 do
     begin
       Child := PaintNode.ChildNodes[J];
@@ -389,6 +406,16 @@ begin
   end;
   if Kind = 'linearGradient' then
   begin
+    // 多ストップの標準SVG表示を保ちつつ、再編集時は開始色と角度へ戻す。
+    if TryGetAttribute(PaintNode,'data-vad-fill',S) and (S = 'spectrum') then
+    begin
+      if not TryGetAttribute(PaintNode,'data-vad-color1',S) or
+        not TryParseSvgColor(S,Color) then Exit;
+      if not TryGetAttribute(PaintNode,'data-vad-angle',S) or
+        not TryStrToInt(S,Fill.Angle) then Exit;
+      Fill.Kind := vfkSpectrum;
+      Exit(True);
+    end;
     X := '1'; Y := '0';
     TryGetAttribute(PaintNode,'x2',X); TryGetAttribute(PaintNode,'y2',Y);
     if (X = '0') and (Y = '1') then Fill.Kind := vfkLinearVertical
@@ -722,8 +749,8 @@ begin
     Include(Data.FontStyle, fsItalic);
   Data.TextColor := clBlack;
   if TryGetPresentationValueOrInherited(Node, InheritedStyles,
-    'fill', ValueText) and not TryParseSvgColor(ValueText,
-    Data.TextColor) then
+    'fill', ValueText) and not TryParseFill(Node,ValueText,
+    Data.TextColor,Data.FillStyle) then
     Exit;
   Width := 0;
   if not TryGetAttribute(Node, 'vad:width', ValueText) or
@@ -856,7 +883,7 @@ begin
     StrokeText) and
     not SameText(Trim(StrokeText), 'none') then
   begin
-    if not TryParseSvgColor(StrokeText, Data.StrokeColor) then
+    if not TryParseFill(Node,StrokeText,Data.StrokeColor,Data.StrokePaint) then
       Exit;
     if TryGetAttribute(Node, 'vad:stroke-color', ValueText) and
       TryStrToInt(ValueText, StrokeInteger) and
@@ -944,7 +971,7 @@ begin
   TryGetPresentationValueOrInherited(Node, InheritedStyles, 'stroke',
     StrokeText);
   if SameText(Trim(StrokeText), 'none') or
-    not TryParseSvgColor(StrokeText, Data.StrokeColor) then
+    not TryParseFill(Node,StrokeText,Data.StrokeColor,Data.StrokePaint) then
     Exit(False);
   if TryGetAttribute(Node, 'vad:stroke-color', ValueText) and
     TryStrToInt(ValueText, StrokeInteger) and
@@ -1456,7 +1483,7 @@ begin
   Data.StrokeColor := clBlack;
   if not SameText(Trim(ValueText), 'none') then
   begin
-    if not TryParseSvgColor(ValueText, Data.StrokeColor) then
+    if not TryParseFill(Node,ValueText,Data.StrokeColor,Data.StrokePaint) then
       Exit;
     Data.StrokeWidth := 1.0;
     if TryGetPresentationValueOrInherited(Node, InheritedStyles,
@@ -1772,6 +1799,7 @@ begin
   Result.Points[I] := Corners[I];
   Result.StartMarker := vlmNone;
   Result.StartMarkerSize := 4.0;
+  Result.StrokePaint := RectangleData.StrokePaint;
   Result.StrokeColor := RectangleData.StrokeColor;
   Result.StrokeStyle := RectangleData.StrokeStyle;
   Result.LineCap := vlcButt;

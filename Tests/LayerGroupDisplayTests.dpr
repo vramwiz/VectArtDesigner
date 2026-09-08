@@ -1,4 +1,4 @@
-program LayerGroupDisplayTests;
+﻿program LayerGroupDisplayTests;
 
 {$APPTYPE CONSOLE}
 
@@ -24,13 +24,13 @@ uses
   VectArtDesignerTextGeometry in
     'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerLayerFlipOperations in
-    'Source\Core\Commands\VectArtDesignerLayerFlipOperations.pas',
+    'Source\Core\Commands\Transform\VectArtDesignerLayerFlipOperations.pas',
   VectArtDesignerLayerGroupOperations in
-    'Source\Core\Commands\VectArtDesignerLayerGroupOperations.pas',
+    'Source\Core\Commands\Structure\VectArtDesignerLayerGroupOperations.pas',
   VectArtDesignerLayerRotationOperations in
-    'Source\Core\Commands\VectArtDesignerLayerRotationOperations.pas',
+    'Source\Core\Commands\Transform\VectArtDesignerLayerRotationOperations.pas',
   VectArtDesignerLayerVisibilityOperations in
-    'Source\Core\Commands\VectArtDesignerLayerVisibilityOperations.pas',
+    'Source\Core\Commands\Structure\VectArtDesignerLayerVisibilityOperations.pas',
   VectArtDesignerObjectContextMenu in
     'Source\Editor\Menus\VectArtDesignerObjectContextMenu.pas',
   VectArtDesignerLayerRenderer in

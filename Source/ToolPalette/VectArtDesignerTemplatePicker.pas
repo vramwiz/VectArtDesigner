@@ -22,7 +22,6 @@ type
     procedure Choose(Sender: TObject; ACol, ARow: Longint; var CanSelect: Boolean);
     procedure ModeChanged(Sender: TObject);
     procedure OpenColor(Sender: TObject);
-    procedure ColorChanged(Sender: TObject; Color: TColor);
     procedure FillChanged(Sender: TObject; Color: TColor; const Fill: TVectArtFillStyle);
   public
     constructor Create(AOwner: TComponent); override;
@@ -82,6 +81,7 @@ begin
   FFill.Value := FState.RectangleFillColor;
   FFill.FillStyle := FState.RectangleFillStyle;
   FStroke.Value := FState.RectangleStrokeColor;
+  FStroke.FillStyle := FState.RectangleStrokePaint;
   FMode.ItemIndex := Ord(FState.RectangleMode);
   FGrid.Invalidate;
 end;
@@ -113,8 +113,10 @@ begin
   FGrid.Canvas.Pen.Color := FState.RectangleStrokeColor;
   FGrid.Canvas.Pen.Width := EnsureRange(Round(FState.RectangleStrokeWidth),1,5);
   if not VectArtRectangleModeHasStroke(FState.RectangleMode) then FGrid.Canvas.Pen.Style := psClear;
-  if VectArtRectangleModeHasFill(FState.RectangleMode) and
-    (FState.RectangleFillStyle.Kind <> vfkSolid) then
+  if (VectArtRectangleModeHasFill(FState.RectangleMode) and
+    (FState.RectangleFillStyle.Kind <> vfkSolid)) or
+    (VectArtRectangleModeHasStroke(FState.RectangleMode) and
+    (FState.RectangleStrokePaint.Kind <> vfkSolid)) then
   begin
     Bitmap := TBitmap.Create;
     try
@@ -129,11 +131,22 @@ begin
       for J := 1 to High(P) do Builder.LineTo(P[J]);
       Builder.Close; Path := Builder.Detach;
       Paint := TSkPaint.Create; Paint.AntiAlias := True;
-      SetFillPaint(Paint,FState.RectangleFillColor,FState.RectangleFillStyle,Bounds,1);
-      Surface.Canvas.DrawPath(Path,Paint); Surface := nil;
+      if VectArtRectangleModeHasFill(FState.RectangleMode) then
+      begin
+        SetFillPaint(Paint,FState.RectangleFillColor,FState.RectangleFillStyle,Bounds,1);
+        Surface.Canvas.DrawPath(Path,Paint);
+      end;
+      if VectArtRectangleModeHasStroke(FState.RectangleMode) then
+      begin
+        Paint.Style := TSkPaintStyle.Stroke;
+        Paint.StrokeWidth := EnsureRange(FState.RectangleStrokeWidth,1,5);
+        SetStrokePaint(Paint,FState.RectangleStrokeColor,FState.RectangleStrokePaint,Bounds,Paint.StrokeWidth,1);
+        Surface.Canvas.DrawPath(Path,Paint);
+      end;
+      Surface := nil;
       FGrid.Canvas.Draw(Rect.Left,Rect.Top,Bitmap);
     finally Bitmap.Free; end;
-    FGrid.Canvas.Brush.Style := bsClear;
+    FGrid.Canvas.Brush.Style := bsClear; FGrid.Canvas.Pen.Style := psClear;
   end;
   FGrid.Canvas.Polygon(ScreenPoints);
   FGrid.Canvas.Pen.Style := psSolid; FGrid.Canvas.Pen.Width := 1;
@@ -162,7 +175,7 @@ begin
   FStrokeEditing := Sender = FStroke;
   if FState = nil then Exit;
   if FStrokeEditing then
-    ShowVectArtColorPopup(Self,'テンプレ図形の線色',FStroke.Value,nil,ColorChanged)
+    ShowVectArtFillPopup(Self,FStroke.Value,FState.RectangleStrokePaint,nil,FillChanged,False)
   else ShowVectArtFillPopup(Self,FFill.Value,FState.RectangleFillStyle,nil,FillChanged);
 end;
 
@@ -170,15 +183,15 @@ procedure TVectArtTemplatePicker.FillChanged(Sender: TObject; Color: TColor;
   const Fill: TVectArtFillStyle);
 begin
   if FState = nil then Exit;
+  if FStrokeEditing then
+  begin
+    FState.RectangleStrokeColor := Color; FState.RectangleStrokePaint := Fill;
+    Refresh; Exit;
+  end;
   FState.SetRectangleFill(Color,Fill);
   if FState.RectangleMode = vrmOutline then FState.RectangleMode := vrmFillAndOutline;
   Refresh;
 end;
-procedure TVectArtTemplatePicker.ColorChanged(Sender: TObject; Color: TColor);
-begin
-  if FState = nil then Exit;
-  if FStrokeEditing then FState.RectangleStrokeColor := Color else FState.RectangleFillColor := Color;
-  Refresh;
-end;
+
 
 end.

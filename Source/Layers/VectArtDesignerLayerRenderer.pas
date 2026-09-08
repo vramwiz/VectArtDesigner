@@ -659,7 +659,9 @@ begin
       Inc(Row);
     end;
   end;
-  if ((Layer is TVectArtRectangleLayer) and (TVectArtRectangleLayer(Layer).FillStyle.Kind <> vfkSolid)) or
+  if ((Layer is TVectArtTextLayer) and (TVectArtTextLayer(Layer).FillStyle.Kind <> vfkSolid)) or
+    (Layer.StrokePaint.Kind <> vfkSolid) or
+    ((Layer is TVectArtRectangleLayer) and (TVectArtRectangleLayer(Layer).FillStyle.Kind <> vfkSolid)) or
     ((Layer is TVectArtPathLayer) and (TVectArtPathLayer(Layer).FillStyle.Kind <> vfkSolid)) then
     DrawFillThumbnail(ACanvas,ThumbnailRect,Layer)
   else if Layer is TVectArtRectangleLayer then
@@ -953,7 +955,9 @@ begin
       Inc(Row);
     end;
   end;
-  if ((Layer is TVectArtRectangleLayer) and (TVectArtRectangleLayer(Layer).FillStyle.Kind <> vfkSolid)) or
+  if ((Layer is TVectArtTextLayer) and (TVectArtTextLayer(Layer).FillStyle.Kind <> vfkSolid)) or
+    (Layer.StrokePaint.Kind <> vfkSolid) or
+    ((Layer is TVectArtRectangleLayer) and (TVectArtRectangleLayer(Layer).FillStyle.Kind <> vfkSolid)) or
     ((Layer is TVectArtPathLayer) and (TVectArtPathLayer(Layer).FillStyle.Kind <> vfkSolid)) then
     DrawFillThumbnail(ACanvas,ThumbnailRect,Layer)
   else if Layer is TVectArtRectangleLayer then

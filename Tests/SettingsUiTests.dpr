@@ -182,6 +182,98 @@ begin
     Check(TDrawGrid(FindControl(ColorForm,TDrawGrid)).Tag = -1,'Unlisted color has selection');
     TRadioButton(ColorForm.FindComponent('ColorSlot1')).Checked := True;
     Check(TDrawGrid(FindControl(ColorForm,TDrawGrid)).Tag >= 0,'Color1 selection not restored');
+    with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
+    begin
+      ItemIndex := Items.IndexOf('円形'); OnChange(ColorForm.FindComponent('GradientKindCombo'));
+    end;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkCircle,'Circle UI apply');
+    Check(not TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Visible,'Circle angle visible');
+    Check(S.RectangleFillStyle.Kind = vfkCircle,'Circle creation default');
+    H.Undo;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkLinearHorizontal,'Circle UI undo');
+    H.Redo;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkCircle,'Circle UI redo');
+    CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
+    Check(TComboBox(ColorForm.FindComponent('GradientKindCombo')).Text = '円形','Circle popup reopen');
+    Capture(ColorForm,'paint-circle');
+    with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
+    begin
+      ItemIndex := 0; OnChange(ColorForm.FindComponent('GradientKindCombo'));
+    end;
+    with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
+    begin
+      ItemIndex := Items.IndexOf('角形'); OnChange(ColorForm.FindComponent('GradientKindCombo'));
+    end;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkSquare,'Square UI apply');
+    Check(not TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Visible,'Square angle visible');
+    Check(S.RectangleFillStyle.Kind = vfkSquare,'Square creation default');
+    H.Undo;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkLinearHorizontal,'Square UI undo');
+    H.Redo;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkSquare,'Square UI redo');
+    CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
+    Check(TComboBox(ColorForm.FindComponent('GradientKindCombo')).Text = '角形','Square popup reopen');
+    Capture(ColorForm,'paint-square');
+    with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
+    begin
+      ItemIndex := 0; OnChange(ColorForm.FindComponent('GradientKindCombo'));
+    end;
+    with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
+    begin
+      ItemIndex := Items.IndexOf('波状'); OnChange(ColorForm.FindComponent('GradientKindCombo'));
+    end;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkWave,'Wave UI apply');
+    Check(not TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Visible,'Wave angle visible');
+    Check(S.RectangleFillStyle.Kind = vfkWave,'Wave creation default');
+    H.Undo;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkLinearHorizontal,'Wave UI undo');
+    H.Redo;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkWave,'Wave UI redo');
+    CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
+    Check(TComboBox(ColorForm.FindComponent('GradientKindCombo')).Text = '波状','Wave popup reopen');
+    with TVectArtNumericSlider(ColorForm.FindComponent('GradientWaveCountSlider')).Edit do
+    begin
+      Check(Text = '5','Wave default count');
+      Text := '3'; OnExit(TVectArtNumericSlider(ColorForm.FindComponent('GradientWaveCountSlider')).Edit);
+      Check(TVectArtRectangleLayer(D[1]).FillStyle.WaveCount = 3,'Wave count apply');
+      H.Undo;
+      Check(TVectArtRectangleLayer(D[1]).FillStyle.WaveCount = 5,'Wave count undo');
+      H.Redo;
+      Check(TVectArtRectangleLayer(D[1]).FillStyle.WaveCount = 3,'Wave count redo');
+    end;
+    CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
+    Check(TVectArtNumericSlider(ColorForm.FindComponent('GradientWaveCountSlider')).Edit.Text = '3','Wave count reopen');
+    Capture(ColorForm,'paint-wave');
+    with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
+    begin
+      ItemIndex := 0; OnChange(ColorForm.FindComponent('GradientKindCombo'));
+    end;
+    with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
+    begin
+      ItemIndex := Items.IndexOf('スペクトル'); OnChange(ColorForm.FindComponent('GradientKindCombo'));
+    end;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkSpectrum,'Spectrum UI apply');
+    Check(not TRadioButton(ColorForm.FindComponent('ColorSlot2')).Visible,'Spectrum color2 visible');
+    Check(S.RectangleFillStyle.Kind = vfkSpectrum,'Spectrum creation default');
+    H.Undo;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkLinearHorizontal,'Spectrum UI undo');
+    H.Redo;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkSpectrum,'Spectrum UI redo');
+    with TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Edit do
+    begin
+      Text := '135'; OnExit(TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Edit);
+      Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkSpectrum,'Angle switched spectrum to linear');
+      Check(TVectArtRectangleLayer(D[1]).FillStyle.Angle = 135,'Spectrum angle apply');
+      Text := '45'; OnExit(TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Edit);
+    end;
+    CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
+    Check(TComboBox(ColorForm.FindComponent('GradientKindCombo')).Text = 'スペクトル','Spectrum reopen');
+    Capture(ColorForm,'paint-spectrum');
+    with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
+    begin
+      ItemIndex := 0; OnChange(ColorForm.FindComponent('GradientKindCombo'));
+    end;
+    Check(TRadioButton(ColorForm.FindComponent('ColorSlot2')).Visible,'Linear color2 missing');
     Capture(ColorForm,'paint-gradient');
     ModeCombo := TComboBox(FindControl(ColorForm,TComboBox));
     ModeCombo.ItemIndex := 2; ModeCombo.OnChange(ModeCombo);
@@ -201,10 +293,54 @@ begin
       Command.Undo;
       Check(TVectArtRectangleLayer(D[1]).StrokeWidth = 2,'Appearance undo');
     finally Command.Free; end;
+    for I := 0 to Tabs.PageCount-1 do
+      if Tabs.Pages[I].Caption = '線の色' then Tabs.ActivePage := Tabs.Pages[I];
+    Swatch := TVectArtColorSwatch(FindControl(Tabs.ActivePage,TVectArtColorSwatch));
+    Swatch.OnClick(Swatch);
+    ModeCombo := TComboBox(FindControl(ColorForm,TComboBox));
+    Check(ModeCombo.Items.Count = 2,'Stroke popup should allow solid and gradient only');
+    ModeCombo.ItemIndex := 1; ModeCombo.OnChange(ModeCombo);
+    PickPopupColor(ColorForm,clRed);
+    TRadioButton(ColorForm.FindComponent('ColorSlot2')).Checked := True;
+    PickPopupColor(ColorForm,clBlue);
+    with TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Edit do
+    begin
+      Text := '45'; OnExit(TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Edit);
+    end;
+    Check(D[1].StrokePaint.Kind = vfkLinearHorizontal,'Stroke UI apply');
+    Check(D[1].StrokePaint.Angle = 45,'Stroke UI angle');
+    Check(TVectArtRectangleLayer(D[1]).FillColor = clBlue,'Stroke UI altered interior');
+    Check(TVectArtRectangleLayer(D[1]).StrokeWidth = 2,'Stroke UI altered width');
+    ModeCombo.ItemIndex := 0; ModeCombo.OnChange(ModeCombo);
+    Check(D[1].StrokePaint.Kind = vfkSolid,'Stroke solid switch');
+    H.Undo;
+    Check(D[1].StrokePaint.Kind = vfkLinearHorizontal,'Stroke gradient Undo');
+    ModeCombo.ItemIndex := 1; ModeCombo.OnChange(ModeCombo);
+    CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
+    Check(TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Edit.Text = '45','Stroke popup reopen');
+    Capture(ColorForm,'stroke-gradient-popup');
+    CloseVectArtColorPopup(UI);
+    Capture(F,'settings-stroke-gradient');
     T := Default(TVectArtTextData); T.Text := 'タイトル'; T.Name := 'Text';
     T.FontFamily := 'Yu Gothic UI'; T.FontSize := 32; T.Bounds := RectF(20,20,180,80);
     T.Opacity := 1; T.Visible := True; T.TextColor := clWhite;
     D.InsertText(2,T); D.SelectedIndex := 2; UI.RefreshFromDocument;
+    for I := 0 to Tabs.PageCount-1 do
+      if Tabs.Pages[I].Caption = '文字色' then Tabs.ActivePage := Tabs.Pages[I];
+    Swatch := TVectArtColorSwatch(FindControl(Tabs.ActivePage,TVectArtColorSwatch));
+    Swatch.OnClick(Swatch);
+    ModeCombo := TComboBox(FindControl(ColorForm,TComboBox));
+    Check(ModeCombo.Items.Count = 2,'Text allows solid and gradient');
+    ModeCombo.ItemIndex := 1; ModeCombo.OnChange(ModeCombo);
+    with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
+    begin ItemIndex := 4; OnChange(TComboBox(ColorForm.FindComponent('GradientKindCombo'))); end;
+    Check(TVectArtTextLayer(D[2]).FillStyle.Kind = vfkWave,'Text gradient UI');
+    ModeCombo.ItemIndex := 0; ModeCombo.OnChange(ModeCombo);
+    H.Undo; Check(TVectArtTextLayer(D[2]).FillStyle.Kind = vfkWave,'Text gradient Undo');
+    CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
+    Check(TComboBox(ColorForm.FindComponent('GradientKindCombo')).Text = '波状','Text gradient reopen');
+    Capture(ColorForm,'text-gradient-popup'); CloseVectArtColorPopup(UI);
+
     for I := 0 to Tabs.PageCount-1 do
       if Tabs.Pages[I].Caption = '文字' then Tabs.ActivePage := Tabs.Pages[I];
     Capture(F,'settings-text');
@@ -218,6 +354,7 @@ begin
     Memo := TMemo(FindControl(UI,TMemo)); Memo.Text := '編集した文字'; Memo.OnExit(Memo);
     Check(TVectArtTextLayer(D[2]).Text = '編集した文字','Text edit did not apply');
     H.Undo; Check(TVectArtTextLayer(D[2]).Text = 'タイトル','Text undo');
+    Check(TVectArtTextLayer(D[2]).FillStyle.Kind = vfkWave,'Text editing retains gradient');
     D.SetLayerLocked(2,True); UI.RefreshFromDocument;
     Check(not Memo.Enabled,'Locked text editable');
     for I := 0 to Tabs.PageCount-1 do
@@ -252,6 +389,22 @@ begin
     Check(TVectArtPathLayer(D[D.LayerCount-1]).FillColor = clBlue,'New shape lost selected fill color');
     I := D.LayerCount; H.Undo; Check(D.LayerCount=I-1,'Template undo');
     H.Redo; Check(D.LayerCount=I,'Template redo');
+    Check(D[D.LayerCount-1].StrokePaint.Kind = vfkLinearHorizontal,'Creation lost stroke gradient');
+    Check(D[D.LayerCount-1].StrokePaint.Angle = 45,'Creation lost stroke angle');
+    D.SetSelectedLayers([1,3]); UI.RefreshFromDocument;
+    for I := 0 to Tabs.PageCount-1 do
+      if Tabs.Pages[I].Caption = '線の色' then Tabs.ActivePage := Tabs.Pages[I];
+    Swatch := TVectArtColorSwatch(FindControl(Tabs.ActivePage,TVectArtColorSwatch));
+    Check(Swatch.Enabled,'Mixed strokes cannot edit'); Swatch.OnClick(Swatch);
+    with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
+    begin ItemIndex := Items.IndexOf('放射'); OnChange(ColorForm.FindComponent('GradientKindCombo')); end;
+    Check((D[1].StrokePaint.Kind = vfkRadial) and (D[3].StrokePaint.Kind = vfkRadial),'Mixed stroke apply');
+    H.Undo;
+    Check((D[1].StrokePaint.Kind = vfkLinearHorizontal) and (D[3].StrokePaint.Kind = vfkSolid),'Mixed stroke single Undo');
+    D.SetLayerLocked(3,True); UI.RefreshFromDocument;
+    Check(not Swatch.Enabled,'Locked stroke enabled');
+    Check(not ColorForm.Visible,'Locked selection kept popup open');
+    D.SetLayerLocked(3,False);
     Picker.Open(S); Picker.Hide; Capture(Picker,'template-picker');
     ShowVectArtColorPopup(UI,'色・塗り',clRed,[clRed,clWhite],nil);
     for I := 0 to Screen.FormCount-1 do

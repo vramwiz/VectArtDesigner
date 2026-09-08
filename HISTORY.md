@@ -1,4 +1,4 @@
-﻿# VectArtDesigner 制作履歴
+# VectArtDesigner 制作履歴
 
 ## 2026-09-08 設定UIの初期実装
 
@@ -1341,3 +1341,85 @@ MIF / SVG 読み込みで重要。
 - 本体と AviUtl2 プラグインで可能な限り同一データ・同一描画エンジンを使用する。
 - GUI に依存しない編集・描画コアを作る。
 - Codex に個別機能を実装させる前に、データモデルと責務境界を確定する。
+
+## 2026-09-09 放射状グラデーションのMIF保存・再読込
+
+- 提供サンプル `mif/四角_グラデーション_放射状.mif` の塗りPNGで `texture object type=gradation radiate` を確認。color1=255（赤）、color2=16711680（青）、angle=0、level=0、pathname=@。
+- Rectangle／Ellipse／閉じたPathの放射状塗りをこのネイティブ属性で保存・再読込する。塗りPNGと図形・合成PNGは既存の共通描画を使用し、独自MIFキーは追加しない。放射状の角度は0とする。
+- 放射状をMIF非対応判定から除外。画像テクスチャのMIF保存は引き続き非対応。
+- FillIntegrationTestsで提供サンプルの読込・再保存、属性名、2色、四角・横長楕円・閉じたPathの往復、画素、Undo、既存線形／SVG／JSONを確認。MIF診断は29サンプルすべてバイト一致。
+- Win64 Debug／Releaseは警告0・エラー0。通常EXEもDebugで更新。検証成果物はTestOutput配下。
+- WebArt本体で書出しファイルを開いた表示・再編集の確認は未実施。
+
+## 2026-09-09 放射状の広がりを元アプリへ修正
+
+- ユーザーの比較画像と元の赤青MIFの図形PNGを確認。放射状は外接矩形へ伸ばした楕円ではなく、中心からの実距離／対角線の半分で色を補間する円だった。前回は属性の往復だけを確認し、描画の一致を見落としていた。
+- 共通FillPaintを円形の実座標へ修正。キャンバス、色見本、サムネイル、MIFの図形・合成PNGへ反映。SVGもuserSpaceOnUseの中心と半径へ接続した。
+- 180×100の元サンプルの赤成分（上辺中央133、左辺中央34、左1/4位置143）と描画結果を許容差4以内で検証。FillIntegrationTests PASS。Win64 Debug／Releaseは警告・エラー0、通常EXEも更新済み。
+- WebArt本体による書出しファイルの再編集確認は引き続き未実施。
+
+## 2026-09-09 円形グラデーション
+
+- `mif/四角_グラデーション_円形.mif`を解析。`texture object type=gradation circle`、color1=255、color2=16711680、angle=0、level=0、pathname=@。左を色1、右を色2、上下を中間色とする実座標の偏角補間であり、放射状の距離補間とは異なる。
+- 共通Skia描画へ3ストップのSweep Shaderを追加。整数中心画素をSkiaの画素中心へ合わせた。元サンプル180×100と書出し図形PNGの枠から2px内側の全画素を比較し、RGB各成分の差は最大1、平均0.332。比較スクリプト・画像はTestOutputに保存。
+- 共通色ポップアップの種別へ「円形」を追加。2色編集、再表示、Undo／Redo、新規図形の塗り既定値、色見本、テンプレ図形へ接続。プレビューは実寸座標を使い、長方形の縦横比による偏角の歪みを防ぐ。
+- FillKindは末尾へvfkCircleを追加し、既存JSONの序数を維持。Rectangle／Ellipse／閉じたPathの既存塗りモデルを使用し、MIFへ独自キーは追加しない。今回は確認できたangle=0のみ。
+- SVGは標準の角度グラデーションを持たないため、塗りをPNGのpatternへ変換する。長辺最大2048px、図形自体はベクターを維持。data-vad-fill／data-vad-color1／data-vad-color2で本アプリ再読込時に2色の円形設定を復元する。他アプリでは画像塗りとして表示する。
+- FillIntegrationTests（画素、中心色、JSON／SVG／MIF、提供MIF、閉じたPath、Undo）とSettingsUiTests（円形選択・再表示・Undo／Redo・新規作成色）がPASS。画面PNGも確認。
+- Win64 Debug／Releaseは警告0・エラー0。通常EXEをDebugで更新済み。WebArt本体での書出し結果の目視確認は未実施。
+
+## 2026-09-09 角形グラデーション
+
+- 提供サンプル `mif/四角_グラデーション_角形.mif` の `texture object type=gradation square`を確認。color1=255、color2=16711680、angle=0、level=0、pathname=@。
+- 中心からの横・縦距離をそれぞれ半幅・半高さで正規化し、最大値で2色を補間する。等色線は外接矩形と同じ縦横比の長方形。Skia Runtime Shaderを一度コンパイルし、色・配置を差し替えて再利用する。
+- 共通ポップアップに「角形」を追加。共通描画、色見本、再表示、新規図形の塗り既定値、Undo／Redoへ接続。vfkSquareは末尾に追加し、既存JSON序数を維持。MIFはネイティブ属性で保存・再読込し、独自キーは追加しない。確認対象はangle=0。
+- SVGは円形と同じPNG pattern方式を共有。data-vad-fill=squareと2色から本アプリで編集設定を復元する。塗りPNGは長辺最大2048px、図形はベクターを維持する。
+- 元サンプル180×100と書出し図形PNGの枠から2px内側を比較し、RGB各成分の差は最大1、平均0.321。比較画像・スクリプトはTestOutput配下。
+- FillIntegrationTests（JSON／SVG／MIF、提供サンプル、閉じたPath、画素、Undo）、SettingsUiTests（角形選択・再表示・Undo／Redo・作成既定色）がPASS。実設定画面のPNGを確認。
+- Win64 Debug／Releaseとも警告0・エラー0。TestOutput/AppDebugとTestOutput/AppReleaseへ出力。通常EXE更新は起動中のF2039で失敗したため、アプリ終了後の更新が必要。WebArt本体での書出し結果の確認は未実施。
+
+## 2026-09-09 波状グラデーション
+
+- 提供サンプル `mif/四角_グラデーション_波状_5.mif`を解析。`texture object type=gradation wave`、color1=255、color2=16711680、angle=0、level=5、pathname=@。
+- 中心からの実距離を対角線の半分で割り、t=(1-cos(2π×繰り返し数×正規化距離))/2で2色を補間する。Skia Runtime Shaderを再利用し、長方形でも円形の波を描く。
+- 既存の塗りレコードにWaveCountを追加し、MIFのtexture levelへ接続。vfkWaveは末尾に追加して既存JSON序数を維持。JSONはfillWaveCountを追加し、省略時0。波状以外の塗りへ影響させない。
+- 共通ポップアップに「波状」と繰り返し数の共通スライダーを追加。既定5、入力0～100、スライダー0～20。0は色1の単色となる。色見本・プレビュー・Undo／Redo・新規作成色へ反映する。
+- SVGは既存のPNG pattern方式を共有。data-vad-fill=wave、2色、data-vad-wave-countから編集設定を復元する。
+- 元サンプル180×100と書出し図形PNGの枠から2px内側を全画素比較。RGB各成分の差は最大1、平均0.332。提供サンプルで確認した繰り返し数は5、その他は同じ数式で実装。
+- FillIntegrationTests（画素、提供MIF、閉じたPath、MIF／SVG／JSON往復、繰り返し0・1・3・5・10、Undo）、SettingsUiTests（波状選択・繰り返し変更・再表示・Undo／Redo・作成既定色）がPASS。実設定画面PNGも確認。
+- Win64 Debug／Releaseは警告0・エラー0。通常EXEもDebugで更新済み。検証成果物はTestOutput配下。WebArt本体で書出し結果を開く確認は未実施。
+
+## 2026-09-09 線形スペクトル
+
+- 提供サンプル `mif/四角_グラデーション_スペクトル_赤.mif` を解析。texture object type=spectrum linear、color1=255、color2=0、angle=45、level=0、pathname=@。
+- 実座標を指定方向へ投影し、開始色から色相を一周させる。色相の折れ点をRGBストップへ展開してSkiaとSVGで共有。vfkSpectrumは列挙末尾に追加して既存JSON序数を維持する。
+- 共通ポップアップへ「スペクトル」を追加。開始色と角度を編集し、色2は非表示。角度を変えてもスペクトル種別を維持する。プレビュー、色見本、作成既定色、Undo／Redoへ接続。
+- MIFはspectrum linearと開始色・角度を保存して再編集できる。SVGは標準linearGradientの複数ストップでベクター表示を維持し、data-vad-fill=spectrum、data-vad-color1、data-vad-angleから編集設定を復元する。
+- 赤・45度の180×100サンプルと書出し図形PNGの枠から2px内側を全画素比較し、RGB各成分の差は最大1、平均0.168。開始色の彩度・明度を維持して色相を回す実装だが、赤以外の元アプリ製サンプルとの比較は未実施。
+- FillIntegrationTests（元MIF、画素、閉じたPath、JSON／SVG／MIF、角度0・45・90・135・180・270・315、Undo）、SettingsUiTests（選択・色2非表示・角度変更・再表示・Undo／Redo・作成既定色）がPASS。画面PNG確認済み。
+- Win64 Debug／Releaseは警告0・エラー0。通常EXEもDebugで更新済み。成果物はTestOutput配下。WebArt本体で書出し結果を開いた確認は未実施。
+
+## 2026-09-09 線・枠のグラデーション
+
+- ユーザー指定に従い、線の経路長や各辺ではなく図形全体の座標で色を配置し、線の形状だけに描画する。塗りとは独立したStrokePaintを持ち、Rectangle／Ellipse／Line／Pathのスナップショット・作成・複製・削除Undoへ保持する。
+- 「線の色」とテンプレ図形の線色を共通ペイントポップアップへ接続。ベタと全6種類（線形・放射・円形・角形・波状・スペクトル）を選べる。線の画像テクスチャは選択肢から除外する。線幅・線種・内側の塗りを維持し、複数選択の変更は一件のUndo。ロック・選択変更時のポップアップ終了も維持。
+- 新規図形・Lineの線設定へ引き継ぎ、キャンバス・マーカー・レイヤー／グループサムネイル・テンプレ一覧へ反映。水平／垂直Lineには線幅に応じた非ゼロの描画領域を与える。
+- 追加された元MIF枠線6サンプルで、線用テクスチャがオブジェクトPNGの3チャンク後にあることを確認。既存texture属性で保存・再読込し、MIFへ独自キーは追加しない。JSONはstrokeで始まる塗り設定キーを追加し、省略時は従来の単色。
+- 線形・放射・円形・波状・スペクトルは奇数寸法で整数の半幅／半高さを基準にする。角形は全寸法を使う。線形・放射には元画像の画素中心補正も適用。元サンプルとの比較は6種類とも色領域のRGB各成分で最大1差。輪郭と塗り境界のアンチエイリアス差は比較から除外した。
+- SVGの線にもペイント参照を保存。線形・放射・スペクトルは標準グラデーション、円形・角形・波状はPNG pattern＋編集設定を使用。水平／垂直Lineでも実座標を指定し、線幅とマーカー用の余白を含めた画像でpattern境界の繰り返しを防ぐ。
+- StrokePaintTestsを追加し、全方式のRectangle／Line／Path、内部塗りの維持、JSON／SVG／MIF往復、削除スナップショット、サムネイル、元MIF6サンプルの画素基準を検証。SettingsUiTestsに線色UI、再表示、作成引継ぎ、複数選択一括Undo、ロックを追加してPASS。
+- FillIntegrationTests、LineToolbarTests、RoundedRectangleCreationTests、MainFormLifecycleTestsもPASS。Debug／Releaseは警告0・エラー0。通常EXEをDebugで更新済み。検証成果物はTestOutput配下。WebArt本体で書出し結果を開く確認は未実施。
+
+## 2026-09-09 文字グラデーション
+
+- 文字色UIへ6種類を追加し、文字全体の色場、Undo、編集後の保持、サムネイル、MIF／SVG／JSONへ接続。
+- 元アプリの終端CRLFによって文字が縦につぶれる読込を修正。
+- 元MIF6種のRGB比較、文字描画・保存往復、UIと既存の塗り／線の回帰テストを実施。Debug／Releaseは警告・エラー0。
+
+## 2026-09-09 グラデーション完成・ユニット整理
+
+- 塗り・線・文字のグラデーションをいったん完成として区切る。
+- MIF読込、PNG描画、配置、ペイント属性、SVGペイント定義、手続きシェーダーを6ユニットへ分割。
+- 描画ペイントと編集コマンド9ユニットを責務別フォルダへ移動し、本体・テストの参照を更新。
+- 目的・担当範囲・意図・互換制約に沿ってコメントを整理し、Source/README.mdへ構成を記録。
+- 回帰テスト19件、Debug／Releaseビルド、参照整合性、差分チェックを通過。

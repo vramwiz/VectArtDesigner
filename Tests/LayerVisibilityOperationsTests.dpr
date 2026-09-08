@@ -12,10 +12,10 @@ uses
   VectArtDesignerBezierGeometry in 'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerEditHistory in 'Source\Core\VectArtDesignerEditHistory.pas',
   VectArtDesignerEditCommands in 'Source\Core\Commands\VectArtDesignerEditCommands.pas',
-  VectArtDesignerLayerFlipOperations in 'Source\Core\Commands\VectArtDesignerLayerFlipOperations.pas',
-  VectArtDesignerLayerRotationOperations in 'Source\Core\Commands\VectArtDesignerLayerRotationOperations.pas',
-  VectArtDesignerLayerVisibilityOperations in 'Source\Core\Commands\VectArtDesignerLayerVisibilityOperations.pas',
-  VectArtDesignerLayerGroupOperations in 'Source\Core\Commands\VectArtDesignerLayerGroupOperations.pas',
+  VectArtDesignerLayerFlipOperations in 'Source\Core\Commands\Transform\VectArtDesignerLayerFlipOperations.pas',
+  VectArtDesignerLayerRotationOperations in 'Source\Core\Commands\Transform\VectArtDesignerLayerRotationOperations.pas',
+  VectArtDesignerLayerVisibilityOperations in 'Source\Core\Commands\Structure\VectArtDesignerLayerVisibilityOperations.pas',
+  VectArtDesignerLayerGroupOperations in 'Source\Core\Commands\Structure\VectArtDesignerLayerGroupOperations.pas',
   VectArtDesignerObjectContextMenu in 'Source\Editor\Menus\VectArtDesignerObjectContextMenu.pas';
 
 procedure Require(Condition: Boolean; const MessageText: string);

@@ -16,7 +16,7 @@ procedure ShowVectArtColorPopup(Target: TComponent; const Title: string;
   OnChanged: TVectArtColorChanged);
 procedure ShowVectArtFillPopup(Target: TComponent; Color: TColor;
   const Fill: TVectArtFillStyle; const UsedColors: TArray<TColor>;
-  OnChanged: TVectArtFillChanged);
+  OnChanged: TVectArtFillChanged; AllowTexture: Boolean = True);
 procedure CloseVectArtColorPopup(Target: TComponent);
 
 implementation
@@ -35,10 +35,10 @@ type
 
     FMode, FGradient: TComboBox;
     FSlot1, FSlot2: TRadioButton;
-    FAngle: TVectArtNumericSlider;
-    FAngleLabel, FPaletteLabel: TLabel;
+    FAngle, FWaveCount: TVectArtNumericSlider;
+    FAngleLabel, FWaveCountLabel, FPaletteLabel: TLabel;
     FAllowPaint: Boolean;
-    FAngleValue: Integer;
+    FAngleValue, FWaveCountValue: Integer;
     FPreview: TPaintBox;
     FPreviewBitmap: Vcl.Graphics.TBitmap;
     FPreviewDirty: Boolean;
@@ -55,6 +55,7 @@ type
     procedure PickerChanged(Sender: TObject);
     procedure CommitFill;
     procedure EditAngle(Sender: TObject);
+    procedure EditWaveCount(Sender: TObject);
     procedure Changed(Sender: TObject);
     procedure DrawPreview(Sender: TObject);
     procedure DrawColor(Sender: TObject; ACol, ARow: Longint;
@@ -100,8 +101,9 @@ begin
   FPreview.OnPaint := DrawPreview;
   FGradient := TComboBox.Create(Self);
   FGradient.Parent := Self;
+  FGradient.Name := 'GradientKindCombo';
   FGradient.Style := csDropDownList;
-  FGradient.Items.AddStrings(['線形', '放射']);
+  FGradient.Items.AddStrings(['線形', '放射', '円形', '角形', '波状', 'スペクトル']);
   FGradient.ItemIndex := 0;
   FGradient.SetBounds(16, 132, 172, 28);
   FGradient.OnChange := Changed;
@@ -114,6 +116,15 @@ begin
   FAngle.Configure(0,359,1,0);
   FAngle.TrackBar.LargeChange := 15;
   FAngle.OnChange := EditAngle;
+  FWaveCountLabel := TLabel.Create(Self);
+  FWaveCountLabel.Parent := Self;
+  FWaveCountLabel.Caption := '繰り返し';
+  FWaveCount := TVectArtNumericSlider.CreateForParent(Self,Self);
+  FWaveCount.Name := 'GradientWaveCountSlider';
+  FWaveCount.Configure(0,100,1,0);
+  FWaveCount.SetSliderRange(0,20);
+  FWaveCount.OnChange := EditWaveCount;
+  FWaveCountValue := 5;
   FTextureButton := TButton.Create(Self);
   FTextureButton.Parent := Self;
   FTextureButton.Caption := 'テクスチャ画像を選択…';
@@ -187,9 +198,13 @@ begin
     if FAllowPaint then
     begin FMode.SetBounds(16,Y,338,28); Inc(Y,38); end;
     FGradient.Visible := FMode.ItemIndex = 1;
-    FAngle.Visible := FGradient.Visible and (FGradient.ItemIndex = 0);
+    FAngle.Visible := FGradient.Visible and (FGradient.ItemIndex in [0,5]);
     FAngleLabel.Visible := FAngle.Visible;
-    FSlot1.Visible := FGradient.Visible; FSlot2.Visible := FGradient.Visible;
+    FWaveCount.Visible := FGradient.Visible and (FGradient.ItemIndex = 4);
+    FWaveCountLabel.Visible := FWaveCount.Visible;
+    FSlot1.Visible := FGradient.Visible;
+    FSlot2.Visible := FGradient.Visible and (FGradient.ItemIndex <> 5);
+    if FGradient.ItemIndex = 5 then FSlot1.Checked := True;
     if FGradient.Visible then
     begin
       FGradient.SetBounds(16,Y,338,28); Inc(Y,38);
@@ -198,6 +213,11 @@ begin
         FAngleLabel.SetBounds(16,Y+5,80,20);
         FAngle.SetBounds(84,Y,270,30); Inc(Y,38);
       end;
+      if FWaveCount.Visible then
+      begin
+        FWaveCountLabel.SetBounds(16,Y+5,68,20);
+        FWaveCount.SetBounds(84,Y,270,30); Inc(Y,38);
+      end;
       FSlot1.SetBounds(24,Y,60,26); FSlot2.SetBounds(188,Y,60,26);
       FSwatch1.SetBounds(92,Y+2,70,22); FSwatch2.SetBounds(256,Y+2,70,22);
       Inc(Y,36);
@@ -205,6 +225,7 @@ begin
     FSwatch1.Visible := FSlot1.Visible; FSwatch2.Visible := FSlot2.Visible;
     FSwatch1.Brush.Color := FColor1; FSwatch2.Brush.Color := FColor2;
     FAngle.SetDisplay(((FAngleValue mod 360)+360) mod 360);
+    FWaveCount.SetDisplay(FWaveCountValue);
     FTextureButton.Visible := FMode.ItemIndex = 2;
     if FTextureButton.Visible then
     begin FTextureButton.SetBounds(16,Y,338,28); Inc(Y,38); end;
@@ -239,13 +260,27 @@ begin
   Sync;
 end;
 
+procedure TVectArtPaintPopup.EditWaveCount(Sender: TObject);
+var Value: Integer;
+begin
+  if FUpdating or not Visible then Exit;
+  Value := Round(FWaveCount.Value);
+  if Value <> FWaveCountValue then
+  begin FWaveCountValue := Value; CommitFill; end;
+  Sync;
+end;
+
 procedure TVectArtPaintPopup.EditAngle(Sender: TObject);
 var Value: Integer;
 begin
   if FUpdating or not Visible then Exit;
   Value := Round(FAngle.Value);
   if Value <> FAngleValue then
-  begin FAngleValue := Value; FGradient.ItemIndex := 0; CommitFill; end;
+  begin
+    FAngleValue := Value;
+    if FGradient.ItemIndex <> 5 then FGradient.ItemIndex := 0;
+    CommitFill;
+  end;
   Sync;
 end;
 procedure TVectArtPaintPopup.ApplyColor(Color: TColor);
@@ -259,7 +294,7 @@ end;
 procedure TVectArtPaintPopup.DrawPreview(Sender: TObject);
 begin
   DrawPaintPreview(FPreview,FPreviewBitmap,FPreviewDirty,FMode.ItemIndex,
-    FGradient.ItemIndex,FAngleValue,FColor1,FColor2,FTexture);
+    FGradient.ItemIndex,FAngleValue,FWaveCountValue,FColor1,FColor2,FTexture);
 end;
 procedure TVectArtPaintPopup.PickerChanged(Sender: TObject);
 begin
@@ -370,7 +405,12 @@ begin
   Fill.Color2 := FColor2;
   Fill.Angle := FAngleValue;
   if FMode.ItemIndex = 1 then begin
-    if FGradient.ItemIndex = 1 then Fill.Kind := vfkRadial
+    if FGradient.ItemIndex = 5 then Fill.Kind := vfkSpectrum
+    else if FGradient.ItemIndex = 4 then
+    begin Fill.Kind := vfkWave; Fill.WaveCount := FWaveCountValue; end
+    else if FGradient.ItemIndex = 3 then Fill.Kind := vfkSquare
+    else if FGradient.ItemIndex = 2 then Fill.Kind := vfkCircle
+    else if FGradient.ItemIndex = 1 then Fill.Kind := vfkRadial
     else if FAngleValue = 90 then Fill.Kind := vfkLinearVertical
     else Fill.Kind := vfkLinearHorizontal;
   end;
@@ -384,7 +424,7 @@ end;
 
 procedure ShowVectArtFillPopup(Target: TComponent; Color: TColor;
   const Fill: TVectArtFillStyle; const UsedColors: TArray<TColor>;
-  OnChanged: TVectArtFillChanged);
+  OnChanged: TVectArtFillChanged; AllowTexture: Boolean = True);
 var Stream: TBytesStream;
 begin
   ShowVectArtColorPopup(Target,'色・塗りを編集',Color,UsedColors,nil);
@@ -392,18 +432,25 @@ begin
   try
     Popup.FAllowPaint := True;
     Popup.FAngleValue := Fill.Angle;
+    Popup.FWaveCountValue := 5;
+    if Fill.Kind = vfkWave then Popup.FWaveCountValue := Fill.WaveCount;
     if Fill.Kind = vfkLinearVertical then Popup.FAngleValue := 90;
     Popup.FColor2 := Fill.Color2;
     if Fill.Kind = vfkSolid then Popup.FColor2 := clWhite;
+    if Popup.FMode.Items.Count < 3 then Popup.FMode.Items.Add('テクスチャ');
     Popup.FMode.Items[1] := 'グラデーション';
     Popup.FMode.Items[2] := 'テクスチャ';
     Popup.FTexturePng := Copy(Fill.TexturePng);
     Popup.FTexture.Assign(nil);
     Popup.FSlot1.Checked := True;
-    if Fill.Kind in [vfkLinearHorizontal,vfkLinearVertical,vfkRadial] then
+    if Fill.Kind in [vfkLinearHorizontal,vfkLinearVertical,vfkRadial,vfkCircle,vfkSquare,vfkWave,vfkSpectrum] then
     begin
       Popup.FMode.ItemIndex := 1;
-      if Fill.Kind = vfkRadial then Popup.FGradient.ItemIndex := 1
+      if Fill.Kind = vfkSpectrum then Popup.FGradient.ItemIndex := 5
+      else if Fill.Kind = vfkWave then Popup.FGradient.ItemIndex := 4
+      else if Fill.Kind = vfkSquare then Popup.FGradient.ItemIndex := 3
+      else if Fill.Kind = vfkCircle then Popup.FGradient.ItemIndex := 2
+      else if Fill.Kind = vfkRadial then Popup.FGradient.ItemIndex := 1
       else Popup.FGradient.ItemIndex := 0;
     end
     else if Fill.Kind = vfkTexture then
@@ -412,6 +459,7 @@ begin
       Stream := TBytesStream.Create(Fill.TexturePng);
       try Popup.FTexture.LoadFromStream(Stream); finally Stream.Free; end;
     end;
+    if not AllowTexture then Popup.FMode.Items.Delete(2);
     Popup.FFillChanged := OnChanged;
   finally Popup.FUpdating := False; end;
   Popup.Sync;

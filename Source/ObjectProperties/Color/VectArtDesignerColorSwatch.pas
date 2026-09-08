@@ -73,6 +73,7 @@ procedure TVectArtColorSwatch.SetFillStyle(const Value: TVectArtFillStyle);
 begin
   if (FFillStyle.Kind = Value.Kind) and (FFillStyle.Color2 = Value.Color2) and
     (FFillStyle.Angle = Value.Angle) and
+    (FFillStyle.WaveCount = Value.WaveCount) and
     (Length(FFillStyle.TexturePng) = Length(Value.TexturePng)) then
     if (Length(Value.TexturePng) = 0) or
       CompareMem(@FFillStyle.TexturePng[0],@Value.TexturePng[0],Length(Value.TexturePng)) then Exit;
@@ -121,7 +122,7 @@ begin
   else
   begin
     Caption := HexColor(FValue);
-    if FFillStyle.Kind in [vfkLinearHorizontal,vfkLinearVertical,vfkRadial] then Caption := 'グラデーション';
+    if FFillStyle.Kind in [vfkLinearHorizontal,vfkLinearVertical,vfkRadial,vfkCircle,vfkSquare,vfkWave,vfkSpectrum] then Caption := 'グラデーション';
     if FFillStyle.Kind = vfkTexture then Caption := 'テクスチャ';
     Canvas.TextOut(54,10,Caption + '  編集…');
   end;

@@ -1,4 +1,4 @@
-// Reflects the current selection around a shared axis as one undoable edit.
+﻿// 選択全体を共通軸で反転し、図形種別ごとの更新を1件のUndo操作にまとめる。
 // 単一選択は自身、複数選択は共通外接範囲の中心を軸とし、1件の履歴へまとめる。
 unit VectArtDesignerLayerFlipOperations;
 

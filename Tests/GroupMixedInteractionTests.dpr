@@ -22,7 +22,7 @@ uses
   VectArtDesignerEditHistory in
     'Source\Core\VectArtDesignerEditHistory.pas',
   VectArtDesignerLayerGroupOperations in
-    'Source\Core\Commands\VectArtDesignerLayerGroupOperations.pas';
+    'Source\Core\Commands\Structure\VectArtDesignerLayerGroupOperations.pas';
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin

@@ -260,7 +260,8 @@ begin
       FPathEndMarkerSizeEdit.Enabled := False;
     end;
     FFillSwatch.Enabled := FColorEdit.Enabled;
-    FStrokeSwatch.Enabled := FStrokeColorEdit.Enabled;
+    FStrokeSwatch.Enabled := (FDocument <> nil) and (FDocument.SelectionCount > 0) and
+      (Length(GetSelectedStrokeIndices) = FDocument.SelectionCount) and not SelectedLayersHaveLock;
     S := StringReplace(FColorEdit.Text, '#', '', [rfReplaceAll]);
     FFillSwatch.Empty := not TryStrToInt('$' + S, N);
     if not FFillSwatch.Empty then FFillSwatch.Value := RGB((N shr 16) and 255, (N shr 8) and 255, N and 255);
@@ -270,9 +271,15 @@ begin
       if FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer then
         CurrentFill := TVectArtRectangleLayer(FDocument[FDocument.SelectedIndex]).FillStyle
       else if FDocument[FDocument.SelectedIndex] is TVectArtPathLayer then
-        CurrentFill := TVectArtPathLayer(FDocument[FDocument.SelectedIndex]).FillStyle;
+        CurrentFill := TVectArtPathLayer(FDocument[FDocument.SelectedIndex]).FillStyle
+      else if FDocument[FDocument.SelectedIndex] is TVectArtTextLayer then
+        CurrentFill := TVectArtTextLayer(FDocument[FDocument.SelectedIndex]).FillStyle;
     end;
     FFillSwatch.FillStyle := CurrentFill;
+    CurrentFill := Default(TVectArtFillStyle);
+    if (FDocument <> nil) and (FDocument.SelectionCount = 1) then
+      CurrentFill := FDocument[FDocument.SelectedIndex].StrokePaint;
+    FStrokeSwatch.FillStyle := CurrentFill;
     S := StringReplace(FStrokeColorEdit.Text, '#', '', [rfReplaceAll]);
     FStrokeSwatch.Empty := not TryStrToInt('$' + S, N);
     if not FStrokeSwatch.Empty then FStrokeSwatch.Value := RGB((N shr 16) and 255, (N shr 8) and 255, N and 255);
@@ -325,17 +332,53 @@ begin
       Colors := Colors + [TVectArtPathLayer(Layer).FillColor, TVectArtPathLayer(Layer).StrokeColor];
   end;
   FPopupSelection := FDocument.GetSelectedLayerIndices;
+  if FPopupStroke and (Length(FPopupSelection) > 0) then
+  begin
+    for I in FPopupSelection do
+      if not ((FDocument[I] is TVectArtRectangleLayer) or (FDocument[I] is TVectArtLineLayer) or
+        (FDocument[I] is TVectArtPathLayer)) then Exit;
+    Layer := FDocument[FPopupSelection[0]];
+    Fill := Layer.StrokePaint;
+    if Layer is TVectArtRectangleLayer then Value := TVectArtRectangleLayer(Layer).StrokeColor
+    else if Layer is TVectArtLineLayer then Value := TVectArtLineLayer(Layer).StrokeColor
+    else Value := TVectArtPathLayer(Layer).StrokeColor;
+    ShowVectArtFillPopup(Self,Value,Fill,Colors,PopupStrokePaintChanged,False);
+    Exit;
+  end;
   if not FPopupStroke and (FDocument.SelectionCount = 1) then
   begin
     Layer := FDocument[FDocument.SelectedIndex];
     if Layer is TVectArtRectangleLayer then Fill := TVectArtRectangleLayer(Layer).FillStyle
     else if (Layer is TVectArtPathLayer) and TVectArtPathLayer(Layer).Closed then
       Fill := TVectArtPathLayer(Layer).FillStyle
+    else if Layer is TVectArtTextLayer then Fill := TVectArtTextLayer(Layer).FillStyle
     else
     begin ShowVectArtColorPopup(Self,'色を編集',Value,Colors,PopupColorChanged); Exit; end;
-    ShowVectArtFillPopup(Self,Value,Fill,Colors,PopupFillChanged);
+    ShowVectArtFillPopup(Self,Value,Fill,Colors,PopupFillChanged,not (Layer is TVectArtTextLayer));
   end
   else ShowVectArtColorPopup(Self,'色を編集',Value,Colors,PopupColorChanged);
+end;
+
+procedure TVectArtObjectPropertiesControl.PopupStrokePaintChanged(Sender: TObject; Color: TColor;
+  const Fill: TVectArtFillStyle);
+var Command: TVectArtCompoundCommand; I: Integer;
+begin
+  if (FDocument = nil) or (FDocument.SelectionCount = 0) or SelectedLayersHaveLock then Exit;
+  if Fill.Kind = vfkTexture then Exit;
+  for I in FDocument.GetSelectedLayerIndices do
+    if not ((FDocument[I] is TVectArtRectangleLayer) or (FDocument[I] is TVectArtLineLayer) or
+      (FDocument[I] is TVectArtPathLayer)) then Exit;
+  Command := TVectArtCompoundCommand.Create;
+  for I in FDocument.GetSelectedLayerIndices do
+    Command.Add(TVectArtStrokePaintCommand.Create(FDocument,I,Color,Fill));
+  Command.Execute;
+  if FEditorState <> nil then
+  begin
+    FEditorState.RectangleStrokeColor := Color; FEditorState.RectangleStrokePaint := Fill;
+    FEditorState.LineStrokeColor := Color; FEditorState.LineStrokePaint := Fill;
+  end;
+  if FEditHistory <> nil then FEditHistory.AddApplied(Command) else Command.Free;
+  RefreshFromDocument;
 end;
 
 procedure TVectArtObjectPropertiesControl.PopupFillChanged(Sender: TObject; Color: TColor;
@@ -345,7 +388,8 @@ begin
   if (FDocument = nil) or (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock then Exit;
   Command := TVectArtFillCommand.Create(FDocument,FDocument.SelectedIndex,Color,Fill);
   Command.Execute;
-  if FEditorState <> nil then FEditorState.SetRectangleFill(Color,Fill);
+  if (FEditorState <> nil) and not (FDocument[FDocument.SelectedIndex] is TVectArtTextLayer) then
+    FEditorState.SetRectangleFill(Color,Fill);
   if FEditHistory <> nil then FEditHistory.AddApplied(Command) else Command.Free;
   RefreshFromDocument;
 end;

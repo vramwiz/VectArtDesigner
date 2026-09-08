@@ -4,12 +4,12 @@ unit VectArtDesignerPaintPreview;
 interface
 uses Vcl.ExtCtrls, Vcl.Graphics;
 procedure DrawPaintPreview(Preview: TPaintBox; Bitmap: Vcl.Graphics.TBitmap;
-  var Dirty: Boolean; Mode,Gradient,Angle: Integer; Color1,Color2: TColor; Texture: TPicture);
+  var Dirty: Boolean; Mode,Gradient,Angle,WaveCount: Integer; Color1,Color2: TColor; Texture: TPicture);
 implementation
 uses System.SysUtils, System.Types, System.Math, System.UITypes, System.Skia,
   VectArtDesignerDocument, VectArtDesignerFillPaint;
 procedure DrawPaintPreview(Preview: TPaintBox; Bitmap: Vcl.Graphics.TBitmap;
-  var Dirty: Boolean; Mode,Gradient,Angle: Integer; Color1,Color2: TColor; Texture: TPicture);
+  var Dirty: Boolean; Mode,Gradient,Angle,WaveCount: Integer; Color1,Color2: TColor; Texture: TPicture);
 var
   Surface: ISkSurface;
   Paint: ISkPaint;
@@ -53,14 +53,18 @@ begin
       Surface := TSkSurface.MakeRasterDirect(Info,Bitmap.ScanLine[H-1],W*4);
       if Surface = nil then raise EInvalidOp.Create('Cannot create paint preview surface');
       Surface.Canvas.Translate(0,H);
-      Surface.Canvas.Scale(W,-H);
+      Surface.Canvas.Scale(1,-1);
       Paint := TSkPaint.Create;
       Fill := Default(TVectArtFillStyle);
-      if Gradient = 1 then Fill.Kind := vfkRadial
+      if Gradient = 5 then Fill.Kind := vfkSpectrum
+      else if Gradient = 4 then Fill.Kind := vfkWave
+      else if Gradient = 3 then Fill.Kind := vfkSquare
+      else if Gradient = 2 then Fill.Kind := vfkCircle
+      else if Gradient = 1 then Fill.Kind := vfkRadial
       else if Angle = 90 then Fill.Kind := vfkLinearVertical
       else Fill.Kind := vfkLinearHorizontal;
-      Fill.Color2 := Color2; Fill.Angle := Angle;
-      SetFillPaint(Paint,Color1,Fill,RectF(0,0,1,1),1);
+      Fill.Color2 := Color2; Fill.Angle := Angle; Fill.WaveCount := WaveCount;
+      SetFillPaint(Paint,Color1,Fill,RectF(0,0,W,H),1);
       Surface.Canvas.DrawPaint(Paint);
       Surface := nil;
     end;
@@ -68,7 +72,7 @@ begin
   end;
   Preview.Canvas.Draw(0,0,Bitmap);
   // 方向矢印は表示面だけへ重ね、保存用の塗り画像に混入させない。
-  if (Mode = 1) and (Gradient = 0) then
+  if (Mode = 1) and (Gradient in [0,5]) then
   begin
     DX := Cos(DegToRad(Angle)); DY := Sin(DegToRad(Angle));
     L := Min(W,H)*0.32;

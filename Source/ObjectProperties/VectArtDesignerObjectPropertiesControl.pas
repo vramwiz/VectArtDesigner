@@ -66,6 +66,7 @@ type
     procedure ApplyColor;
     procedure ApplyGeometry;
     procedure ApplyOpacity;
+    procedure PopupStrokePaintChanged(Sender: TObject; Color: TColor; const Fill: TVectArtFillStyle);
     procedure ApplyStrokeColor;
     procedure ApplyStrokeStyle(Sender: TObject);
     procedure ApplyPathLineCap(Sender: TObject);

@@ -11,8 +11,9 @@ function TryWriteVectArtSvg(Document: TVectArtDocument; out SvgText,
 
 implementation
 
-uses VectArtDesignerGradientGeometry, System.SysUtils, System.Classes, System.Types, System.Math, System.NetEncoding,
-  Vcl.Graphics, Winapi.Windows, VectArtDesignerSvgPrimitives,
+uses VectArtDesignerFillPaint, System.SysUtils, System.Classes,
+  System.Types, System.Math, System.NetEncoding,
+  Vcl.Graphics, Winapi.Windows, VectArtDesignerSvgPrimitives, VectArtDesignerSvgPaintWriter,
   VectArtDesignerBezierGeometry, VectArtDesignerGeometry;
 
 function XmlEscape(const Value: string): string;
@@ -22,25 +23,6 @@ begin
   Result := StringReplace(Result, '>', '&gt;', [rfReplaceAll]);
   Result := StringReplace(Result, '"', '&quot;', [rfReplaceAll]);
   Result := StringReplace(Result, '''', '&apos;', [rfReplaceAll]);
-end;
-
-function SvgNumber(Value: Single): string;
-var
-  FormatSettings: TFormatSettings;
-begin
-  FormatSettings := TFormatSettings.Create;
-  FormatSettings.DecimalSeparator := '.';
-  FormatSettings.ThousandSeparator := #0;
-  Result := FloatToStrF(Value, ffGeneral, 9, 0, FormatSettings);
-end;
-
-function SvgColor(Value: TColor): string;
-var
-  RgbColor: TColor;
-begin
-  RgbColor := ColorToRGB(Value);
-  Result := Format('#%.2x%.2x%.2x', [GetRValue(RgbColor),
-    GetGValue(RgbColor), GetBValue(RgbColor)]);
 end;
 
 function BooleanText(Value: Boolean): string;
@@ -103,7 +85,7 @@ begin
 end;
 
 procedure AppendSvgStroke(Builder: TStringBuilder; Color: TColor;
-  Width: Single; Style: TVectArtStrokeStyle);
+  Width: Single; Style: TVectArtStrokeStyle; const PaintRef: string);
 var
   DashIndex: Integer;
   DashIntervals: TArray<Single>;
@@ -113,7 +95,7 @@ begin
     Builder.Append(' stroke="none"');
     Exit;
   end;
-  Builder.Append(' stroke="').Append(SvgColor(Color))
+  Builder.Append(' stroke="').Append(PaintRef)
     .Append('" stroke-width="').Append(SvgNumber(Width))
     .Append('" vad:stroke-color="').Append(Integer(Color))
     .Append('" vad:stroke-style="').Append(Ord(Style)).Append('"');
@@ -130,31 +112,6 @@ begin
   Builder.Append('"');
 end;
 
-function FillReference(Color: TColor; const Fill: TVectArtFillStyle; Index: Integer): string;
-begin
-  if Fill.Kind = vfkSolid then Result := SvgColor(Color)
-  else Result := Format('url(#vad-fill-%d)',[Index]);
-end;
-function FillDefinition(Color: TColor; const Fill: TVectArtFillStyle; Index: Integer): string;
-var Tag, Attr: string; StartPoint,EndPoint: TPointF;
-begin
-  Result := '';
-  if Fill.Kind = vfkSolid then Exit;
-  if Fill.Kind = vfkTexture then
-    Exit(Format('<pattern id="vad-fill-%d" width="1" height="1" patternContentUnits="objectBoundingBox"><image width="1" height="1" preserveAspectRatio="none" href="data:image/png;base64,%s"/></pattern>',
-      [Index,TNetEncoding.Base64.EncodeBytesToString(Fill.TexturePng)]));
-  Tag := 'linearGradient'; Attr := 'x1="0" y1="0" x2="1" y2="0"';
-  if (Fill.Kind = vfkLinearHorizontal) and (Fill.Angle mod 360 <> 0) then
-  begin
-    LinearGradientEndpoints(Fill.Angle,StartPoint,EndPoint);
-    Attr := 'x1="'+SvgNumber(StartPoint.X)+'" y1="'+SvgNumber(StartPoint.Y)+
-      '" x2="'+SvgNumber(EndPoint.X)+'" y2="'+SvgNumber(EndPoint.Y)+'"';
-  end;
-  if Fill.Kind = vfkLinearVertical then Attr := 'x1="0" y1="0" x2="0" y2="1"';
-  if Fill.Kind = vfkRadial then begin Tag := 'radialGradient'; Attr := 'cx="0.5" cy="0.5" r="0.5"'; end;
-  Result := Format('<%s id="vad-fill-%d" %s><stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/></%s>',
-    [Tag,Index,Attr,SvgColor(Color),SvgColor(Fill.Color2),Tag]);
-end;
 function TryWriteVectArtSvg(Document: TVectArtDocument; out SvgText,
   ErrorMessage: string): Boolean;
 var
@@ -254,12 +211,43 @@ begin
         if Document[I] is TVectArtRectangleLayer then
         begin
           Rectangle := TVectArtRectangleLayer(Document[I]);
-          Builder.AppendLine(FillDefinition(Rectangle.FillColor,Rectangle.FillStyle,I));
+          Builder.AppendLine(FillDefinition(Rectangle.FillColor,Rectangle.FillStyle,I,Rectangle.Bounds));
         end
         else if Document[I] is TVectArtPathLayer then
         begin
           Path := TVectArtPathLayer(Document[I]);
-          Builder.AppendLine(FillDefinition(Path.FillColor,Path.FillStyle,I));
+          Builder.AppendLine(FillDefinition(Path.FillColor,Path.FillStyle,I,PointsBounds(BuildPathDisplayPolyline(Path.Points,Path.Bezier,Path.Closed,16))));
+        end;
+      for I := 1 to Document.LayerCount-1 do
+      begin
+        Layer := Document[I];
+        if Layer is TVectArtRectangleLayer then
+        begin
+          Rectangle := TVectArtRectangleLayer(Layer);
+          Builder.AppendLine(FillDefinition(Rectangle.StrokeColor,Rectangle.StrokePaint,-I,
+            StrokePaintBounds(Rectangle.Bounds,Rectangle.StrokeWidth,Rectangle.StrokePaint.Kind),Rectangle.StrokeWidth*0.5));
+        end
+        else if Layer is TVectArtPathLayer then
+        begin
+          Path := TVectArtPathLayer(Layer);
+          Builder.AppendLine(FillDefinition(Path.StrokeColor,Path.StrokePaint,-I,
+            StrokePaintBounds(PointsBounds(BuildPathDisplayPolyline(Path.Points,Path.Bezier,Path.Closed,16)),Path.StrokeWidth,Path.StrokePaint.Kind),
+            Max(Path.StrokeWidth,Max(Path.StartMarkerSize,Path.EndMarkerSize)*Path.StrokeWidth)));
+        end
+        else if Layer is TVectArtLineLayer then
+        begin
+          Line := TVectArtLineLayer(Layer);
+          Builder.AppendLine(FillDefinition(Line.StrokeColor,Line.StrokePaint,-I,
+            StrokePaintBounds(PointsBounds([Line.StartPoint,Line.EndPoint]),Line.StrokeWidth,Line.StrokePaint.Kind),
+            Max(Line.StrokeWidth,Max(Line.StartMarkerSize,Line.EndMarkerSize)*Line.StrokeWidth)));
+        end;
+      end;
+      for I := 1 to Document.LayerCount-1 do
+        if Document[I] is TVectArtTextLayer then
+        begin
+          TextLayer := TVectArtTextLayer(Document[I]);
+          Builder.AppendLine(FillDefinition(TextLayer.TextColor,TextLayer.FillStyle,-I,
+            TextLayer.Bounds,0,True));
         end;
       Builder.AppendLine('  </defs>');
       for I := 1 to Document.LayerCount - 1 do
@@ -271,7 +259,7 @@ begin
           Builder.Append('  <text x="').Append(SvgNumber(TextLayer.Bounds.Left))
             .Append('" y="').Append(SvgNumber(TextLayer.Bounds.Top +
               TextLayer.FontSize)).Append('" fill="')
-            .Append(SvgColor(TextLayer.TextColor)).Append('" font-family="')
+            .Append(FillReference(TextLayer.TextColor,TextLayer.FillStyle,-I)).Append('" font-family="')
             .Append(XmlEscape(TextLayer.FontFamily)).Append('" font-size="')
             .Append(SvgNumber(TextLayer.FontSize)).Append('" letter-spacing="')
             .Append(SvgNumber(TextLayer.FontSize *
@@ -383,7 +371,7 @@ begin
             .Append('" y2="').Append(SvgNumber(Line.EndPoint.Y))
             .Append('" fill="none"');
           AppendSvgStroke(Builder, Line.StrokeColor, Line.StrokeWidth,
-            Line.StrokeStyle);
+            Line.StrokeStyle,FillReference(Line.StrokeColor,Line.StrokePaint,-I));
           Builder.Append(' opacity="').Append(SvgNumber(Line.Opacity))
             .Append('" stroke-linecap="')
             .Append(SvgLineCap(Line.LineCap)).Append('" stroke-linejoin="')
@@ -432,7 +420,7 @@ begin
             Builder.Append('none');
           Builder.Append('"');
           AppendSvgStroke(Builder, Path.StrokeColor, Path.StrokeWidth,
-            Path.StrokeStyle);
+            Path.StrokeStyle,FillReference(Path.StrokeColor,Path.StrokePaint,-I));
           Builder.Append(' stroke-linecap="').Append(SvgLineCap(Path.LineCap))
             .Append('" stroke-linejoin="').Append(SvgLineJoin(Path.LineJoin))
             .Append('"');
@@ -494,7 +482,8 @@ begin
           .Append(Integer(Rectangle.FillColor))
           .Append('"');
         AppendSvgStroke(Builder, Rectangle.StrokeColor,
-          Rectangle.StrokeWidth, Rectangle.StrokeStyle);
+          Rectangle.StrokeWidth, Rectangle.StrokeStyle,
+          FillReference(Rectangle.StrokeColor,Rectangle.StrokePaint,-I));
         Builder
           .Append(' vad:name="').Append(XmlEscape(Rectangle.Name))
           .Append('" vad:locked="').Append(BooleanText(Rectangle.Locked))

@@ -1,4 +1,4 @@
-// Verifies flat grouping, atomic selection, regrouping, and undo/redo.
+﻿// Verifies flat grouping, atomic selection, regrouping, and undo/redo.
 program LayerGroupOperationsTests;
 
 {$APPTYPE CONSOLE}
@@ -16,7 +16,7 @@ uses
   VectArtDesignerLayerBatchCommands in
     'Source\Core\Commands\VectArtDesignerLayerBatchCommands.pas',
   VectArtDesignerLayerGroupOperations in
-    'Source\Core\Commands\VectArtDesignerLayerGroupOperations.pas',
+    'Source\Core\Commands\Structure\VectArtDesignerLayerGroupOperations.pas',
   VectArtDesignerLayerDuplication in
     'Source\Layers\VectArtDesignerLayerDuplication.pas';
 

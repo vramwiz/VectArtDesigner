@@ -37,6 +37,7 @@ type
     FPathStartMarkerSize: Single;
     FRectangleFillColor: TColor;
     FRectangleFillStyle: TVectArtFillStyle;
+    FRectangleStrokePaint, FLineStrokePaint: TVectArtFillStyle;
     FRectangleMode: TVectArtRectangleMode;
     FRectangleOpacity: Single;
     FRectangleStrokeColor: TColor;
@@ -62,6 +63,8 @@ type
     procedure SetPathEndMarkerSize(const Value: Single);
     procedure SetPathStartMarker(const Value: TVectArtLineMarker);
     procedure SetPathStartMarkerSize(const Value: Single);
+    procedure SetRectangleStrokePaint(const Value: TVectArtFillStyle);
+    procedure SetLineStrokePaint(const Value: TVectArtFillStyle);
     procedure SetRectangleFillColor(const Value: TColor);
     procedure SetRectangleOpacity(const Value: Single);
     procedure SetRectangleStrokeColor(const Value: TColor);
@@ -70,6 +73,8 @@ type
   public
     constructor Create;
     procedure SetRectangleFill(Color: TColor; const Fill: TVectArtFillStyle);
+    property RectangleStrokePaint: TVectArtFillStyle read FRectangleStrokePaint write SetRectangleStrokePaint;
+    property LineStrokePaint: TVectArtFillStyle read FLineStrokePaint write SetLineStrokePaint;
     property RectangleFillStyle: TVectArtFillStyle read FRectangleFillStyle;
     procedure SelectClosedBezierToolGroup;
     procedure SelectClosedPathToolGroup;
@@ -475,6 +480,10 @@ begin
   FRectangleFillStyle := Fill;
   if Assigned(FOnChanged) then FOnChanged(Self);
 end;
+procedure TVectArtEditorState.SetRectangleStrokePaint(const Value: TVectArtFillStyle);
+begin FRectangleStrokePaint := Value; if Assigned(FOnChanged) then FOnChanged(Self); end;
+procedure TVectArtEditorState.SetLineStrokePaint(const Value: TVectArtFillStyle);
+begin FLineStrokePaint := Value; if Assigned(FOnChanged) then FOnChanged(Self); end;
 procedure TVectArtEditorState.SetRectangleFillColor(const Value: TColor);
 begin
   if FRectangleFillColor = Value then

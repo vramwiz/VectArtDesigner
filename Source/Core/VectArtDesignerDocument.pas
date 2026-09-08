@@ -9,12 +9,14 @@ uses
   Vcl.Graphics;
 
 type
-  TVectArtFillKind = (vfkSolid, vfkLinearHorizontal, vfkLinearVertical, vfkRadial, vfkTexture);
+  TVectArtFillKind = (vfkSolid, vfkLinearHorizontal, vfkLinearVertical, vfkRadial, vfkTexture, vfkCircle, vfkSquare, vfkWave, vfkSpectrum);
   TVectArtFillStyle = record
     Kind: TVectArtFillKind;
     Color2: TColor;
     // Absolute degrees for horizontal/angled linear fills; legacy vertical remains 90.
     Angle: Integer;
+    // 中心から対角の端までの波の繰り返し数。MIFのtexture levelに対応する。
+    WaveCount: Integer;
     TexturePng: TBytes;
   end;
   TVectArtLayerId = UInt64;
@@ -41,6 +43,7 @@ type
 
   TVectArtLayer = class
   private
+    FStrokePaint: TVectArtFillStyle;
     FGroupId: TVectArtGroupId;
     FLayerId: TVectArtLayerId;
     FRevision: Int64;
@@ -52,6 +55,7 @@ type
   protected
     constructor Create(AKind: TVectArtLayerKind; const AName: string);
   public
+    property StrokePaint: TVectArtFillStyle read FStrokePaint write FStrokePaint;
     property GroupId: TVectArtGroupId read FGroupId;
     property Kind: TVectArtLayerKind read FKind;
     property LayerId: TVectArtLayerId read FLayerId;
@@ -115,6 +119,7 @@ type
     Opacity: Single;                        // 0.0..1.0のレイヤー不透明度。
     RotationDegrees: Single;                // 中心回りの時計回り角度。
     Shape: TVectArtPrimitiveShape;           // 四角または楕円の描画形状。
+    StrokePaint: TVectArtFillStyle;
     StrokeColor: TColor;                    // 枠線色。
     StrokeStyle: TVectArtStrokeStyle; // 枠線パターン。
     StrokeWidth: Single;                    // ドキュメント座標の枠線幅。
@@ -168,6 +173,7 @@ type
     StartPoint: TPointF;                    // 線の始点。
     StartMarker: TVectArtLineMarker;     // 始点マーカー。
     StartMarkerSize: Single;             // 始点マーカー倍率。
+    StrokePaint: TVectArtFillStyle;
     StrokeColor: TColor;                    // 線色。
     StrokeStyle: TVectArtStrokeStyle;    // 線パターン。
     StrokeWidth: Single;                    // ドキュメント座標の線幅。
@@ -237,6 +243,7 @@ type
     Points: TArray<TPointF>;                // 描画順に並ぶ頂点列。
     StartMarker: TVectArtLineMarker;        // 開いたPathの始点マーカー。
     StartMarkerSize: Single;                // 始点マーカー倍率。
+    StrokePaint: TVectArtFillStyle;
     StrokeColor: TColor;                    // 輪郭線色。
     StrokeStyle: TVectArtStrokeStyle;    // 輪郭線パターン。
     StrokeWidth: Single;                    // ドキュメント座標の輪郭線幅。
@@ -284,6 +291,7 @@ type
     FRotationDegrees: Single;
     FText: string;
     FTextColor: TColor;
+    FFillStyle: TVectArtFillStyle;
     FVertical: Boolean;
   public
     constructor Create(const AName: string; const ABounds: TRectF;
@@ -304,6 +312,7 @@ type
       write FRotationDegrees;
     property Text: string read FText write FText;
     property TextColor: TColor read FTextColor write FTextColor;
+    property FillStyle: TVectArtFillStyle read FFillStyle write FFillStyle;
     property Vertical: Boolean read FVertical write FVertical;
   end;
 
@@ -323,6 +332,7 @@ type
     RotationDegrees: Single;
     Text: string;               // Explicit line breaks are stored in-band.
     TextColor: TColor;
+    FillStyle: TVectArtFillStyle;
     Vertical: Boolean;          // Trueなら改行単位の列を右から左へ縦組みする。
     Visible: Boolean;
   end;
@@ -627,6 +637,7 @@ begin
   Result.RotationDegrees := Layer.RotationDegrees;
   Result.Text := Layer.Text;
   Result.TextColor := Layer.TextColor;
+  Result.FillStyle := Layer.FillStyle;
   Result.Vertical := Layer.Vertical;
   Result.Visible := Layer.Visible;
 end;
@@ -845,6 +856,7 @@ begin
     RectangleLayer.Shape := vpsEllipse
   else
     RectangleLayer.Shape := vpsRectangle;
+  RectangleLayer.StrokePaint := Data.StrokePaint;
   RectangleLayer.StrokeColor := Data.StrokeColor;
   RectangleLayer.StrokeStyle := Data.StrokeStyle;
   RectangleLayer.StrokeWidth := Max(Data.StrokeWidth, 0.0);
@@ -880,6 +892,7 @@ begin
   LineLayer.StartMarker := Data.StartMarker;
   LineLayer.StartMarkerSize := Max(Data.StartMarkerSize, 1.0);
   LineLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
+  LineLayer.StrokePaint := Data.StrokePaint;
   LineLayer.StrokeColor := Data.StrokeColor;
   LineLayer.StrokeStyle := Data.StrokeStyle;
   LineLayer.StrokeWidth := Max(Data.StrokeWidth, 0.1);
@@ -919,6 +932,7 @@ begin
   PathLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
   PathLayer.StartMarker := Data.StartMarker;
   PathLayer.StartMarkerSize := Max(Data.StartMarkerSize, 1.0);
+  PathLayer.StrokePaint := Data.StrokePaint;
   PathLayer.StrokeColor := Data.StrokeColor;
   PathLayer.StrokeStyle := Data.StrokeStyle;
   PathLayer.StrokeWidth := Max(Data.StrokeWidth, 0.0);
@@ -967,6 +981,7 @@ begin
   Result := EnsureRange(Index, 1, FLayers.Count);
   TextLayer := TVectArtTextLayer.Create(Data.Name, Data.Bounds, Data.Text,
     Data.FontFamily, Data.FontSize, Data.TextColor);
+  TextLayer.FillStyle := Data.FillStyle;
   TextLayer.FlipHorizontal := Data.FlipHorizontal;
   TextLayer.FlipVertical := Data.FlipVertical;
   TextLayer.FontStyle := Data.FontStyle;
@@ -1039,6 +1054,7 @@ begin
   Data.Opacity := RectangleLayer.Opacity;
   Data.RotationDegrees := RectangleLayer.RotationDegrees;
   Data.Shape := RectangleLayer.Shape;
+  Data.StrokePaint := RectangleLayer.StrokePaint;
   Data.StrokeColor := RectangleLayer.StrokeColor;
   Data.StrokeStyle := RectangleLayer.StrokeStyle;
   Data.StrokeWidth := RectangleLayer.StrokeWidth;
@@ -1085,6 +1101,7 @@ begin
   Data.Name := LineLayer.Name;
   Data.Opacity := LineLayer.Opacity;
   Data.StartPoint := LineLayer.StartPoint;
+  Data.StrokePaint := LineLayer.StrokePaint;
   Data.StrokeColor := LineLayer.StrokeColor;
   Data.StrokeStyle := LineLayer.StrokeStyle;
   Data.StrokeWidth := LineLayer.StrokeWidth;
@@ -1136,6 +1153,7 @@ begin
   Data.Points := Copy(PathLayer.Points);
   Data.StartMarker := PathLayer.StartMarker;
   Data.StartMarkerSize := PathLayer.StartMarkerSize;
+  Data.StrokePaint := PathLayer.StrokePaint;
   Data.StrokeColor := PathLayer.StrokeColor;
   Data.StrokeStyle := PathLayer.StrokeStyle;
   Data.StrokeWidth := PathLayer.StrokeWidth;
@@ -1253,6 +1271,7 @@ begin
   Layer.RotationDegrees := NormalizeAngleDegrees(Data.RotationDegrees);
   Layer.Text := Data.Text;
   Layer.TextColor := Data.TextColor;
+  Layer.FillStyle := Data.FillStyle;
   Layer.Vertical := Data.Vertical;
   Layer.Visible := Data.Visible;
   ChangedLayer(Index);

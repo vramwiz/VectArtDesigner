@@ -1,5 +1,5 @@
-// Manages flat group membership as one undoable document edit.
-// Groups never own layers; membership changes preserve the document layer order.
+﻿// フラットなグループ所属を1件のUndo操作として更新する。
+// グループはレイヤーを所有せず、所属変更でも積層順を維持する。
 unit VectArtDesignerLayerGroupOperations;
 
 interface

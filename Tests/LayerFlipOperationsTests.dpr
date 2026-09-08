@@ -1,4 +1,4 @@
-// Selection-axis reflection and undo/redo coverage for every editable layer.
+﻿// Selection-axis reflection and undo/redo coverage for every editable layer.
 program LayerFlipOperationsTests;
 
 {$APPTYPE CONSOLE}
@@ -11,7 +11,7 @@ uses
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerEditHistory in 'Source\Core\VectArtDesignerEditHistory.pas',
   VectArtDesignerEditCommands in 'Source\Core\Commands\VectArtDesignerEditCommands.pas',
-  VectArtDesignerLayerFlipOperations in 'Source\Core\Commands\VectArtDesignerLayerFlipOperations.pas',
+  VectArtDesignerLayerFlipOperations in 'Source\Core\Commands\Transform\VectArtDesignerLayerFlipOperations.pas',
   VectArtDesignerBezierGeometry in 'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas';
 

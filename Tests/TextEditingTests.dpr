@@ -1,4 +1,4 @@
-program TextEditingTests;
+﻿program TextEditingTests;
 
 {$APPTYPE CONSOLE}
 
@@ -22,7 +22,7 @@ uses
   VectArtDesignerEditHistory in
     'Source\Core\VectArtDesignerEditHistory.pas',
   VectArtDesignerLayerStructureCommands in
-    'Source\Core\Commands\VectArtDesignerLayerStructureCommands.pas',
+    'Source\Core\Commands\Structure\VectArtDesignerLayerStructureCommands.pas',
   VectArtDesignerTextGeometry in
     'Source\Core\VectArtDesignerTextGeometry.pas',
   VectArtDesignerTextEditing in

@@ -1,4 +1,4 @@
-// Rotates the current selection around a shared center as one undoable edit.
+﻿// 選択全体を共通中心で回転し、図形種別ごとの更新を1件のUndo操作にまとめる。
 // 固定角度だけを扱い、任意角度の入力はオブジェクト設定側へ委ねる。
 unit VectArtDesignerLayerRotationOperations;
 

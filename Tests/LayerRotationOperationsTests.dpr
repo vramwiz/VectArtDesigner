@@ -1,4 +1,4 @@
-// Fixed-angle selection rotation and undo/redo coverage for editable layers.
+﻿// Fixed-angle selection rotation and undo/redo coverage for editable layers.
 program LayerRotationOperationsTests;
 
 {$APPTYPE CONSOLE}
@@ -11,7 +11,7 @@ uses
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerEditHistory in 'Source\Core\VectArtDesignerEditHistory.pas',
   VectArtDesignerEditCommands in 'Source\Core\Commands\VectArtDesignerEditCommands.pas',
-  VectArtDesignerLayerRotationOperations in 'Source\Core\Commands\VectArtDesignerLayerRotationOperations.pas',
+  VectArtDesignerLayerRotationOperations in 'Source\Core\Commands\Transform\VectArtDesignerLayerRotationOperations.pas',
   VectArtDesignerBezierGeometry in 'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas';
 
