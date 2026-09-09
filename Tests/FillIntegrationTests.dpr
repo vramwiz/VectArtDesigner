@@ -147,7 +147,7 @@ begin
       Check(TVectArtRectangleLayer(E[1]).FillStyle.Kind = vfkTexture,'Texture SVG kind');
       Check(Length(TVectArtRectangleLayer(E[1]).FillStyle.TexturePng) = Length(Fill.TexturePng),'Texture bytes');
       Check(TryAnalyzeVectArtMifExport(D,Report,Err),Err);
-      Check(Report.Compatibility = mecUnsupported,'Unverified texture MIF must not silently lose fill');
+      Check(Report.Compatibility <> mecUnsupported,'Embedded texture MIF is supported');
       Cmd.Undo;
     finally Cmd.Free; end;
     Reader := CreateVectArtMifContainerReader;

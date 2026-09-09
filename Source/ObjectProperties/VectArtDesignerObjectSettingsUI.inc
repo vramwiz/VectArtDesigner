@@ -342,7 +342,7 @@ begin
     if Layer is TVectArtRectangleLayer then Value := TVectArtRectangleLayer(Layer).StrokeColor
     else if Layer is TVectArtLineLayer then Value := TVectArtLineLayer(Layer).StrokeColor
     else Value := TVectArtPathLayer(Layer).StrokeColor;
-    ShowVectArtFillPopup(Self,Value,Fill,Colors,PopupStrokePaintChanged,False);
+    ShowVectArtFillPopup(Self,Value,Fill,Colors,PopupStrokePaintChanged);
     Exit;
   end;
   if not FPopupStroke and (FDocument.SelectionCount = 1) then
@@ -354,7 +354,7 @@ begin
     else if Layer is TVectArtTextLayer then Fill := TVectArtTextLayer(Layer).FillStyle
     else
     begin ShowVectArtColorPopup(Self,'色を編集',Value,Colors,PopupColorChanged); Exit; end;
-    ShowVectArtFillPopup(Self,Value,Fill,Colors,PopupFillChanged,not (Layer is TVectArtTextLayer));
+    ShowVectArtFillPopup(Self,Value,Fill,Colors,PopupFillChanged);
   end
   else ShowVectArtColorPopup(Self,'色を編集',Value,Colors,PopupColorChanged);
 end;
@@ -364,7 +364,6 @@ procedure TVectArtObjectPropertiesControl.PopupStrokePaintChanged(Sender: TObjec
 var Command: TVectArtCompoundCommand; I: Integer;
 begin
   if (FDocument = nil) or (FDocument.SelectionCount = 0) or SelectedLayersHaveLock then Exit;
-  if Fill.Kind = vfkTexture then Exit;
   for I in FDocument.GetSelectedLayerIndices do
     if not ((FDocument[I] is TVectArtRectangleLayer) or (FDocument[I] is TVectArtLineLayer) or
       (FDocument[I] is TVectArtPathLayer)) then Exit;

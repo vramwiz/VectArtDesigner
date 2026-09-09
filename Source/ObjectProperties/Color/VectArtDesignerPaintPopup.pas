@@ -1,4 +1,4 @@
-﻿// 単色専用と図形の塗り設定で、色表示・使用色・編集窓を共有する。
+﻿// 単色専用と線・塗り・文字のペイント設定で、色表示・使用色・編集窓を共有する。
 // 適用先への変更通知だけを行い、Documentの更新とUndoは呼び出し側に委ねる。
 unit VectArtDesignerPaintPopup;
 
@@ -23,7 +23,7 @@ implementation
 
 uses
   System.SysUtils, System.Math, System.UITypes, Winapi.Windows, Vcl.Dialogs,
-  VectArtDesignerNumericSlider, ColorPickerHueBar, ColorPickerSVArea, ColorPickerColorMath, Vcl.Imaging.pngimage, Vcl.Imaging.jpeg, VectArtDesignerPaintPreview, VectArtDesignerColorSwatch;
+  VectArtDesignerNumericSlider, ColorPickerHueBar, ColorPickerSVArea, ColorPickerColorMath, VectArtDesignerTextureImage, VectArtDesignerPaintPreview, VectArtDesignerColorSwatch;
 
 type
   TVectArtPaintPopup = class(TForm)
@@ -343,33 +343,21 @@ begin
 end;
 
 procedure TVectArtPaintPopup.LoadTexture(Sender: TObject);
-var D: TOpenDialog; P: TPngImage; Stream: TMemoryStream; Bitmap: Vcl.Graphics.TBitmap;
+var Dialog: TOpenDialog; Bytes: TBytes; Stream: TBytesStream;
 begin
-  D := TOpenDialog.Create(Self);
+  Dialog := TOpenDialog.Create(Self);
   try
-    D.Filter := '画像|*.png;*.jpg;*.jpeg;*.bmp';
-    if D.Execute then
+    Dialog.Filter := '画像|*.png;*.jpg;*.jpeg;*.bmp';
+    if Dialog.Execute then
       try
-        FTexture.LoadFromFile(D.FileName);
-        P := TPngImage.Create; Stream := TMemoryStream.Create;
-        try
-          if FTexture.Graphic is TPngImage then P.Assign(FTexture.Graphic)
-          else
-          begin
-            Bitmap := Vcl.Graphics.TBitmap.Create;
-            try
-              Bitmap.SetSize(FTexture.Width,FTexture.Height);
-              Bitmap.Canvas.Draw(0,0,FTexture.Graphic);
-              P.Assign(Bitmap);
-            finally Bitmap.Free; end;
-          end;
-          P.SaveToStream(Stream);
-          SetLength(FTexturePng,Stream.Size);
-          Move(Stream.Memory^,FTexturePng[0],Stream.Size);
-        finally Stream.Free; P.Free; end;
+        // 変換完了まで現在の設定を維持し、プレビューと保存データを同じPNGから更新する。
+        Bytes := LoadVectArtTexturePng(Dialog.FileName);
+        Stream := TBytesStream.Create(Bytes);
+        try FTexture.LoadFromStream(Stream); finally Stream.Free; end;
+        FTexturePng := Bytes;
         FPreviewDirty := True; FPreview.Invalidate; CommitFill;
       except on E: Exception do MessageDlg(E.Message, mtError, [mbOK], 0); end;
-  finally D.Free; end;
+  finally Dialog.Free; end;
 end;
 
 procedure ShowVectArtColorPopup(Target: TComponent; const Title: string;

@@ -143,9 +143,10 @@ begin
       begin
         Image := TSkImage.MakeFromEncoded(Fill.TexturePng);
         if Image = nil then Exit;
-        M := TMatrix.CreateScaling(Bounds.Width/Image.Width,Bounds.Height/Image.Height) *
-          TMatrix.CreateTranslation(Bounds.Left,Bounds.Top);
-        Paint.Shader := Image.MakeShader(M,TSkSamplingOptions.Medium);
+        // 元アプリの画像塗りは実寸で左上を合わせる。図形全体で同じタイル座標を共有する。
+        M := TMatrix.CreateTranslation(Bounds.Left,Bounds.Top);
+        Paint.Shader := Image.MakeShader(M,TSkSamplingOptions.Medium,
+          TSkTileMode.Repeat,TSkTileMode.Repeat);
       end;
   end;
   // Shaderの色を保ち、Paint側ではレイヤーの透明度だけを乗算する。

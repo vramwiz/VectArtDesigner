@@ -932,18 +932,8 @@ begin
     for I := 1 to Document.LayerCount - 1 do
     begin
       Layer := Document[I];
-      if Layer.StrokePaint.Kind = vfkTexture then
-        Report.AddIssue(meikUnsupported,I,Layer.Name,'線の画像テクスチャは未対応です。');
-      if ((Layer is TVectArtRectangleLayer) and
-        (TVectArtRectangleLayer(Layer).FillStyle.Kind = vfkTexture)) or
-        ((Layer is TVectArtPathLayer) and
-        (TVectArtPathLayer(Layer).FillStyle.Kind = vfkTexture)) then
-        Report.AddIssue(meikUnsupported,I,Layer.Name,
-          '画像テクスチャのMIF属性は未検証です。SVGへ保存してください。');
       if Layer is TVectArtTextLayer then
       begin
-        if TVectArtTextLayer(Layer).FillStyle.Kind = vfkTexture then
-          Report.AddIssue(meikUnsupported,I,Layer.Name,'文字の画像テクスチャのMIF属性は未検証です。');
         Inc(TextIndex);
         if Layer.Name <> Format('Text %d', [TextIndex]) then
           Report.AddIssue(meikConversion, I, Layer.Name,

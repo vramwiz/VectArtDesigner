@@ -2,8 +2,8 @@
 program SettingsUiTests;
 {$APPTYPE CONSOLE}
 uses
-  Winapi.Windows, System.Diagnostics, System.UITypes, System.Classes, System.SysUtils, System.Types, System.Math,
-  Vcl.Forms, Vcl.Grids, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.Graphics,
+  Winapi.Windows, Winapi.Messages, System.Diagnostics, System.UITypes, System.Classes, System.SysUtils, System.Types, System.Math,
+  Vcl.Dialogs, Vcl.Forms, Vcl.Grids, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.Graphics,
   Vcl.Themes, Vcl.Styles, Vcl.Imaging.pngimage,
   VectArtDesignerNumericSlider, ColorPickerSVArea, TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
   VectArtDesignerDocument, VectArtDesignerEditorState, VectArtDesignerEditHistory,
@@ -41,6 +41,44 @@ begin
       begin Allowed := True; Grid.OnSelectCell(Grid,Col,Row,Allowed); Exit; end;
     end;
   raise Exception.Create('Color chip missing');
+end;
+// 標準画像選択ダイアログへテスト画像を入力し、実際の読込イベントを通す。
+var TextureDialogTimer: UINT_PTR; TextureDialogTicks: Integer; TextureFile: string;
+procedure TextureDialogTick(Wnd: HWND; Msg: UINT; ID: UINT_PTR; Time: DWORD); stdcall;
+var Dialog: HWND; ProcessID: DWORD; ClassName: array[0..63] of Char;
+begin
+  Inc(TextureDialogTicks);
+  Dialog := GetForegroundWindow;
+  GetWindowThreadProcessId(Dialog,@ProcessID);
+  GetClassName(Dialog,ClassName,Length(ClassName));
+  if (ProcessID=GetCurrentProcessId) and (string(ClassName)='#32770') then
+  begin
+    KillTimer(0,ID); TextureDialogTimer := 0;
+    SendMessage(Dialog,WM_USER+104,1152,LPARAM(PChar(TextureFile)));
+    PostMessage(Dialog,WM_COMMAND,IDOK,0);
+  end
+  else if TextureDialogTicks>50 then
+  begin KillTimer(0,ID); TextureDialogTimer := 0; PostMessage(Dialog,WM_COMMAND,IDCANCEL,0); end;
+end;
+procedure PickTexture(Form: TForm);
+var Button: TButton; Bitmap: TBitmap; Png: TPngImage; Previous: Boolean;
+begin
+  TextureFile := ExpandFileName(ExtractFilePath(ParamStr(0))+'ui-texture.png');
+  Bitmap := TBitmap.Create; Png := TPngImage.Create;
+  try
+    Bitmap.SetSize(16,16); Bitmap.Canvas.Brush.Color := clRed;
+    Bitmap.Canvas.FillRect(Rect(0,0,8,16)); Bitmap.Canvas.Brush.Color := clBlue;
+    Bitmap.Canvas.FillRect(Rect(8,0,16,16)); Png.Assign(Bitmap); Png.SaveToFile(TextureFile);
+  finally Png.Free; Bitmap.Free; end;
+  Button := TButton(FindControl(Form,TButton)); Check(Button<>nil,'Texture button');
+  Previous := UseLatestCommonDialogs; UseLatestCommonDialogs := False;
+  TextureDialogTicks := 0;
+  TextureDialogTimer := SetTimer(0,0,100,@TextureDialogTick);
+  try Button.Click;
+  finally
+    if TextureDialogTimer<>0 then KillTimer(0,TextureDialogTimer);
+    UseLatestCommonDialogs := Previous;
+  end;
 end;
 procedure Capture(Control: TWinControl; const Name: string);
 var B: TBitmap; P: TPngImage; DC: HDC;
@@ -280,6 +318,13 @@ begin
     Check(not FindControl(ColorForm,TDrawGrid).Visible,'Texture color grid visible');
     Check(not TColorPickerSVArea(ColorForm.FindComponent('SVPicker')).Visible,'Texture picker visible');
     Check(ColorForm.ClientHeight < 220,'Texture popup retains color space');
+    PickTexture(ColorForm);
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind=vfkTexture,'Texture file applied to fill');
+    Check(S.RectangleFillStyle.Kind=vfkTexture,'Texture creation default');
+    H.Undo; Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind<>vfkTexture,'Texture fill undo');
+    H.Redo; Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind=vfkTexture,'Texture fill redo');
+    CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
+    Check(ModeCombo.ItemIndex=2,'Texture fill reopen');
     Capture(ColorForm,'paint-texture');
     ModeCombo.ItemIndex := 1; ModeCombo.OnChange(ModeCombo);
     CloseVectArtColorPopup(UI);
@@ -298,7 +343,15 @@ begin
     Swatch := TVectArtColorSwatch(FindControl(Tabs.ActivePage,TVectArtColorSwatch));
     Swatch.OnClick(Swatch);
     ModeCombo := TComboBox(FindControl(ColorForm,TComboBox));
-    Check(ModeCombo.Items.Count = 2,'Stroke popup should allow solid and gradient only');
+    Check(ModeCombo.Items.Count = 3,'Stroke popup allows texture');
+    ModeCombo.ItemIndex := 2; ModeCombo.OnChange(ModeCombo); PickTexture(ColorForm);
+    Check(D[1].StrokePaint.Kind=vfkTexture,'Texture file applied to stroke');
+    Check(S.LineStrokePaint.Kind=vfkTexture,'Texture line creation default');
+    H.Undo; Check(D[1].StrokePaint.Kind<>vfkTexture,'Texture stroke undo');
+    H.Redo; Check(D[1].StrokePaint.Kind=vfkTexture,'Texture stroke redo');
+    CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
+    Check(ModeCombo.ItemIndex=2,'Texture stroke reopen');
+    Capture(ColorForm,'stroke-texture-popup');
     ModeCombo.ItemIndex := 1; ModeCombo.OnChange(ModeCombo);
     PickPopupColor(ColorForm,clRed);
     TRadioButton(ColorForm.FindComponent('ColorSlot2')).Checked := True;
@@ -330,7 +383,14 @@ begin
     Swatch := TVectArtColorSwatch(FindControl(Tabs.ActivePage,TVectArtColorSwatch));
     Swatch.OnClick(Swatch);
     ModeCombo := TComboBox(FindControl(ColorForm,TComboBox));
-    Check(ModeCombo.Items.Count = 2,'Text allows solid and gradient');
+    Check(ModeCombo.Items.Count = 3,'Text popup allows texture');
+    ModeCombo.ItemIndex := 2; ModeCombo.OnChange(ModeCombo); PickTexture(ColorForm);
+    Check(TVectArtTextLayer(D[2]).FillStyle.Kind=vfkTexture,'Texture file applied to text');
+    H.Undo; Check(TVectArtTextLayer(D[2]).FillStyle.Kind=vfkSolid,'Texture text undo');
+    H.Redo; Check(TVectArtTextLayer(D[2]).FillStyle.Kind=vfkTexture,'Texture text redo');
+    CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
+    Check(ModeCombo.ItemIndex=2,'Texture text reopen');
+    Capture(ColorForm,'text-texture-popup');
     ModeCombo.ItemIndex := 1; ModeCombo.OnChange(ModeCombo);
     with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
     begin ItemIndex := 4; OnChange(TComboBox(ColorForm.FindComponent('GradientKindCombo'))); end;

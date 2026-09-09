@@ -18,6 +18,8 @@ uses
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerBezierGeometry in
     'Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas',
+  VectArtDesignerSvgPaintReader in
+    'Source\Persistence\Svg\Paint\VectArtDesignerSvgPaintReader.pas',
   VectArtDesignerSvgDocument in
     'Source\Persistence\Svg\VectArtDesignerSvgDocument.pas';
 

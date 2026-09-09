@@ -1,4 +1,4 @@
-﻿// 塗り・線・文字で共有するMIFペイント属性を読み書きする。未検証の画像テクスチャは独自属性へ変換しない。
+﻿// 塗り・線・文字で共有するMIFペイント属性を読み書きする。画像は元寸法のPNGとして埋め込み、外部ファイルに依存させない。
 unit VectArtDesignerMifPaint;
 
 interface
@@ -32,9 +32,26 @@ end;
 
 function CreateFillTexturePng(Color: TColor; const Fill: TVectArtFillStyle; Stroke: Boolean = False): TBytes;
 var Pixels: TArray<TVectArtRgbaPixel>; Surface: ISkSurface; Paint: ISkPaint;
-    Info: TSkImageInfo; Angle: Integer;
+    Info: TSkImageInfo; Angle: Integer; Image: ISkImage;
 begin
   if Fill.Kind = vfkSolid then Exit(CreateTexturePng(Color));
+  if Fill.Kind = vfkTexture then
+  begin
+    Image := TSkImage.MakeFromEncoded(Fill.TexturePng);
+    if Image = nil then raise EWriteError.Create('Invalid texture PNG');
+    // ピクセルを縮小せず保持する。既存の配置・ペイント属性は新しい値へ置き換える。
+    Result := RemovePngChunk(RemovePngChunk(Fill.TexturePng,'waDA'),'tEXt');
+    AddText(Result,'object type','texture');
+    AddImagePlacementMetadata(Result,RectF(0,0,Image.Width-1,Image.Height-1),255,False);
+    AddWadaString(Result,'texture object type','image');
+    AddWadaInteger(Result,'texture color1',0);
+    AddWadaInteger(Result,'texture color2',0);
+    AddWadaInteger(Result,'texture angle',0);
+    AddWadaInteger(Result,'texture level',0);
+    // 画像本体は埋込済みなので、別のPCで利用できない元ファイルの絶対パスを保存しない。
+    AddWadaString(Result,'texture pathname','@');
+    Exit;
+  end;
   if not (Fill.Kind in [vfkLinearHorizontal,vfkLinearVertical,vfkRadial,vfkCircle,vfkSquare,vfkWave,vfkSpectrum]) then
     raise EWriteError.Create('This fill type has no verified native MIF mapping yet');
   SetLength(Pixels,64*64);
@@ -47,7 +64,7 @@ begin
   Result := EncodeRgba(@Pixels[0],64,64);
   AddText(Result,'object type','texture');
   AddImagePlacementMetadata(Result,RectF(0,0,63,63),255,False);
-  // WebArtの放射状サンプルと同じ属性を使い、図形として再編集できるようにする。
+  // 確認済みのネイティブ属性を使い、PNGだけでなく編集可能なペイント設定も保持する。
   if Fill.Kind = vfkRadial then
     AddWadaString(Result,'texture object type','gradation radiate')
   else if Fill.Kind = vfkCircle then
@@ -73,6 +90,12 @@ function ReadFillTexture(const Png: TBytes): TVectArtFillStyle;
 var Kind: string; Angle, C: Int32;
 begin
   Result := Default(TVectArtFillStyle);
+  if TryReadPngString(Png,'waDA','texture object type',Kind) and SameText(Kind,'image') then
+  begin
+    Result.Kind := vfkTexture;
+    Result.TexturePng := RemovePngChunk(RemovePngChunk(Png,'waDA'),'tEXt');
+    Exit;
+  end;
   if TryReadPngString(Png,'waDA','texture object type',Kind) and
     (SameText(Kind,'gradation linear') or SameText(Kind,'gradation radiate') or
       SameText(Kind,'gradation circle') or SameText(Kind,'gradation square') or

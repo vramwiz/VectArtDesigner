@@ -4,7 +4,7 @@ unit VectArtDesignerSvgPrimitives;
 
 interface
 
-uses Vcl.Graphics, System.SysUtils, VectArtDesignerDocument;
+uses Xml.XMLIntf, Vcl.Graphics, System.SysUtils, VectArtDesignerDocument;
 
 const
   SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
@@ -21,9 +21,49 @@ function TryParseLineMarkerName(const Value: string;
 function SvgNumber(Value: Single): string;
 function SvgColor(Value: TColor): string;
 
+// XMLの接頭辞や数値表記の扱いを図形とペイントで共有する。
+function LocalNodeName(const Node: IXMLNode): string;
+function TryGetAttribute(const Node: IXMLNode; const Name: string; out Value: string): Boolean;
+function TryParseSvgNumber(const Text: string; out Value: Single): Boolean;
+
 implementation
 
-uses System.Classes, Vcl.Imaging.pngimage, Winapi.Windows;
+uses System.Math, System.Variants, System.Classes, Vcl.Imaging.pngimage, Winapi.Windows;
+
+function LocalNodeName(const Node: IXMLNode): string;
+var
+  SeparatorIndex: Integer;
+begin
+  Result := Node.NodeName;
+  SeparatorIndex := Result.IndexOf(':');
+  if SeparatorIndex >= 0 then
+    Result := Result.Substring(SeparatorIndex + 1);
+end;
+
+function TryGetAttribute(const Node: IXMLNode; const Name: string;
+  out Value: string): Boolean;
+begin
+  Result := (Node <> nil) and Node.HasAttribute(Name);
+  if Result then
+    Value := VarToStr(Node.Attributes[Name])
+  else
+    Value := '';
+end;
+
+function TryParseSvgNumber(const Text: string; out Value: Single): Boolean;
+var
+  FormatSettings: TFormatSettings;
+  NumberText: string;
+begin
+  NumberText := Trim(Text);
+  if NumberText.EndsWith('px', True) then
+    Delete(NumberText, Length(NumberText) - 1, 2);
+  FormatSettings := TFormatSettings.Create;
+  FormatSettings.DecimalSeparator := '.';
+  FormatSettings.ThousandSeparator := #0;
+  Result := TryStrToFloat(Trim(NumberText), Value, FormatSettings) and
+    not IsNan(Value) and not IsInfinite(Value);
+end;
 
 function SvgNumber(Value: Single): string;
 var

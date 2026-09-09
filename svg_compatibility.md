@@ -1,4 +1,4 @@
-# SVG入出力のMIF編集互換範囲
+﻿# SVG入出力のMIF編集互換範囲
 
 `VectArtDesigner`ではSVGを独立した高機能編集形式とはせず、MIF編集モデルとの交換形式として扱う。
 読込時は対応する図形をDocumentへ変換し、変換または無視した描画要素を`TSvgImportReport`で通知する。
@@ -81,3 +81,9 @@ SVG読込レポートは入力時に失われるSVG表現を示す。MIF保存�
 ## 文字色グラデーション（2026-09-09）
 
 textのfillへ6種類のグラデーション参照を出力し、読込時にTextData.FillStyleへ復元する。線形・放射状・スペクトルは標準gradient、円形・角形・波状は表示PNG patternと既存data-vad属性で再編集情報を保持する。色場は文字オブジェクト全体を基準とする。外部SVGビューアーのフォントメトリクス・文字配置の完全一致は従来どおり保証しない。
+
+## 画像テクスチャ（2026-09-09）
+
+図形のfill、線のstroke、文字のfillに埋め込みPNGのpatternを使用する。patternUnits=userSpaceOnUse、x／yは図形の左上、width／heightと子imageは元画像の寸法とし、実寸で繰り返す。画像はbase64で埋め込み、再読込時にTexturePngへ戻す。水平・垂直LineもobjectBoundingBoxへ依存しない。
+
+以前のアプリが書いた画像引き伸ばしpatternも画像は読み込むが、現在のMIF編集モデルでは実寸配置になる。任意の外部SVGのpatternTransformや配置パラメータ全般の再現は対応範囲外。

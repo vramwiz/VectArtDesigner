@@ -15,7 +15,7 @@ var
   Paint: ISkPaint;
   Info: TSkImageInfo;
   Fill: TVectArtFillStyle;
-  W, H: Integer;
+  W, H, X, Y: Integer;
   DX,DY,L: Double;
   Tail,Tip,Wing1,Wing2: TPoint;
   procedure ArrowStroke(Color: TColor; Width: Integer);
@@ -38,7 +38,18 @@ begin
     begin
       Bitmap.Canvas.Brush.Color := Color1;
       Bitmap.Canvas.FillRect(Rect(0,0,W,H));
-      Bitmap.Canvas.StretchDraw(Rect(0,0,W,H), Texture.Graphic);
+      // 本描画と同じ実寸のタイルを表示する。
+      if (Texture.Width > 0) and (Texture.Height > 0) then
+      begin
+        Y := 0;
+        while Y < H do
+        begin
+          X := 0;
+          while X < W do
+          begin Bitmap.Canvas.Draw(X,Y,Texture.Graphic); Inc(X,Texture.Width); end;
+          Inc(Y,Texture.Height);
+        end;
+      end;
     end
     else if Mode <> 1 then
     begin

@@ -1,6 +1,8 @@
 ﻿program VectArtDesigner;
 
 uses
+  VectArtDesignerSvgPaintReader in 'Source\Persistence\Svg\Paint\VectArtDesignerSvgPaintReader.pas',
+  VectArtDesignerTextureImage in 'Source\Persistence\VectArtDesignerTextureImage.pas',
   VectArtDesignerMifReader in 'Source\Persistence\Mif\VectArtDesignerMifReader.pas',
   VectArtDesignerMifPlacement in 'Source\Persistence\Mif\Rendering\VectArtDesignerMifPlacement.pas',
   VectArtDesignerMifRaster in 'Source\Persistence\Mif\Rendering\VectArtDesignerMifRaster.pas',

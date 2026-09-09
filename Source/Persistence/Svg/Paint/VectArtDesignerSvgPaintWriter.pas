@@ -53,7 +53,7 @@ end;
 // 定義IDは塗りに正のレイヤー番号、線に負の番号を使い、両者を独立させる。
 function FillDefinition(Color: TColor; const Fill: TVectArtFillStyle; Index: Integer; const Bounds: TRectF; Padding: Single = 0; TextPaint: Boolean = False): string;
 var Tag, Attr: string; StartPoint,EndPoint: TPointF; Area: TRectF;
-    Colors: TArray<TAlphaColor>; Positions: TArray<Single>; J: Integer;
+    Colors: TArray<TAlphaColor>; Positions: TArray<Single>; J: Integer; Image: ISkImage;
 begin
   Result := '';
   if Fill.Kind = vfkSolid then Exit;
@@ -90,9 +90,15 @@ begin
       [Index,Tag,SvgColor(Color),SvgColor(Fill.Color2),Fill.WaveCount,
        TNetEncoding.Base64.EncodeBytesToString(RasterFillPng(Color,Fill,Bounds))]));
   end;
+  // 実寸配置はuserSpaceOnUseで表し、面積を持たない水平・垂直Lineでも同じ画像を使えるようにする。
   if Fill.Kind = vfkTexture then
-    Exit(Format('<pattern id="vad-fill-%d" width="1" height="1" patternContentUnits="objectBoundingBox"><image width="1" height="1" preserveAspectRatio="none" href="data:image/png;base64,%s"/></pattern>',
-      [Index,TNetEncoding.Base64.EncodeBytesToString(Fill.TexturePng)]));
+  begin
+    Image := TSkImage.MakeFromEncoded(Fill.TexturePng);
+    if Image = nil then raise EWriteError.Create('Invalid texture PNG');
+    Exit(Format('<pattern id="vad-fill-%d" patternUnits="userSpaceOnUse" x="%s" y="%s" width="%d" height="%d"><image width="%d" height="%d" preserveAspectRatio="none" href="data:image/png;base64,%s"/></pattern>',
+      [Index,SvgNumber(Bounds.Left),SvgNumber(Bounds.Top),Image.Width,Image.Height,
+       Image.Width,Image.Height,TNetEncoding.Base64.EncodeBytesToString(Fill.TexturePng)]));
+  end;
   Tag := 'linearGradient'; Attr := 'x1="0" y1="0" x2="1" y2="0"';
   if (Fill.Kind = vfkLinearHorizontal) and (Fill.Angle mod 360 <> 0) then
   begin

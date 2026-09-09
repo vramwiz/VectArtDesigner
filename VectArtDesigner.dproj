@@ -128,6 +128,8 @@
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
+        <DCCReference Include="Source\Persistence\Svg\Paint\VectArtDesignerSvgPaintReader.pas"/>
+        <DCCReference Include="Source\Persistence\VectArtDesignerTextureImage.pas"/>
         <DCCReference Include="Source\ObjectProperties\Color\VectArtDesignerPaintPreview.pas"/>
         <DCCReference Include="Source\Rendering\Paint\VectArtDesignerGradientGeometry.pas"/>
         <DCCReference Include="Source\UI\VectArtDesignerNumericSlider.pas"/>

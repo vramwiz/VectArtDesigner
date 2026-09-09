@@ -175,7 +175,7 @@ begin
   FStrokeEditing := Sender = FStroke;
   if FState = nil then Exit;
   if FStrokeEditing then
-    ShowVectArtFillPopup(Self,FStroke.Value,FState.RectangleStrokePaint,nil,FillChanged,False)
+    ShowVectArtFillPopup(Self,FStroke.Value,FState.RectangleStrokePaint,nil,FillChanged)
   else ShowVectArtFillPopup(Self,FFill.Value,FState.RectangleFillStyle,nil,FillChanged);
 end;
 

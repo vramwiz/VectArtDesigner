@@ -1,4 +1,4 @@
-# VectArtDesigner 制作履歴
+﻿# VectArtDesigner 制作履歴
 
 ## 2026-09-08 設定UIの初期実装
 
@@ -1423,3 +1423,24 @@ MIF / SVG 読み込みで重要。
 - 描画ペイントと編集コマンド9ユニットを責務別フォルダへ移動し、本体・テストの参照を更新。
 - 目的・担当範囲・意図・互換制約に沿ってコメントを整理し、Source/README.mdへ構成を記録。
 - 回帰テスト19件、Debug／Releaseビルド、参照整合性、差分チェックを通過。
+
+## 2026-09-09 線・塗り・文字の画像テクスチャ
+
+- 「線の色」「塗り色」「文字色」の共通ポップアップからテクスチャ方式とPNG／JPEG／BMP画像を選べる。線の適用除外を撤去し、テンプレ図形の線色も接続した。変更・方式切替・再表示・Undo／Redoに対応し、図形の塗りと線／Lineの作成既定値へ引き継ぐ。
+- `mif/四角_テクスチャ.mif`、`四角枠_テクスチャ.mif`、`文字_テクスチャ.mif`を解析。全て`texture object type=image`で1254×1254の元画像を埋め込む。図形の塗りと文字はオブジェクトPNGの次、枠は3チャンク後のIPNGを使用する。
+- 共通描画を引き伸ばしから図形左上基準の実寸画像へ変更。線は全セグメント、文字は文字全体で画像座標を共有する。画像より大きい範囲はタイル反復する。プレビューとSVGのpatternも実寸へ統一した。
+- MIFは元寸法と画像画素を保ち、image属性・配置・color1／color2=0・angle=0・level=0を出力。元ファイルのパスへ依存させずpathname=@とする。既存のPNGメタデータは置き換え、MIF独自キーや専用Document型は増やさない。SVG／JSONにも画像を埋め込む。
+- TexturePaintTestsで3サンプルの画像画素保持、MIF／SVG／JSON往復、Undo、削除復元、サムネイル、Rectangle／Ellipse／Line／閉じたPathを検証。元オブジェクトPNGとの内部色差はRGB各成分1以内。境界アンチエイリアスは比較から除外し、文字は双方の不透明画素で照合。小さい画像の縦横反復・原点・透明度も検証した。
+- SettingsUiTestsは3ページの実際のファイル選択ダイアログを通し、適用・Undo／Redo・再表示・作成既定値を確認。画面PNGも確認した。FillIntegrationTests、StrokePaintTests、TextPaintTests、TextEditingTests、LineToolbarTests、RoundedRectangleCreationTests、MainFormLifecycleTests、SvgDocumentRoundTrip、MifDocumentRoundTripを含む11件がPASS。
+- MIFコンテナー診断44件がバイト一致。Debug／Releaseは警告・エラー0、通常EXEをDebugで更新済み。成果物はTestOutput配下。
+- 元アプリ製サンプルは画像より小さいオブジェクト、angle=0／level=0のみ。タイル境界を越える元アプリの表示、他の配置属性、pathname=@で書き出したファイルのWebArt本体での表示・再編集は未確認。現時点では画像選択を扱い、拡縮・位置・回転の追加UIは設けていない。
+
+## テクスチャ完成時の責務分割（2026-09-09）
+
+ユーザーの動作確認を受け、線・塗り・文字の画像テクスチャをいったん完成とした。画像の配置仕様や設定項目の追加は行っていない。
+
+- SvgDocumentから単色とペイント定義の解析をPersistence/Svg/Paint/VectArtDesignerSvgPaintReaderへ分離。本体は2356行から2170行へ縮小。XML属性・数値の共通解釈はSvgPrimitivesへ移し、図形読込とペイント読込から共有する。
+- 色ポップアップ内の画像読込・PNG変換をPersistence/VectArtDesignerTextureImageへ分離。フォームは選択ダイアログ、プレビュー同期、適用通知を担当する。PNG変換結果をプレビューにも使い、保存データと画像表示の入力を揃える。PNGの透明度と従来のJPEG／BMP変換を維持する。
+- Sourceは各フォルダ最大6ユニットで大量集中がなく、既存の責務別フォルダを維持。PaintReaderは既存のSVG/Paintへ置いた。本体dpr／dprojとSVGテストの明示参照を更新。構成と依存方向はSource/README.mdへ記録。
+- 新設・変更ユニットの先頭へ目的・担当範囲、処理内へ所有権・変換完了前の状態維持・実寸配置・外部パス非依存・SVGの復元制約をコメントで記載。日本語PascalソースはUTF-8 BOM付き。
+- TexturePaintTests、SettingsUiTests、SvgDocumentRoundTrip、FillIntegrationTests、StrokePaintTests、TextPaintTests、MainFormLifecycleTestsの7件PASS。Debug／Releaseは警告・エラー0、通常EXEをDebugで更新済み。参照先存在チェックとgit diff --checkも通過。検証出力はTestOutput配下。

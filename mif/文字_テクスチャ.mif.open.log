@@ -1,0 +1,548 @@
+﻿# VectArtDesigner MIF open debug log
+time: 2026-09-09T09:09:19.500+09:00
+file: D:\DelphiProg\test\VectArtDesigner\mif\文字_テクスチャ.mif
+file bytes: 1690486
+outer chunks: 6
+document import: SUCCESS
+
+Chunk[0]: tag=MHDR data=4
+Chunk[1]: tag=IPNG data=10412
+  PNG[0]: bytes=10412 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 640 x 480 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=32 crc=True
+      key: application name
+      value bytes: 15
+      text: WebArt Designer
+      hex: 57 65 62 41 72 74 20 44 65 73 69 67 6E 65 72
+    offset=0x00000062 type=waDA data=24 crc=True
+      key: waDAapplication version
+      value bytes: 4
+      int32-be: 700 (0x00 00 02 BC)
+    offset=0x00000086 type=waDA data=26 crc=True
+      key: waDAbackground page index
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x000000AC type=IDAT data=8192 crc=True
+    offset=0x000020B8 type=IDAT data=2012 crc=True
+    offset=0x000028A0 type=IEND data=0 crc=True
+Chunk[2]: tag=IPNG data=773
+  PNG[1]: bytes=773 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 64 x 64 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=19 crc=True
+      key: object type
+      value bytes: 7
+      text: texture
+      hex: 74 65 78 74 75 72 65
+    offset=0x00000055 type=waDA data=22 crc=True
+      key: waDAimage position1 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000077 type=waDA data=22 crc=True
+      key: waDAimage position1 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000099 type=waDA data=22 crc=True
+      key: waDAimage position2 x
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x000000BB type=waDA data=22 crc=True
+      key: waDAimage position2 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x000000DD type=waDA data=22 crc=True
+      key: waDAimage position3 x
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x000000FF type=waDA data=22 crc=True
+      key: waDAimage position3 y
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x00000121 type=waDA data=22 crc=True
+      key: waDAimage position4 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000143 type=waDA data=22 crc=True
+      key: waDAimage position4 y
+      value bytes: 4
+      int32-be: 63 (0x00 00 00 3F)
+    offset=0x00000165 type=waDA data=16 crc=True
+      key: waDAimage alpha
+      value bytes: 4
+      int32-be: 255 (0x00 00 00 FF)
+    offset=0x00000181 type=waDA data=17 crc=True
+      key: waDAimage hidden
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000019E type=waDA data=25 crc=True
+      key: waDAtexture object type
+      value bytes: 5
+      text: color
+      hex: 63 6F 6C 6F 72
+    offset=0x000001C3 type=waDA data=19 crc=True
+      key: waDAtexture color1
+      value bytes: 4
+      int32-be: 16777215 (0x00 FF FF FF)
+    offset=0x000001E2 type=waDA data=19 crc=True
+      key: waDAtexture color2
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000201 type=waDA data=18 crc=True
+      key: waDAtexture angle
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000021F type=waDA data=18 crc=True
+      key: waDAtexture level
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000023D type=waDA data=18 crc=True
+      key: waDAtexture pathname
+      value bytes: 1
+      text: @
+      hex: 40
+    offset=0x0000025B type=IDAT data=146 crc=True
+    offset=0x000002F9 type=IEND data=0 crc=True
+Chunk[3]: tag=IPNG data=18647
+  PNG[2]: bytes=18647 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 175 x 85 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=16 crc=True
+      key: object type
+      value bytes: 4
+      int32-be: 1819240303 (0x6C 6F 67 6F)
+    offset=0x00000052 type=waDA data=22 crc=True
+      key: waDAimage position1 x
+      value bytes: 4
+      int32-be: 110 (0x00 00 00 6E)
+    offset=0x00000074 type=waDA data=22 crc=True
+      key: waDAimage position1 y
+      value bytes: 4
+      int32-be: 135 (0x00 00 00 87)
+    offset=0x00000096 type=waDA data=22 crc=True
+      key: waDAimage position2 x
+      value bytes: 4
+      int32-be: 284 (0x00 00 01 1C)
+    offset=0x000000B8 type=waDA data=22 crc=True
+      key: waDAimage position2 y
+      value bytes: 4
+      int32-be: 135 (0x00 00 00 87)
+    offset=0x000000DA type=waDA data=22 crc=True
+      key: waDAimage position3 x
+      value bytes: 4
+      int32-be: 284 (0x00 00 01 1C)
+    offset=0x000000FC type=waDA data=22 crc=True
+      key: waDAimage position3 y
+      value bytes: 4
+      int32-be: 219 (0x00 00 00 DB)
+    offset=0x0000011E type=waDA data=22 crc=True
+      key: waDAimage position4 x
+      value bytes: 4
+      int32-be: 110 (0x00 00 00 6E)
+    offset=0x00000140 type=waDA data=22 crc=True
+      key: waDAimage position4 y
+      value bytes: 4
+      int32-be: 219 (0x00 00 00 DB)
+    offset=0x00000162 type=waDA data=16 crc=True
+      key: waDAimage alpha
+      value bytes: 4
+      int32-be: 255 (0x00 00 00 FF)
+    offset=0x0000017E type=waDA data=17 crc=True
+      key: waDAimage hidden
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000019B type=waDA data=17 crc=True
+      key: waDAlogo fs auto
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x000001B8 type=waDA data=16 crc=True
+      key: waDAlogo smooth
+      value bytes: 4
+      int32-be: 1 (0x00 00 00 01)
+    offset=0x000001D4 type=waDA data=15 crc=True
+      key: waDAlogo pad x
+      value bytes: 4
+      int32-be: 2 (0x00 00 00 02)
+    offset=0x000001EF type=waDA data=15 crc=True
+      key: waDAlogo pad y
+      value bytes: 4
+      int32-be: 2 (0x00 00 00 02)
+    offset=0x0000020A type=waDA data=18 crc=True
+      key: waDAlogo margin x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000228 type=waDA data=18 crc=True
+      key: waDAlogo margin y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000246 type=waDA data=16 crc=True
+      key: waDAlogo format
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000262 type=waDA data=26 crc=True
+      key: waDAlogo text unicode
+      value bytes: 8
+      text: <non-UTF8>
+      hex: 87 65 57 5B 0D 00 0A 00
+    offset=0x00000288 type=waDA data=16 crc=True
+      key: waDAlogo text
+      value bytes: 6
+      text: <non-UTF8>
+      hex: 95 B6 8E 9A 0D 0A
+    offset=0x000002A4 type=waDA data=16 crc=True
+      key: waDAfont height
+      value bytes: 4
+      int32-be: -81 (0xFF FF FF AF)
+    offset=0x000002C0 type=waDA data=15 crc=True
+      key: waDAfont width
+      value bytes: 4
+      int32-be: 34 (0x00 00 00 22)
+    offset=0x000002DB type=waDA data=16 crc=True
+      key: waDAfont weight
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x000002F7 type=waDA data=20 crc=True
+      key: waDAfont escapement
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000317 type=waDA data=21 crc=True
+      key: waDAfont orientation
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000338 type=waDA data=16 crc=True
+      key: waDAfont italic
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000354 type=waDA data=19 crc=True
+      key: waDAfont underline
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000373 type=waDA data=19 crc=True
+      key: waDAfont strikeout
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000392 type=waDA data=17 crc=True
+      key: waDAfont charset
+      value bytes: 4
+      int32-be: 128 (0x00 00 00 80)
+    offset=0x000003AF type=waDA data=22 crc=True
+      key: waDAfont outprecision
+      value bytes: 4
+      int32-be: 3 (0x00 00 00 03)
+    offset=0x000003D1 type=waDA data=23 crc=True
+      key: waDAfont clipprecision
+      value bytes: 4
+      int32-be: 2 (0x00 00 00 02)
+    offset=0x000003F4 type=waDA data=17 crc=True
+      key: waDAfont quality
+      value bytes: 4
+      int32-be: 1 (0x00 00 00 01)
+    offset=0x00000411 type=waDA data=24 crc=True
+      key: waDAfont pitchandfamily
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000435 type=waDA data=26 crc=True
+      key: waDAfont facename
+      value bytes: 12
+      text: MS UI Gothic
+      hex: 4D 53 20 55 49 20 47 6F 74 68 69 63
+    offset=0x0000045B type=waDA data=22 crc=True
+      key: waDAlogo writing mode
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000047D type=waDA data=29 crc=True
+      key: waDAlogo outline object type
+      value bytes: 4
+      int32-be: 1852796517 (0x6E 6F 6E 65)
+    offset=0x000004A6 type=waDA data=28 crc=True
+      key: waDAlogo effect object type
+      value bytes: 4
+      int32-be: 1852796517 (0x6E 6F 6E 65)
+    offset=0x000004CE type=IDAT data=8192 crc=True
+    offset=0x000024DA type=IDAT data=8192 crc=True
+    offset=0x000044E6 type=IDAT data=985 crc=True
+    offset=0x000048CB type=IEND data=0 crc=True
+Chunk[4]: tag=IPNG data=1660594
+  PNG[3]: bytes=1660594 signature=True
+    offset=0x00000008 type=IHDR data=13 crc=True
+      size: 1254 x 1254 bitDepth=8 colorType=6
+    offset=0x00000021 type=pHYs data=9 crc=True
+    offset=0x00000036 type=tEXt data=19 crc=True
+      key: object type
+      value bytes: 7
+      text: texture
+      hex: 74 65 78 74 75 72 65
+    offset=0x00000055 type=waDA data=22 crc=True
+      key: waDAimage position1 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000077 type=waDA data=22 crc=True
+      key: waDAimage position1 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000099 type=waDA data=22 crc=True
+      key: waDAimage position2 x
+      value bytes: 4
+      int32-be: 1253 (0x00 00 04 E5)
+    offset=0x000000BB type=waDA data=22 crc=True
+      key: waDAimage position2 y
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x000000DD type=waDA data=22 crc=True
+      key: waDAimage position3 x
+      value bytes: 4
+      int32-be: 1253 (0x00 00 04 E5)
+    offset=0x000000FF type=waDA data=22 crc=True
+      key: waDAimage position3 y
+      value bytes: 4
+      int32-be: 1253 (0x00 00 04 E5)
+    offset=0x00000121 type=waDA data=22 crc=True
+      key: waDAimage position4 x
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000143 type=waDA data=22 crc=True
+      key: waDAimage position4 y
+      value bytes: 4
+      int32-be: 1253 (0x00 00 04 E5)
+    offset=0x00000165 type=waDA data=16 crc=True
+      key: waDAimage alpha
+      value bytes: 4
+      int32-be: 255 (0x00 00 00 FF)
+    offset=0x00000181 type=waDA data=17 crc=True
+      key: waDAimage hidden
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000019E type=waDA data=25 crc=True
+      key: waDAtexture object type
+      value bytes: 5
+      text: image
+      hex: 69 6D 61 67 65
+    offset=0x000001C3 type=waDA data=19 crc=True
+      key: waDAtexture color1
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x000001E2 type=waDA data=19 crc=True
+      key: waDAtexture color2
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x00000201 type=waDA data=18 crc=True
+      key: waDAtexture angle
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000021F type=waDA data=18 crc=True
+      key: waDAtexture level
+      value bytes: 4
+      int32-be: 0 (0x00 00 00 00)
+    offset=0x0000023D type=waDA data=82 crc=True
+      key: waDAtexture pathname
+      value bytes: 65
+      text: @C:\Users\vramw\Pictures\a30e46a3-9836-4e97-ae87-8214ad69f737.png
+      hex: 40 43 3A 5C 55 73 65 72 73 5C 76 72 61 6D 77 5C 50 69 63 74 75 72 65 73 5C 61 33 30 65 34 36 61 33 2D 39 38 33 36 2D 34 65 39 37 2D 61 65 38 37 2D 38 32 31 34 61 64 36 39 66 37 33 37 2E 70 6E 67
+    offset=0x0000029B type=IDAT data=8192 crc=True
+    offset=0x000022A7 type=IDAT data=8192 crc=True
+    offset=0x000042B3 type=IDAT data=8192 crc=True
+    offset=0x000062BF type=IDAT data=8192 crc=True
+    offset=0x000082CB type=IDAT data=8192 crc=True
+    offset=0x0000A2D7 type=IDAT data=8192 crc=True
+    offset=0x0000C2E3 type=IDAT data=8192 crc=True
+    offset=0x0000E2EF type=IDAT data=8192 crc=True
+    offset=0x000102FB type=IDAT data=8192 crc=True
+    offset=0x00012307 type=IDAT data=8192 crc=True
+    offset=0x00014313 type=IDAT data=8192 crc=True
+    offset=0x0001631F type=IDAT data=8192 crc=True
+    offset=0x0001832B type=IDAT data=8192 crc=True
+    offset=0x0001A337 type=IDAT data=8192 crc=True
+    offset=0x0001C343 type=IDAT data=8192 crc=True
+    offset=0x0001E34F type=IDAT data=8192 crc=True
+    offset=0x0002035B type=IDAT data=8192 crc=True
+    offset=0x00022367 type=IDAT data=8192 crc=True
+    offset=0x00024373 type=IDAT data=8192 crc=True
+    offset=0x0002637F type=IDAT data=8192 crc=True
+    offset=0x0002838B type=IDAT data=8192 crc=True
+    offset=0x0002A397 type=IDAT data=8192 crc=True
+    offset=0x0002C3A3 type=IDAT data=8192 crc=True
+    offset=0x0002E3AF type=IDAT data=8192 crc=True
+    offset=0x000303BB type=IDAT data=8192 crc=True
+    offset=0x000323C7 type=IDAT data=8192 crc=True
+    offset=0x000343D3 type=IDAT data=8192 crc=True
+    offset=0x000363DF type=IDAT data=8192 crc=True
+    offset=0x000383EB type=IDAT data=8192 crc=True
+    offset=0x0003A3F7 type=IDAT data=8192 crc=True
+    offset=0x0003C403 type=IDAT data=8192 crc=True
+    offset=0x0003E40F type=IDAT data=8192 crc=True
+    offset=0x0004041B type=IDAT data=8192 crc=True
+    offset=0x00042427 type=IDAT data=8192 crc=True
+    offset=0x00044433 type=IDAT data=8192 crc=True
+    offset=0x0004643F type=IDAT data=8192 crc=True
+    offset=0x0004844B type=IDAT data=8192 crc=True
+    offset=0x0004A457 type=IDAT data=8192 crc=True
+    offset=0x0004C463 type=IDAT data=8192 crc=True
+    offset=0x0004E46F type=IDAT data=8192 crc=True
+    offset=0x0005047B type=IDAT data=8192 crc=True
+    offset=0x00052487 type=IDAT data=8192 crc=True
+    offset=0x00054493 type=IDAT data=8192 crc=True
+    offset=0x0005649F type=IDAT data=8192 crc=True
+    offset=0x000584AB type=IDAT data=8192 crc=True
+    offset=0x0005A4B7 type=IDAT data=8192 crc=True
+    offset=0x0005C4C3 type=IDAT data=8192 crc=True
+    offset=0x0005E4CF type=IDAT data=8192 crc=True
+    offset=0x000604DB type=IDAT data=8192 crc=True
+    offset=0x000624E7 type=IDAT data=8192 crc=True
+    offset=0x000644F3 type=IDAT data=8192 crc=True
+    offset=0x000664FF type=IDAT data=8192 crc=True
+    offset=0x0006850B type=IDAT data=8192 crc=True
+    offset=0x0006A517 type=IDAT data=8192 crc=True
+    offset=0x0006C523 type=IDAT data=8192 crc=True
+    offset=0x0006E52F type=IDAT data=8192 crc=True
+    offset=0x0007053B type=IDAT data=8192 crc=True
+    offset=0x00072547 type=IDAT data=8192 crc=True
+    offset=0x00074553 type=IDAT data=8192 crc=True
+    offset=0x0007655F type=IDAT data=8192 crc=True
+    offset=0x0007856B type=IDAT data=8192 crc=True
+    offset=0x0007A577 type=IDAT data=8192 crc=True
+    offset=0x0007C583 type=IDAT data=8192 crc=True
+    offset=0x0007E58F type=IDAT data=8192 crc=True
+    offset=0x0008059B type=IDAT data=8192 crc=True
+    offset=0x000825A7 type=IDAT data=8192 crc=True
+    offset=0x000845B3 type=IDAT data=8192 crc=True
+    offset=0x000865BF type=IDAT data=8192 crc=True
+    offset=0x000885CB type=IDAT data=8192 crc=True
+    offset=0x0008A5D7 type=IDAT data=8192 crc=True
+    offset=0x0008C5E3 type=IDAT data=8192 crc=True
+    offset=0x0008E5EF type=IDAT data=8192 crc=True
+    offset=0x000905FB type=IDAT data=8192 crc=True
+    offset=0x00092607 type=IDAT data=8192 crc=True
+    offset=0x00094613 type=IDAT data=8192 crc=True
+    offset=0x0009661F type=IDAT data=8192 crc=True
+    offset=0x0009862B type=IDAT data=8192 crc=True
+    offset=0x0009A637 type=IDAT data=8192 crc=True
+    offset=0x0009C643 type=IDAT data=8192 crc=True
+    offset=0x0009E64F type=IDAT data=8192 crc=True
+    offset=0x000A065B type=IDAT data=8192 crc=True
+    offset=0x000A2667 type=IDAT data=8192 crc=True
+    offset=0x000A4673 type=IDAT data=8192 crc=True
+    offset=0x000A667F type=IDAT data=8192 crc=True
+    offset=0x000A868B type=IDAT data=8192 crc=True
+    offset=0x000AA697 type=IDAT data=8192 crc=True
+    offset=0x000AC6A3 type=IDAT data=8192 crc=True
+    offset=0x000AE6AF type=IDAT data=8192 crc=True
+    offset=0x000B06BB type=IDAT data=8192 crc=True
+    offset=0x000B26C7 type=IDAT data=8192 crc=True
+    offset=0x000B46D3 type=IDAT data=8192 crc=True
+    offset=0x000B66DF type=IDAT data=8192 crc=True
+    offset=0x000B86EB type=IDAT data=8192 crc=True
+    offset=0x000BA6F7 type=IDAT data=8192 crc=True
+    offset=0x000BC703 type=IDAT data=8192 crc=True
+    offset=0x000BE70F type=IDAT data=8192 crc=True
+    offset=0x000C071B type=IDAT data=8192 crc=True
+    offset=0x000C2727 type=IDAT data=8192 crc=True
+    offset=0x000C4733 type=IDAT data=8192 crc=True
+    offset=0x000C673F type=IDAT data=8192 crc=True
+    offset=0x000C874B type=IDAT data=8192 crc=True
+    offset=0x000CA757 type=IDAT data=8192 crc=True
+    offset=0x000CC763 type=IDAT data=8192 crc=True
+    offset=0x000CE76F type=IDAT data=8192 crc=True
+    offset=0x000D077B type=IDAT data=8192 crc=True
+    offset=0x000D2787 type=IDAT data=8192 crc=True
+    offset=0x000D4793 type=IDAT data=8192 crc=True
+    offset=0x000D679F type=IDAT data=8192 crc=True
+    offset=0x000D87AB type=IDAT data=8192 crc=True
+    offset=0x000DA7B7 type=IDAT data=8192 crc=True
+    offset=0x000DC7C3 type=IDAT data=8192 crc=True
+    offset=0x000DE7CF type=IDAT data=8192 crc=True
+    offset=0x000E07DB type=IDAT data=8192 crc=True
+    offset=0x000E27E7 type=IDAT data=8192 crc=True
+    offset=0x000E47F3 type=IDAT data=8192 crc=True
+    offset=0x000E67FF type=IDAT data=8192 crc=True
+    offset=0x000E880B type=IDAT data=8192 crc=True
+    offset=0x000EA817 type=IDAT data=8192 crc=True
+    offset=0x000EC823 type=IDAT data=8192 crc=True
+    offset=0x000EE82F type=IDAT data=8192 crc=True
+    offset=0x000F083B type=IDAT data=8192 crc=True
+    offset=0x000F2847 type=IDAT data=8192 crc=True
+    offset=0x000F4853 type=IDAT data=8192 crc=True
+    offset=0x000F685F type=IDAT data=8192 crc=True
+    offset=0x000F886B type=IDAT data=8192 crc=True
+    offset=0x000FA877 type=IDAT data=8192 crc=True
+    offset=0x000FC883 type=IDAT data=8192 crc=True
+    offset=0x000FE88F type=IDAT data=8192 crc=True
+    offset=0x0010089B type=IDAT data=8192 crc=True
+    offset=0x001028A7 type=IDAT data=8192 crc=True
+    offset=0x001048B3 type=IDAT data=8192 crc=True
+    offset=0x001068BF type=IDAT data=8192 crc=True
+    offset=0x001088CB type=IDAT data=8192 crc=True
+    offset=0x0010A8D7 type=IDAT data=8192 crc=True
+    offset=0x0010C8E3 type=IDAT data=8192 crc=True
+    offset=0x0010E8EF type=IDAT data=8192 crc=True
+    offset=0x001108FB type=IDAT data=8192 crc=True
+    offset=0x00112907 type=IDAT data=8192 crc=True
+    offset=0x00114913 type=IDAT data=8192 crc=True
+    offset=0x0011691F type=IDAT data=8192 crc=True
+    offset=0x0011892B type=IDAT data=8192 crc=True
+    offset=0x0011A937 type=IDAT data=8192 crc=True
+    offset=0x0011C943 type=IDAT data=8192 crc=True
+    offset=0x0011E94F type=IDAT data=8192 crc=True
+    offset=0x0012095B type=IDAT data=8192 crc=True
+    offset=0x00122967 type=IDAT data=8192 crc=True
+    offset=0x00124973 type=IDAT data=8192 crc=True
+    offset=0x0012697F type=IDAT data=8192 crc=True
+    offset=0x0012898B type=IDAT data=8192 crc=True
+    offset=0x0012A997 type=IDAT data=8192 crc=True
+    offset=0x0012C9A3 type=IDAT data=8192 crc=True
+    offset=0x0012E9AF type=IDAT data=8192 crc=True
+    offset=0x001309BB type=IDAT data=8192 crc=True
+    offset=0x001329C7 type=IDAT data=8192 crc=True
+    offset=0x001349D3 type=IDAT data=8192 crc=True
+    offset=0x001369DF type=IDAT data=8192 crc=True
+    offset=0x001389EB type=IDAT data=8192 crc=True
+    offset=0x0013A9F7 type=IDAT data=8192 crc=True
+    offset=0x0013CA03 type=IDAT data=8192 crc=True
+    offset=0x0013EA0F type=IDAT data=8192 crc=True
+    offset=0x00140A1B type=IDAT data=8192 crc=True
+    offset=0x00142A27 type=IDAT data=8192 crc=True
+    offset=0x00144A33 type=IDAT data=8192 crc=True
+    offset=0x00146A3F type=IDAT data=8192 crc=True
+    offset=0x00148A4B type=IDAT data=8192 crc=True
+    offset=0x0014AA57 type=IDAT data=8192 crc=True
+    offset=0x0014CA63 type=IDAT data=8192 crc=True
+    offset=0x0014EA6F type=IDAT data=8192 crc=True
+    offset=0x00150A7B type=IDAT data=8192 crc=True
+    offset=0x00152A87 type=IDAT data=8192 crc=True
+    offset=0x00154A93 type=IDAT data=8192 crc=True
+    offset=0x00156A9F type=IDAT data=8192 crc=True
+    offset=0x00158AAB type=IDAT data=8192 crc=True
+    offset=0x0015AAB7 type=IDAT data=8192 crc=True
+    offset=0x0015CAC3 type=IDAT data=8192 crc=True
+    offset=0x0015EACF type=IDAT data=8192 crc=True
+    offset=0x00160ADB type=IDAT data=8192 crc=True
+    offset=0x00162AE7 type=IDAT data=8192 crc=True
+    offset=0x00164AF3 type=IDAT data=8192 crc=True
+    offset=0x00166AFF type=IDAT data=8192 crc=True
+    offset=0x00168B0B type=IDAT data=8192 crc=True
+    offset=0x0016AB17 type=IDAT data=8192 crc=True
+    offset=0x0016CB23 type=IDAT data=8192 crc=True
+    offset=0x0016EB2F type=IDAT data=8192 crc=True
+    offset=0x00170B3B type=IDAT data=8192 crc=True
+    offset=0x00172B47 type=IDAT data=8192 crc=True
+    offset=0x00174B53 type=IDAT data=8192 crc=True
+    offset=0x00176B5F type=IDAT data=8192 crc=True
+    offset=0x00178B6B type=IDAT data=8192 crc=True
+    offset=0x0017AB77 type=IDAT data=8192 crc=True
+    offset=0x0017CB83 type=IDAT data=8192 crc=True
+    offset=0x0017EB8F type=IDAT data=8192 crc=True
+    offset=0x00180B9B type=IDAT data=8192 crc=True
+    offset=0x00182BA7 type=IDAT data=8192 crc=True
+    offset=0x00184BB3 type=IDAT data=8192 crc=True
+    offset=0x00186BBF type=IDAT data=8192 crc=True
+    offset=0x00188BCB type=IDAT data=8192 crc=True
+    offset=0x0018ABD7 type=IDAT data=8192 crc=True
+    offset=0x0018CBE3 type=IDAT data=8192 crc=True
+    offset=0x0018EBEF type=IDAT data=8192 crc=True
+    offset=0x00190BFB type=IDAT data=8192 crc=True
+    offset=0x00192C07 type=IDAT data=8192 crc=True
+    offset=0x00194C13 type=IDAT data=2695 crc=True
+    offset=0x001956A6 type=IEND data=0 crc=True
+Chunk[5]: tag=MEND data=0
