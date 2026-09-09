@@ -5,12 +5,20 @@ unit VectArtDesignerClipboardOperations;
 interface
 
 uses
-  VectArtDesignerDocument, VectArtDesignerEditHistory;
+  System.SysUtils, System.Types, VectArtDesignerDocument,
+  VectArtDesignerEditHistory,
+  VectArtDesignerEditorState;
 
 function CanCopyVectArtSelection(Document: TVectArtDocument): Boolean;
 function CanCutVectArtSelection(Document: TVectArtDocument): Boolean;
 function CanPasteVectArtClipboard: Boolean;
 function CopyVectArtSelectionToClipboard(Document: TVectArtDocument): Boolean;
+function CanCopyVectArtRegion(Document: TVectArtDocument;
+  const Points: TArray<TPointF>): Boolean;
+function CreateVectArtRegionPng(Document: TVectArtDocument;
+  Mode: TVectArtCutoutMode; const Points: TArray<TPointF>): TBytes;
+function CopyVectArtRegionToClipboard(Document: TVectArtDocument;
+  Mode: TVectArtCutoutMode; const Points: TArray<TPointF>): Boolean;
 procedure CutVectArtSelectionToClipboard(Document: TVectArtDocument;
   EditHistory: TVectArtEditHistory);
 procedure DeleteVectArtSelection(Document: TVectArtDocument;
@@ -21,8 +29,8 @@ procedure PasteVectArtClipboard(Document: TVectArtDocument;
 implementation
 
 uses
-  System.Classes, System.Generics.Collections, System.Math, System.SysUtils,
-  System.Types, Vcl.Clipbrd, Vcl.Graphics, Vcl.Imaging.pngimage,
+  System.Classes, System.Generics.Collections, System.Math,
+  Vcl.Clipbrd, Vcl.Graphics, Vcl.Imaging.pngimage,
   Winapi.Windows, VectArtDesignerBezierGeometry,
   VectArtDesignerDocumentJson, VectArtDesignerEditCommands,
   VectArtDesignerGeometry, VectArtDesignerLayerDataTransfer,
@@ -268,6 +276,224 @@ begin
   except
     Result := False;
   end;
+end;
+
+function WriteRasterClipboard(const PngData: TBytes): Boolean;
+var
+  Handle: HGLOBAL;
+  Png: TPngImage;
+  Stream: TBytesStream;
+begin
+  Result := False;
+  if Length(PngData) = 0 then
+    Exit;
+  try
+    Stream := TBytesStream.Create(PngData);
+    Png := TPngImage.Create;
+    try
+      Png.LoadFromStream(Stream);
+      Clipboard.Open;
+      try
+        Clipboard.Assign(Png);
+        Handle := BytesToGlobalHandle(PngData);
+        Clipboard.SetAsHandle(ClipboardPngFormat, Handle);
+        Result := True;
+      finally
+        Clipboard.Close;
+      end;
+    finally
+      Png.Free;
+      Stream.Free;
+    end;
+  except
+    Result := False;
+  end;
+end;
+
+function CanCopyVectArtRegion(Document: TVectArtDocument;
+  const Points: TArray<TPointF>): Boolean;
+var
+  Bounds: TRectF;
+  I: Integer;
+begin
+  Result := (Document <> nil) and (Document.CanvasLayer <> nil) and
+    (Length(Points) >= 3);
+  if not Result then
+    Exit;
+  Bounds := RectF(Points[0].X, Points[0].Y, Points[0].X, Points[0].Y);
+  for I := 1 to High(Points) do
+  begin
+    Bounds.Left := Min(Bounds.Left, Points[I].X);
+    Bounds.Top := Min(Bounds.Top, Points[I].Y);
+    Bounds.Right := Max(Bounds.Right, Points[I].X);
+    Bounds.Bottom := Max(Bounds.Bottom, Points[I].Y);
+  end;
+  Result := (Bounds.Width > 0) and (Bounds.Height > 0) and
+    (Bounds.Right > 0) and (Bounds.Bottom > 0) and
+    (Bounds.Left < Document.CanvasLayer.Width) and
+    (Bounds.Top < Document.CanvasLayer.Height);
+end;
+
+function PointInPolygon(const Value: TPointF;
+  const Points: TArray<TPointF>): Boolean;
+var
+  I: Integer;
+  J: Integer;
+begin
+  Result := False;
+  J := High(Points);
+  for I := 0 to High(Points) do
+  begin
+    if ((Points[I].Y > Value.Y) <> (Points[J].Y > Value.Y)) and
+      (Value.X < (Points[J].X - Points[I].X) *
+        (Value.Y - Points[I].Y) /
+        (Points[J].Y - Points[I].Y) + Points[I].X) then
+      Result := not Result;
+    J := I;
+  end;
+end;
+
+function PointInCutout(Mode: TVectArtCutoutMode; const Value: TPointF;
+  const Points: TArray<TPointF>; const SelectionBounds: TRectF): Boolean;
+var
+  Center: TPointF;
+  RadiusX: Single;
+  RadiusY: Single;
+  X: Single;
+  Y: Single;
+begin
+  if Mode = vcmEllipse then
+  begin
+    RadiusX := SelectionBounds.Width / 2;
+    RadiusY := SelectionBounds.Height / 2;
+    if (RadiusX <= 0) or (RadiusY <= 0) then
+      Exit(False);
+    Center := SelectionBounds.CenterPoint;
+    X := (Value.X - Center.X) / RadiusX;
+    Y := (Value.Y - Center.Y) / RadiusY;
+    Exit(X * X + Y * Y <= 1);
+  end;
+  if Mode = vcmRectangle then
+    Exit((Value.X >= SelectionBounds.Left) and
+      (Value.X <= SelectionBounds.Right) and
+      (Value.Y >= SelectionBounds.Top) and
+      (Value.Y <= SelectionBounds.Bottom));
+  Result := PointInPolygon(Value, Points);
+end;
+
+procedure CompositeRegionCanvasBackground(Buffer: TVectArtRenderBuffer;
+  CanvasLayer: TVectArtCanvasLayer);
+var
+  Alpha: Cardinal;
+  Background: TColor;
+  BackgroundR: Cardinal;
+  BackgroundG: Cardinal;
+  BackgroundB: Cardinal;
+  I: NativeInt;
+  Pixel: PVectArtRgbaPixel;
+begin
+  if (Buffer = nil) or (CanvasLayer = nil) or CanvasLayer.Transparent or
+    not CanvasLayer.Visible then
+    Exit;
+  Background := ColorToRGB(CanvasLayer.BackgroundColor);
+  BackgroundR := GetRValue(Background);
+  BackgroundG := GetGValue(Background);
+  BackgroundB := GetBValue(Background);
+  Pixel := Buffer.Data;
+  for I := 0 to Buffer.PixelCount - 1 do
+  begin
+    Alpha := Pixel^.A;
+    Pixel^.R := (Cardinal(Pixel^.R) * Alpha +
+      BackgroundR * (255 - Alpha) + 127) div 255;
+    Pixel^.G := (Cardinal(Pixel^.G) * Alpha +
+      BackgroundG * (255 - Alpha) + 127) div 255;
+    Pixel^.B := (Cardinal(Pixel^.B) * Alpha +
+      BackgroundB * (255 - Alpha) + 127) div 255;
+    Pixel^.A := 255;
+    Inc(Pixel);
+  end;
+end;
+
+procedure ApplyCutoutMask(Buffer: TVectArtRenderBuffer;
+  Mode: TVectArtCutoutMode; const Points: TArray<TPointF>;
+  const RenderBounds, SelectionBounds: TRectF);
+const
+  SAMPLE_OFFSETS: array[0..1] of Single = (0.25, 0.75);
+var
+  Coverage: Integer;
+  Pixel: PVectArtRgbaPixel;
+  SampleX: Integer;
+  SampleY: Integer;
+  X: Integer;
+  Y: Integer;
+begin
+  Pixel := Buffer.Data;
+  for Y := 0 to Buffer.Height - 1 do
+    for X := 0 to Buffer.Width - 1 do
+    begin
+      Coverage := 0;
+      for SampleY := 0 to High(SAMPLE_OFFSETS) do
+        for SampleX := 0 to High(SAMPLE_OFFSETS) do
+          if PointInCutout(Mode,
+            PointF(RenderBounds.Left + X + SAMPLE_OFFSETS[SampleX],
+              RenderBounds.Top + Y + SAMPLE_OFFSETS[SampleY]),
+            Points, SelectionBounds) then
+            Inc(Coverage);
+      Pixel^.A := (Cardinal(Pixel^.A) * Cardinal(Coverage) + 2) div 4;
+      Inc(Pixel);
+    end;
+end;
+
+function CreateVectArtRegionPng(Document: TVectArtDocument;
+  Mode: TVectArtCutoutMode; const Points: TArray<TPointF>): TBytes;
+var
+  Buffer: TVectArtRenderBuffer;
+  CanvasBounds: TRectF;
+  I: Integer;
+  RenderBounds: TRectF;
+  SelectionBounds: TRectF;
+  Width: Integer;
+  Height: Integer;
+begin
+  Result := nil;
+  if not CanCopyVectArtRegion(Document, Points) then
+    Exit;
+  SelectionBounds := RectF(Points[0].X, Points[0].Y, Points[0].X,
+    Points[0].Y);
+  for I := 1 to High(Points) do
+  begin
+    SelectionBounds.Left := Min(SelectionBounds.Left, Points[I].X);
+    SelectionBounds.Top := Min(SelectionBounds.Top, Points[I].Y);
+    SelectionBounds.Right := Max(SelectionBounds.Right, Points[I].X);
+    SelectionBounds.Bottom := Max(SelectionBounds.Bottom, Points[I].Y);
+  end;
+  CanvasBounds := RectF(0, 0, Document.CanvasLayer.Width,
+    Document.CanvasLayer.Height);
+  RenderBounds := RectF(Max(Floor(SelectionBounds.Left), CanvasBounds.Left),
+    Max(Floor(SelectionBounds.Top), CanvasBounds.Top),
+    Min(Ceil(SelectionBounds.Right), CanvasBounds.Right),
+    Min(Ceil(SelectionBounds.Bottom), CanvasBounds.Bottom));
+  Width := Round(RenderBounds.Width);
+  Height := Round(RenderBounds.Height);
+  if (Width <= 0) or (Height <= 0) then
+    Exit;
+  Buffer := TVectArtRenderBuffer.Create;
+  try
+    RenderVectArtDocumentRegion(Document, Buffer, Width, Height,
+      RenderBounds, VECTART_NO_GROUP, 0, False);
+    CompositeRegionCanvasBackground(Buffer, Document.CanvasLayer);
+    ApplyCutoutMask(Buffer, Mode, Points, RenderBounds, SelectionBounds);
+    Result := EncodeRgba(Buffer.Data, Width, Height);
+  finally
+    Buffer.Free;
+  end;
+end;
+
+function CopyVectArtRegionToClipboard(Document: TVectArtDocument;
+  Mode: TVectArtCutoutMode; const Points: TArray<TPointF>): Boolean;
+begin
+  Result := WriteRasterClipboard(CreateVectArtRegionPng(Document, Mode,
+    Points));
 end;
 
 function CanCopyVectArtSelection(Document: TVectArtDocument): Boolean;

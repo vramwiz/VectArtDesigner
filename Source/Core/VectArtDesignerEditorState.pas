@@ -10,8 +10,10 @@ uses
 type
   TVectArtEditorTool = (vetSelect, vetRectangle, vetEllipse,
     vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine, vetPath,
-    vetBezier, vetFreehandLine, vetFreehandBezier, vetText, vetTemplate);
+    vetBezier, vetFreehandLine, vetFreehandBezier, vetText, vetTemplate,
+    vetCutout);
   TVectArtRectangleMode = (vrmOutline, vrmFill, vrmFillAndOutline);
+  TVectArtCutoutMode = (vcmRectangle, vcmEllipse, vcmPolygon, vcmFreehand);
 
   TVectArtEditorState = class
   private
@@ -40,6 +42,7 @@ type
     FColor1: TColor;
     FRectangleStrokeStyle: TVectArtStrokeStyle;
     FRectangleStrokeWidth: Single;
+    FCutoutMode: TVectArtCutoutMode;
     procedure CycleRectangleMode;
     procedure SetRectangleMode(Value: TVectArtRectangleMode);
     procedure SetCurrentTool(const Value: TVectArtEditorTool);
@@ -74,6 +77,7 @@ type
     procedure SelectPathToolGroup;
     procedure SelectRectangleToolGroup;
     procedure SelectRoundedRectangleToolGroup;
+    procedure SelectCutoutToolGroup;
     property CurrentTool: TVectArtEditorTool read FCurrentTool
       write SetCurrentTool;
     property LineCap: TVectArtLineCap read FLineCap write SetLineCap;
@@ -116,6 +120,7 @@ type
       read FRectangleStrokeStyle write SetRectangleStrokeStyle;
     property RectangleStrokeWidth: Single read FRectangleStrokeWidth
       write SetRectangleStrokeWidth;
+    property CutoutMode: TVectArtCutoutMode read FCutoutMode;
   end;
 
 function VectArtRectangleModeHasFill(Mode: TVectArtRectangleMode): Boolean;
@@ -169,6 +174,22 @@ begin
   FColor1 := clBlack;
   FRectangleStrokeStyle := vssSolid;
   FRectangleStrokeWidth := 1.0;
+  FCutoutMode := vcmRectangle;
+end;
+
+procedure TVectArtEditorState.SelectCutoutToolGroup;
+begin
+  if FCurrentTool <> vetCutout then
+  begin
+    CurrentTool := vetCutout;
+    Exit;
+  end;
+  if FCutoutMode = High(TVectArtCutoutMode) then
+    FCutoutMode := Low(TVectArtCutoutMode)
+  else
+    FCutoutMode := Succ(FCutoutMode);
+  if Assigned(FOnChanged) then
+    FOnChanged(Self);
 end;
 
 procedure TVectArtEditorState.SelectRectangleToolGroup;

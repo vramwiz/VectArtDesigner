@@ -69,3 +69,8 @@ ObjectPropertiesControl側の担当を維持する。
 完成整理（2026-09-09）:
 - ClipboardとLayerDuplicationに重複していたRectangle／Line／Path／Imageのデータ取得と種類別削除をCore/Transferへ集約した。画像バイト列とPath頂点列は元レイヤーの寿命から分離する。
 - LayerListへ追加されたD&Dの順序構築と履歴コマンドをLayers/Interactionへ分離した。表示ControlはDocumentの並びを直接組み替えず、生成された1コマンドを実行する。
+
+切り取り領域（2026-09-09）:
+- Core/EditorStateは切り取りツールの四角／丸／鋭角の閉じた図形／閉じた自由曲線という4モードだけを共有し、選択領域自体はDocumentへ保存しない。
+- Editor/Clipboard/CutoutSelectionはキャンバス論理座標の一時領域、マウス入力、表示輪郭を担当する。Canvasは入力転送とGDI／Direct2Dの点線表示を担当する。
+- Editor/Clipboard/ClipboardOperationsは選択領域とキャンバスの交差範囲を再描画し、非四角形の外側を透明化してPNG／Bitmapをクリップボードへ渡す。独自オブジェクト形式は付加しない。

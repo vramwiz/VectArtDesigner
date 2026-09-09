@@ -106,6 +106,7 @@ begin
     Require(DuplicateRejected, 'Duplicate shortcut was accepted');
 
     Action.OnCanExecute := nil;
+    State.RectangleMode := vrmOutline;
     Action.Add(Ord('S'), [],
       procedure
       begin
@@ -150,6 +151,11 @@ begin
       procedure
       begin
         State.SelectClosedBezierToolGroup;
+      end);
+    Action.Add(Ord('K'), [],
+      procedure
+      begin
+        State.SelectCutoutToolGroup;
       end);
 
     Key := Ord('P');
@@ -256,6 +262,22 @@ begin
     Key := Ord('L');
     Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetLine),
       'L did not select the line tool');
+    Key := Ord('K');
+    Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetCutout) and
+      (State.CutoutMode = vcmRectangle),
+      'K did not select the rectangle cutout mode');
+    Key := Ord('K');
+    Require(Action.KeyDown(Key, []) and (State.CutoutMode = vcmEllipse),
+      'Repeated K did not select the ellipse cutout mode');
+    Key := Ord('K');
+    Require(Action.KeyDown(Key, []) and (State.CutoutMode = vcmPolygon),
+      'Third K did not select the polygon cutout mode');
+    Key := Ord('K');
+    Require(Action.KeyDown(Key, []) and (State.CutoutMode = vcmFreehand),
+      'Fourth K did not select the freehand cutout mode');
+    Key := Ord('K');
+    Require(Action.KeyDown(Key, []) and (State.CutoutMode = vcmRectangle),
+      'Fifth K did not cycle back to the rectangle cutout mode');
     Key := Ord('S');
     Require(Action.KeyDown(Key, []) and (State.CurrentTool = vetSelect),
       'S did not select the selection tool');

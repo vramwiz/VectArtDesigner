@@ -72,6 +72,7 @@ uses
   VectArtDesignerSvgDocument in 'Source\Persistence\Svg\VectArtDesignerSvgDocument.pas',
   VectArtDesignerDocumentJson in 'Source\Persistence\VectArtDesignerDocumentJson.pas',
   VectArtDesignerClipboardOperations in 'Source\Editor\Clipboard\VectArtDesignerClipboardOperations.pas',
+  VectArtDesignerCutoutSelection in 'Source\Editor\Clipboard\VectArtDesignerCutoutSelection.pas',
   VectArtDesignerCanvas in 'Source\Editor\VectArtDesignerCanvas.pas',
   VectArtDesignerObjectContextMenu in 'Source\Editor\Menus\VectArtDesignerObjectContextMenu.pas',
   VectArtDesignerImageFileImport in 'Source\Editor\Import\VectArtDesignerImageFileImport.pas',

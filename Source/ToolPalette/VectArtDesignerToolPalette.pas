@@ -39,7 +39,7 @@ uses
 
 const
   BUTTON_SIZE = 46;
-  BUTTON_COUNT = 11;
+  BUTTON_COUNT = 12;
   COLOR_BACKGROUND = TColor($00252525);
   COLOR_BUTTON = TColor($002D2D2D);
   COLOR_SELECTED = TColor($0046382B);
@@ -68,8 +68,9 @@ begin
     6: FEditorState.SelectRoundedRectangleToolGroup;
     7: FEditorState.SelectClosedPathToolGroup;
     8: FEditorState.SelectClosedBezierToolGroup;
-    9: FEditorState.CurrentTool := vetText;
-    10: if Assigned(FOnTemplates) then FOnTemplates(Self);
+    9: FEditorState.SelectCutoutToolGroup;
+    10: FEditorState.CurrentTool := vetText;
+    11: if Assigned(FOnTemplates) then FOnTemplates(Self);
   end;
 end;
 
@@ -89,8 +90,9 @@ begin
     6: Result := FEditorState.CurrentTool = vetRoundedRectangle;
     7: Result := FEditorState.CurrentTool = vetClosedPath;
     8: Result := FEditorState.CurrentTool = vetClosedBezier;
-    9: Result := FEditorState.CurrentTool = vetText;
-    10: Result := FEditorState.CurrentTool = vetTemplate;
+    9: Result := FEditorState.CurrentTool = vetCutout;
+    10: Result := FEditorState.CurrentTool = vetText;
+    11: Result := FEditorState.CurrentTool = vetTemplate;
   else
     Result := False;
   end;
@@ -123,7 +125,7 @@ begin
   Canvas.Pen.Color := COLOR_ICON;
   Canvas.Pen.Width := 1;
   Canvas.Brush.Style := bsClear;
-  if Index = 10 then
+  if Index = 11 then
   begin
     Canvas.Font.Color := COLOR_ICON;
     Canvas.Font.Size := 19;
@@ -210,6 +212,38 @@ begin
     Canvas.LineTo(CenterX + 12, CenterY - 4);
   end
   else if Index = 9 then
+  begin
+    Canvas.Ellipse(CenterX - 13, CenterY - 8, CenterX - 8,
+      CenterY - 3);
+    Canvas.Ellipse(CenterX - 13, CenterY + 3, CenterX - 8,
+      CenterY + 8);
+    Canvas.MoveTo(CenterX - 9, CenterY - 3);
+    Canvas.LineTo(CenterX - 1, CenterY + 6);
+    Canvas.MoveTo(CenterX - 9, CenterY + 3);
+    Canvas.LineTo(CenterX - 1, CenterY - 6);
+    if FEditorState <> nil then
+      case FEditorState.CutoutMode of
+        vcmRectangle:
+          Canvas.Rectangle(CenterX + 1, CenterY - 8, CenterX + 12,
+            CenterY + 8);
+        vcmEllipse:
+          Canvas.Ellipse(CenterX + 1, CenterY - 8, CenterX + 12,
+            CenterY + 8);
+        vcmPolygon:
+          Canvas.Polygon([Point(CenterX + 2, CenterY - 7),
+            Point(CenterX + 12, CenterY - 3),
+            Point(CenterX + 8, CenterY + 8),
+            Point(CenterX, CenterY + 3)]);
+        vcmFreehand:
+          Canvas.Polyline([Point(CenterX + 1, CenterY - 5),
+            Point(CenterX + 10, CenterY - 8),
+            Point(CenterX + 12, CenterY),
+            Point(CenterX + 7, CenterY + 8),
+            Point(CenterX, CenterY + 4),
+            Point(CenterX + 1, CenterY - 5)]);
+      end;
+  end
+  else if Index = 10 then
   begin
     Canvas.Font.Name := 'Times New Roman';
     Canvas.Font.Height := -28;

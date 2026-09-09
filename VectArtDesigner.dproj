@@ -196,6 +196,7 @@
         <DCCReference Include="Source\Persistence\Svg\VectArtDesignerSvgDocument.pas"/>
         <DCCReference Include="Source\Persistence\VectArtDesignerDocumentJson.pas"/>
         <DCCReference Include="Source\Editor\Clipboard\VectArtDesignerClipboardOperations.pas"/>
+        <DCCReference Include="Source\Editor\Clipboard\VectArtDesignerCutoutSelection.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerCanvas.pas"/>
         <DCCReference Include="Source\Editor\Menus\VectArtDesignerObjectContextMenu.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerCanvasInteraction.pas"/>

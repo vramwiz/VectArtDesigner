@@ -8,6 +8,7 @@ uses
   System.Classes, System.SysUtils, System.Types, Vcl.Controls, Vcl.Graphics,
   Vcl.StdCtrls, Vcl.Direct2D, Winapi.Messages,
   VectArtDesignerCanvasInteraction,
+  VectArtDesignerCutoutSelection,
   VectArtDesignerDocument, VectArtDesignerEditHistory,
   VectArtDesignerEditorState, VectArtDesignerSelectionGeometry,
   VectArtDesignerObjectContextMenu,
@@ -18,6 +19,7 @@ type
   TVectArtCanvasControl = class(TCustomControl)
   private
     FCanvasBounds: TRect;
+    FCutoutSelection: TVectArtCutoutSelection;
     FDirect2DEnabled: Boolean;
     FDocument: TVectArtDocument;
     FEditorState: TVectArtEditorState;
@@ -94,6 +96,9 @@ type
     destructor Destroy; override;
     function ImportImageFiles(const FileNames: TArray<string>;
       const DropClientPoint: TPoint; out ErrorMessage: string): Integer;
+    function CanCopyToClipboard: Boolean;
+    function CopyToClipboard: Boolean;
+    function CancelCutoutSelection: Boolean;
     // 外部ホストのRGBA8画像をDocumentに含めない参照背景として設定する。
     procedure SetReferenceBackgroundRgba(const Pixels: TBytes;
       Width, Height: Integer);
@@ -119,6 +124,7 @@ uses
   Winapi.D2D1,
   Winapi.ShellAPI, Winapi.Windows, Vcl.Dialogs, Vcl.Forms,
   VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
+  VectArtDesignerClipboardOperations,
   VectArtDesignerEditCommands, VectArtDesignerImageFileImport,
   VectArtDesignerLayerBatchCommands,
   VectArtDesignerLayerStructureCommands, VectArtDesignerSelectionOverlay,
@@ -400,6 +406,7 @@ begin
   ControlStyle := ControlStyle + [csOpaque];
   DoubleBuffered := True;
   FDirect2DEnabled := TDirect2DCanvas.Supported;
+  FCutoutSelection := TVectArtCutoutSelection.Create;
   FInteraction := TVectArtCanvasInteraction.Create;
   FReferenceBackground := Vcl.Graphics.TBitmap.Create;
   FReferenceBackground.PixelFormat := pf32bit;
@@ -435,8 +442,41 @@ begin
   FRenderedDocument.Free;
   FReferenceBackground.Free;
   FShapeCreation.Free;
+  FCutoutSelection.Free;
   FInteraction.Free;
   inherited Destroy;
+end;
+
+function TVectArtCanvasControl.CanCopyToClipboard: Boolean;
+begin
+  CalculateCanvasBounds;
+  FCutoutSelection.Configure(FEditorState, FCanvasBounds, FZoom);
+  if FCutoutSelection.Committed then
+    Result := CanCopyVectArtRegion(FDocument,
+      FCutoutSelection.LogicalOutline)
+  else
+    Result := CanCopyVectArtSelection(FDocument);
+end;
+
+function TVectArtCanvasControl.CopyToClipboard: Boolean;
+begin
+  CalculateCanvasBounds;
+  FCutoutSelection.Configure(FEditorState, FCanvasBounds, FZoom);
+  if FCutoutSelection.Committed then
+    Result := CopyVectArtRegionToClipboard(FDocument,
+      FCutoutSelection.Mode, FCutoutSelection.LogicalOutline)
+  else
+    Result := CopyVectArtSelectionToClipboard(FDocument);
+end;
+
+function TVectArtCanvasControl.CancelCutoutSelection: Boolean;
+begin
+  Result := FCutoutSelection.Active or FCutoutSelection.Committed;
+  if Result then
+  begin
+    FCutoutSelection.Cancel;
+    Invalidate;
+  end;
 end;
 
 procedure TVectArtCanvasControl.CreateWnd;
@@ -1109,6 +1149,15 @@ begin
   end;
   FShapeCreation.Configure(FDocument, EditHistory, FEditorState,
     FCanvasBounds, FZoom);
+  FCutoutSelection.Configure(FEditorState, FCanvasBounds, FZoom);
+  if (Button = mbRight) and FCutoutSelection.Active and
+    (FCutoutSelection.Mode = vcmPolygon) then
+  begin
+    if not FCutoutSelection.FinishPolygon then
+      FCutoutSelection.Cancel;
+    Invalidate;
+    Exit;
+  end;
   if (Button = mbRight) and (FEditorState <> nil) and
     (FEditorState.CurrentTool in [vetPath, vetBezier, vetClosedPath,
       vetClosedBezier]) and
@@ -1138,6 +1187,16 @@ begin
     if CanFocus then
       SetFocus;
     CalculateCanvasBounds;
+    FCutoutSelection.Configure(FEditorState, FCanvasBounds, FZoom);
+    if FCutoutSelection.MouseDown(Button, Shift, X, Y) then
+    begin
+      FDocument.SetSelectedLayers([]);
+      if FCutoutSelection.Mode <> vcmPolygon then
+        MouseCapture := True;
+      Cursor := crCross;
+      Invalidate;
+      Exit;
+    end;
     if (FEditorState <> nil) and (FEditorState.CurrentTool = vetText) and
       PtInRect(FCanvasBounds, Point(X, Y)) then
     begin
@@ -1165,7 +1224,8 @@ begin
     if (FEditorState <> nil) and
       (FEditorState.CurrentTool in [vetRectangle, vetEllipse,
         vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine,
-        vetPath, vetBezier, vetFreehandLine, vetFreehandBezier, vetText, vetTemplate]) then
+        vetPath, vetBezier, vetFreehandLine, vetFreehandBezier, vetText,
+        vetTemplate, vetCutout]) then
     begin
       if FEditorState.CurrentTool = vetText then
         Cursor := crIBeam
@@ -1210,6 +1270,15 @@ begin
     Exit;
   end;
   CalculateCanvasBounds;
+  FCutoutSelection.Configure(FEditorState, FCanvasBounds, FZoom);
+  if FCutoutSelection.MouseMove(Shift, X, Y) then
+  begin
+    if not FCutoutSelection.Active then
+      MouseCapture := False;
+    Cursor := crCross;
+    Invalidate;
+    Exit;
+  end;
   FShapeCreation.Configure(FDocument, EditHistory, FEditorState,
     FCanvasBounds, FZoom);
   if FShapeCreation.MouseMove(Shift, X, Y) then
@@ -1223,7 +1292,8 @@ begin
   if (FEditorState <> nil) and
     (FEditorState.CurrentTool in [vetRectangle, vetEllipse,
       vetRoundedRectangle, vetClosedPath, vetClosedBezier, vetLine,
-      vetPath, vetBezier, vetFreehandLine, vetFreehandBezier, vetText, vetTemplate]) then
+      vetPath, vetBezier, vetFreehandLine, vetFreehandBezier, vetText,
+      vetTemplate, vetCutout]) then
   begin
     if FEditorState.CurrentTool = vetText then
       Cursor := crIBeam
@@ -1256,6 +1326,14 @@ begin
   end;
   FShapeCreation.Configure(FDocument, EditHistory, FEditorState,
     FCanvasBounds, FZoom);
+  FCutoutSelection.Configure(FEditorState, FCanvasBounds, FZoom);
+  if FCutoutSelection.MouseUp(Button, X, Y) then
+  begin
+    MouseCapture := False;
+    Cursor := crCross;
+    Invalidate;
+    Exit;
+  end;
   if FShapeCreation.MouseUp(Button, Shift, X, Y) then
   begin
     MouseCapture := False;
@@ -1446,6 +1524,8 @@ var
   CanvasLayer: TVectArtCanvasLayer;
   CellRect: TRect;
   CreationRect: TRect;
+  CutoutBounds: TRect;
+  CutoutOutline: TArray<TPoint>;
   Column: Integer;
   ColumnEnd: Integer;
   ColumnStart: Integer;
@@ -1596,6 +1676,22 @@ begin
         Direct2DCanvas.Brush.Color := COLOR_SELECTION;
         Direct2DCanvas.FrameRect(RangeRect);
       end;
+      FCutoutSelection.Configure(FEditorState, FCanvasBounds, FZoom);
+      CutoutOutline := FCutoutSelection.ScreenOutline;
+      if Length(CutoutOutline) > 0 then
+      begin
+        CutoutBounds := FCutoutSelection.ScreenBounds;
+        Direct2DCanvas.Brush.Style := bsClear;
+        Direct2DCanvas.Pen.Color := COLOR_SELECTION;
+        Direct2DCanvas.Pen.Style := psDot;
+        if FCutoutSelection.Mode = vcmEllipse then
+          Direct2DCanvas.Ellipse(CutoutBounds)
+        else if FCutoutSelection.Mode = vcmRectangle then
+          Direct2DCanvas.FrameRect(CutoutBounds)
+        else
+          Direct2DCanvas.Polyline(CutoutOutline);
+        Direct2DCanvas.Pen.Style := psSolid;
+      end;
       CreationRect := FShapeCreation.PreviewRect;
       if not CreationRect.IsEmpty then
       begin
@@ -1647,6 +1743,8 @@ procedure TVectArtCanvasControl.PaintGDI;
 var
   CanvasLayer: TVectArtCanvasLayer;
   CreationRect: TRect;
+  CutoutBounds: TRect;
+  CutoutOutline: TArray<TPoint>;
   CellRect: TRect;
   Column: Integer;
   ColumnEnd: Integer;
@@ -1773,6 +1871,22 @@ begin
     Canvas.Brush.Color := COLOR_SELECTION;
     Canvas.FrameRect(RangeRect);
   end;
+  FCutoutSelection.Configure(FEditorState, FCanvasBounds, FZoom);
+  CutoutOutline := FCutoutSelection.ScreenOutline;
+  if Length(CutoutOutline) > 0 then
+  begin
+    CutoutBounds := FCutoutSelection.ScreenBounds;
+    Canvas.Brush.Style := bsClear;
+    Canvas.Pen.Color := COLOR_SELECTION;
+    Canvas.Pen.Style := psDot;
+    if FCutoutSelection.Mode = vcmEllipse then
+      Canvas.Ellipse(CutoutBounds)
+    else if FCutoutSelection.Mode = vcmRectangle then
+      Canvas.FrameRect(CutoutBounds)
+    else
+      Canvas.Polyline(CutoutOutline);
+    Canvas.Pen.Style := psSolid;
+  end;
   CreationRect := FShapeCreation.PreviewRect;
   if not CreationRect.IsEmpty then
   begin
@@ -1862,6 +1976,7 @@ begin
     Exit;
   if FTextEditing then
     FinishTextEdit(False, False);
+  FCutoutSelection.Cancel;
   FDocument := Value;
   FRenderedRevision := -1;
   FRenderedPreviewStrokeWidth := -1.0;

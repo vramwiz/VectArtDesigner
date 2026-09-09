@@ -643,6 +643,22 @@ begin
     (FEditorState.CurrentTool = vetText) then
     lblStatus.Caption := 'Text: click the input position, Enter inserts a ' +
       'line break   Canvas: ' + CanvasSize
+  else if (FEditorState <> nil) and
+    (FEditorState.CurrentTool = vetCutout) then
+    case FEditorState.CutoutMode of
+      vcmRectangle:
+        lblStatus.Caption := 'Cutout rectangle: drag a copy region   Canvas: ' +
+          CanvasSize;
+      vcmEllipse:
+        lblStatus.Caption := 'Cutout ellipse: drag a copy region   Canvas: ' +
+          CanvasSize;
+      vcmPolygon:
+        lblStatus.Caption := 'Cutout polygon: click vertices, then double-click ' +
+          'or right-click   Canvas: ' + CanvasSize;
+      vcmFreehand:
+        lblStatus.Caption := 'Cutout freehand: drag a closed copy region   Canvas: ' +
+          CanvasSize;
+    end
   else
     lblStatus.Caption := 'Ready   Tool: Select   Canvas: ' + CanvasSize;
   if ConstraintStatus <> '' then
@@ -785,12 +801,12 @@ begin
   FShortcuts.Add(Ord('C'), [ssCtrl],
     procedure
     begin
-      CopyVectArtSelectionToClipboard(FDocument);
+      FEditorFrame.CanvasControl.CopyToClipboard;
     end,
     function: Boolean
     begin
-      Result := IsEditingSurfaceFocused and
-        CanCopyVectArtSelection(FDocument);
+      Result := IsEditingSurfaceFocused and (FEditorFrame <> nil) and
+        FEditorFrame.CanvasControl.CanCopyToClipboard;
     end);
   FShortcuts.Add(Ord('X'), [ssCtrl],
     procedure
@@ -931,6 +947,15 @@ begin
     begin
       Result := CanUseToolShortcut;
     end);
+  FShortcuts.Add(Ord('K'), [],
+    procedure
+    begin
+      FEditorState.SelectCutoutToolGroup;
+    end,
+    function: Boolean
+    begin
+      Result := CanUseToolShortcut;
+    end);
   FShortcuts.Add(VK_DELETE, [],
     procedure
     begin
@@ -944,12 +969,15 @@ begin
   FShortcuts.Add(VK_ESCAPE, [],
     procedure
     begin
-      FDocument.SetSelectedLayers([]);
+      if not FEditorFrame.CanvasControl.CancelCutoutSelection then
+        FDocument.SetSelectedLayers([]);
     end,
     function: Boolean
     begin
       Result := IsEditingSurfaceFocused and (FDocument <> nil) and
-        (FDocument.SelectionCount > 0);
+        (FEditorFrame <> nil) and
+        ((FEditorState.CurrentTool = vetCutout) or
+          (FDocument.SelectionCount > 0));
     end);
 end;
 

@@ -1587,3 +1587,12 @@ Rendering/Paint、Persistence/Mif/Rendering、Persistence/Svg/Paintを追加。C
 - `Layers/Interaction/VectArtDesignerLayerDragDrop.pas`を追加。編集可能判定、フラットグループ外側の挿入境界、移動後順序の構築、LayerIdでの再適用、Undo／RedoをLayerListから分離した。LayerListはマウス捕捉、挿入線、自動スクロール、描画連携を担当する。
 - ClipboardOperationsは749行から648行、LayerListは739行から584行、LayerDuplicationは約360行から265行へ縮小。新設ユニットはCore/TransferとLayers/Interactionへ分類し、既存フォルダへの集中を避けた。
 - DPR／DPROJの明示参照とSource READMEを更新。ユニット先頭には目的と担当範囲、処理内には画像バイト所有権、グループを分断しない境界、Index変動に耐えるLayerId、文字入力中の遅延更新という意図・制約だけをコメントとして残した。コードの逐語的な説明は追加していない。
+
+## 切り取り領域ツール（2026-09-09）
+
+- オブジェクトを削除するCtrl+Xとは別に、キャンバスをラスタ画像としてコピーする「切り取り」ツールを追加。ツールボタンの再クリックまたはKキーで、四角、丸、鋭角の閉じた図形、閉じた自由曲線を循環する。
+- 四角／丸はドラッグ、鋭角はClosed Pathと同じ点指定・始点クリック・ダブルクリック・右クリック、自由曲線はドラッグ軌跡をマウスアップ時に閉じて確定する。入力点はキャンバス内へ制限する。
+- 確定結果はDocumentやUndo履歴へ追加せず、キャンバス論理座標の一時選択として点線表示する。新しい領域の開始、モード／ツール変更、Document交換、Escapeで破棄する。
+- Ctrl+Cは領域確定中だけ領域コピーを優先する。表示中のレイヤーを論理ピクセル寸法で再描画し、不透明キャンバスの背景色を含める。丸・鋭角・自由曲線は外接四角内の領域外を透過し、キャンバス外は出力寸法にも画素にも含めない。
+- 領域コピーはPNG／Bitmapだけをクリップボードへ格納し、編集可能オブジェクト用の独自形式は付加しない。通常のオブジェクト選択コピー／貼り付けと混同しない。
+- CutoutSelectionTestsで4入力方式とモード切替、CutoutClipboardTestsで楕円／多角形の透過、キャンバス外クリップ、背景色を検証。ShortcutActionTestsへKキー循環を追加。Debug本体ビルドは警告・エラー0。
