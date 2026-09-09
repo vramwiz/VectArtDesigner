@@ -23,13 +23,14 @@ type
 
 implementation
 
-uses System.SysUtils;
+uses VectArtDesignerSettingsFont, System.SysUtils;
 
 constructor TVectArtSettingsDraft.CreateKind(AOwner: TComponent; AParent: TWinControl; Kind: Integer);
 var L: TLabel;
 begin
   inherited Create(AOwner);
   Parent := AParent;
+  ApplyVectArtSettingsFont(Self);
   FKind := Kind;
   BorderStyle := bsNone;
   L := TLabel.Create(Self);
@@ -39,10 +40,12 @@ begin
   L.SetBounds(12, 12, 230, 58);
   L.Caption := '設定UIの先行表示です。ここでの変更はオブジェクトへ適用・保存されません。';
   L.Anchors := [akLeft, akTop, akRight];
+  L:=TLabel.Create(Self); L.Parent:=Self; L.Caption:='種類：';
+  L.SetBounds(8,82,96,22); L.Tag:=1;
   FSelector := TComboBox.Create(Self);
   FSelector.Parent := Self;
   FSelector.Style := csDropDownList;
-  FSelector.SetBounds(12, 78, 230, 28);
+  FSelector.SetBounds(108, 78, 134, 28);
   FSelector.Anchors := [akLeft, akTop, akRight];
   case Kind of
     0: FSelector.Items.AddStrings(['影なし', '影を付ける']);
@@ -64,9 +67,9 @@ var I: Integer;
 begin
   inherited;
   if FSelector = nil then Exit;
-  FSelector.SetBounds(12,78,ClientWidth-24,28);
+  FSelector.SetBounds(108,78,ClientWidth-120,28);
   for I := 0 to ControlCount-1 do
-    if Controls[I] is TLabel then Controls[I].Width := ClientWidth-24;
+    if (Controls[I] is TLabel) and (Controls[I].Tag=0) then Controls[I].Width := ClientWidth-24;
   if FFields <> nil then FFields.SetBounds(0,118,ClientWidth,ClientHeight-118);
 end;
 
@@ -79,13 +82,15 @@ var
   begin
     L := TLabel.Create(FFields);
     L.Parent := FFields;
-    L.Caption := Caption;
-    L.SetBounds(12, Y, 220, 22);
+    L.Caption := Caption+'：';
+    L.AutoSize:=False; L.WordWrap:=True;
+    L.SetBounds(8, Y+4, 96, 32);
     if ColorField then
     begin
       S := TVectArtColorSwatch.Create(FFields);
       S.Parent := FFields;
-      S.SetBounds(12, Y + 24, 220, 36);
+      S.SetBounds(108, Y, FFields.ClientWidth-120, 36);
+      S.Anchors:=[akLeft,akTop,akRight];
       S.Value := clBlack;
       S.OnClick := ChooseColor;
     end
@@ -96,16 +101,18 @@ var
       C.Style := csDropDownList;
       C.Items.AddStrings(['上', '右上', '右', '右下', '下', '左下', '左', '左上']);
       C.ItemIndex := 3;
-      C.SetBounds(12, Y + 24, 220, 28);
+      C.SetBounds(108, Y, FFields.ClientWidth-120, 28);
+      C.Anchors:=[akLeft,akTop,akRight];
     end
     else
     begin
       E := TEdit.Create(FFields);
       E.Parent := FFields;
       E.Text := Value;
-      E.SetBounds(12, Y + 24, 220, 28);
+      E.SetBounds(108, Y, FFields.ClientWidth-120, 28);
+      E.Anchors:=[akLeft,akTop,akRight];
     end;
-    Inc(Y, 72);
+    Inc(Y, 40);
   end;
 begin
   CloseVectArtColorPopup(Self);
@@ -139,6 +146,7 @@ begin
         Field('横方向位置', '8'); Field('縦方向位置', '8'); end;
       6: begin Field('炎の強さ', '8'); Field('炎の色', '', True); end;
     end;
+  ApplyVectArtSettingsFont(Self);
 end;
 
 procedure TVectArtSettingsDraft.ChooseColor(Sender: TObject);

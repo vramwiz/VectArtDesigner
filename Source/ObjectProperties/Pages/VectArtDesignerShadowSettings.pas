@@ -1,7 +1,7 @@
 ﻿// 図形の影設定をDocumentと履歴へ接続する。文字効果や作成初期値は扱わない。
 unit VectArtDesignerShadowSettings;
 interface
-uses System.Classes, Vcl.Controls, Vcl.Forms, Vcl.StdCtrls, Vcl.Graphics,
+uses VectArtDesignerNumericSlider, System.Classes, Vcl.Controls, Vcl.Forms, Vcl.StdCtrls, Vcl.Graphics,
   VectArtDesignerDocument, VectArtDesignerEditHistory, VectArtDesignerColorSwatch;
 type TVectArtShadowSettings = class(TScrollBox)
 private
@@ -11,20 +11,20 @@ private
   FIndex, FPopupIndex: Integer;
   FEnabled: TCheckBox;
   FColor: TVectArtColorSwatch;
-  FBlur, FX, FY: TEdit;
+  FBlur, FX, FY: TVectArtNumericSlider;
   procedure Change(Sender: TObject);
   procedure OpenColor(Sender: TObject);
   procedure ColorChanged(Sender: TObject; Color: TColor);
   procedure Apply(const Value: TVectArtShadow);
 public
-  constructor Create(AOwner: TComponent); override;
+  constructor CreateForParent(AOwner: TComponent; AParent: TWinControl);
   destructor Destroy; override;
   procedure Configure(Document: TVectArtDocument; History: TVectArtEditHistory);
 end;
 implementation
-uses System.SysUtils, System.Math, VectArtDesignerPaintPopup, VectArtDesignerShadowCommand;
+uses VectArtDesignerSettingsFont, System.SysUtils, System.Math, VectArtDesignerPaintPopup, VectArtDesignerShadowCommand;
 type TShadowControlAccess = class(TControl);
-constructor TVectArtShadowSettings.Create(AOwner: TComponent);
+constructor TVectArtShadowSettings.CreateForParent(AOwner: TComponent; AParent: TWinControl);
   procedure UsePageFont(Control: TControl);
   begin
     TShadowControlAccess(Control).ParentFont := True;
@@ -36,28 +36,33 @@ constructor TVectArtShadowSettings.Create(AOwner: TComponent);
     // 通常ページと同じ独立ウィンドウにし、親背景の転送でラベルが消えるのを防ぐ。
     L:=TStaticText.Create(Self); L.Parent:=Self; L.AutoSize:=False;
     L.ParentColor:=False; L.Color:=Color; UsePageFont(L);
-    L.Caption:=Caption; L.SetBounds(12,Y,210,22);
+    L.Caption:=Caption+'：'; L.SetBounds(8,Y+4,96,30);
   end;
-  function EditAt(const AName: string; Y: Integer): TEdit;
+  function SliderAt(const AName: string; Y, Minimum, Maximum: Integer): TVectArtNumericSlider;
   begin
-    Result:=TEdit.Create(Self); Result.Parent:=Self; Result.Name:=AName; UsePageFont(Result);
-    Result.SetBounds(12,Y,210,26); Result.Anchors:=[akLeft,akTop,akRight]; Result.OnExit:=Change;
+    Result:=TVectArtNumericSlider.CreateForParent(Self,Self); Result.Name:=AName;
+    Result.Configure(Minimum,Maximum,1,0);
+    if Minimum<0 then Result.SetSliderRange(-100,100);
+    Result.SetBounds(108,Y,114,34); Result.Anchors:=[akLeft,akTop,akRight];
+    Result.OnChange:=Change;
   end;
 begin
-  inherited;
-  // Page／TabSheetと同じ描画方針にそろえ、ネイティブ入力欄の上から背景を転送しない。
+  inherited Create(AOwner);
+  Parent := AParent;
+  // 設定パネルと同じ描画方針にそろえ、ネイティブ入力欄の上から背景を転送しない。
   ParentDoubleBuffered:=False; DoubleBuffered:=False; ParentBackground:=False;
   ParentColor:=False; Color:=TColor($00212121); Font.Color:=TColor($00EEEEEE);
+  ApplyVectArtSettingsFont(Self);
   Width:=234; BorderStyle:=bsNone; FIndex:=-1; FPopupIndex:=-1;
   FEnabled:=TCheckBox.Create(Self); FEnabled.Parent:=Self; FEnabled.Name:='ShadowEnabled';
   UsePageFont(FEnabled);
   FEnabled.Caption:='影を付ける'; FEnabled.SetBounds(12,12,210,26); FEnabled.OnClick:=Change;
-  LabelAt('影の色',52); FColor:=TVectArtColorSwatch.Create(Self); FColor.Parent:=Self;
+  LabelAt('影の色',48); FColor:=TVectArtColorSwatch.Create(Self); FColor.Parent:=Self;
   UsePageFont(FColor);
-  FColor.Name:='ShadowColor'; FColor.SetBounds(12,76,210,36); FColor.Anchors:=[akLeft,akTop,akRight]; FColor.OnClick:=OpenColor;
-  LabelAt('ぼかしの強さ',128); FBlur:=EditAt('ShadowBlur',152);
-  LabelAt('横方向位置 (px)',194); FX:=EditAt('ShadowOffsetX',218);
-  LabelAt('縦方向位置 (px)',260); FY:=EditAt('ShadowOffsetY',284);
+  FColor.Name:='ShadowColor'; FColor.SetBounds(108,48,114,34); FColor.Anchors:=[akLeft,akTop,akRight]; FColor.OnClick:=OpenColor;
+  LabelAt('ぼかしの強さ',88); FBlur:=SliderAt('ShadowBlur',88,0,100);
+  LabelAt('位置 横 (px)',128); FX:=SliderAt('ShadowOffsetX',128,-10000,10000);
+  LabelAt('位置 縦 (px)',168); FY:=SliderAt('ShadowOffsetY',168,-10000,10000);
 end;
 destructor TVectArtShadowSettings.Destroy;
 begin CloseVectArtColorPopup(Self); inherited; end;
@@ -78,7 +83,7 @@ begin
     Enabled:=FIndex>=0; V:=Default(TVectArtShadow);
     if Enabled then V:=Document[FIndex].Shadow;
     FEnabled.Checked:=V.Enabled; FColor.Value:=V.Color;
-    FBlur.Text:=IntToStr(V.Blur); FX.Text:=IntToStr(V.OffsetX); FY.Text:=IntToStr(V.OffsetY);
+    FBlur.SetDisplay(V.Blur); FX.SetDisplay(V.OffsetX); FY.SetDisplay(V.OffsetY);
     FColor.Enabled:=Enabled; FBlur.Enabled:=Enabled; FX.Enabled:=Enabled; FY.Enabled:=Enabled;
   finally FUpdating:=False; end;
 end;
@@ -94,13 +99,11 @@ begin
   if FHistory<>nil then FHistory.AddApplied(Command) else Command.Free;
 end;
 procedure TVectArtShadowSettings.Change(Sender: TObject);
-var V: TVectArtShadow; B,X,Y: Integer;
+var V: TVectArtShadow;
 begin
   if FUpdating or (FIndex<0) then Exit;
-  if not TryStrToInt(FBlur.Text,B) or not TryStrToInt(FX.Text,X) or not TryStrToInt(FY.Text,Y) then
-  begin Configure(FDocument,FHistory); Exit; end;
   V:=FDocument[FIndex].Shadow; V.Enabled:=FEnabled.Checked; V.Color:=FColor.Value;
-  V.Blur:=EnsureRange(B,0,100); V.OffsetX:=EnsureRange(X,-10000,10000); V.OffsetY:=EnsureRange(Y,-10000,10000);
+  V.Blur:=Round(FBlur.Value); V.OffsetX:=Round(FX.Value); V.OffsetY:=Round(FY.Value);
   if (Sender=FEnabled) and V.Enabled and (V.Blur=0) and (V.OffsetX=0) and (V.OffsetY=0) then
   begin V.Blur:=1; V.OffsetX:=1; V.OffsetY:=1; end;
   Apply(V); Configure(FDocument,FHistory);

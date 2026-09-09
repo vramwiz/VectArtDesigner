@@ -37,12 +37,13 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 implementation
-uses System.SysUtils, System.StrUtils, System.Math, Winapi.Windows, Vcl.Graphics;
+uses VectArtDesignerSettingsFont, System.SysUtils, System.StrUtils, System.Math, Winapi.Windows, Vcl.Graphics;
 constructor TVectArtNumericSlider.CreateForParent(AOwner: TComponent; AParent: TWinControl);
 begin
   inherited Create(AOwner);
   if AParent = nil then raise EArgumentNilException.Create('Numeric slider parent');
   Parent := AParent;
+  ShowCaption := False;
   BevelOuter := bvNone; ParentBackground := False;
   Color := TColor($00282828); Height := 34; Width := 260;
   FTrack := THorizontalTrackBarControl.Create(Self); FTrack.Parent := Self;
@@ -52,7 +53,7 @@ begin
   FTrack.OnChange := TrackChanged;
   FEdit := TEdit.Create(Self); FEdit.Parent := Self;
   FEdit.Color := TColor($00353535); FEdit.Font.Color := TColor($00EEEEEE);
-  FEdit.Font.Name := 'Segoe UI'; FEdit.Font.Height := -12;
+  FEdit.Font.Name := VECTART_SETTINGS_FONT_NAME; FEdit.Font.Height := VECTART_SETTINGS_FONT_HEIGHT;
   FEdit.OnExit := EditExit; FEdit.OnKeyDown := EditKey;
   Configure(0,100,1,0); Resize;
 end;

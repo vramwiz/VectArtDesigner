@@ -1,4 +1,4 @@
-# ソース構成
+﻿# ソース構成
 
 グラデーションと画像テクスチャは図形の塗り・線・文字の3対象でいったん完成（2026-09-09、ユーザー動作確認済み）。今後の追加は以下の責務へ配置し、公開窓口へ描画や属性変換を集積しない。
 
@@ -36,5 +36,25 @@ Core/Appearance/ObjectAttributesは線・図形・文字の見た目のスナッ
 
 図形の影はDocumentのShadowレコードを正本とする。Rendering/Paint/ShadowPaintが合成・外形、
 Persistence/Mif/Rendering/MifShadowがネイティブ属性・影付きPNG配置、Persistence/Svg/Paint/SvgShadowが標準SVGの対応を担当する。
-ObjectProperties/ShadowSettingsは編集UI、Core/Commands/Appearance/ShadowCommandは履歴、ObjectAttributesは図形間の引継ぎを担当する。
+ObjectProperties/Pages/ShadowSettingsは編集UI、Core/Commands/Appearance/ShadowCommandは履歴、ObjectAttributesは図形間の引継ぎを担当する。
 影付きPNGの領域と、編集対象の本体領域は分離する。文字の影／装飾はこの図形向け機能へ暗黙に含めない。
+
+
+設定カテゴリの切替はObjectProperties/Pages/SettingsSectionsが担当する。PageControl／TabSheetを使用せず、
+アイコン帯と兄弟のスクロールパネルを持ち、選択対象の1枚だけを表示する。パネルの入力欄と編集コマンドは
+ObjectPropertiesControl側の担当を維持する。祖先のPaintで設定本文を全面描画しない。
+
+- UI/VectArtDesignerSettingsFont.pas: 設定ページと色ポップアップの共通文字寸法・書体と、入れ子の欄への適用を担当する。
+
+
+設定編集の責務分離（2026-09-09）:
+- Core/Selection/VectArtDesignerSettingsSelection.pas: 適用対象の分類、ロック判定、四角選択の境界。UI非依存で状態は変更しない。
+- Core/Commands/Geometry/VectArtDesignerSettingsGeometry.pas: 情報ページからの位置・寸法適用とUndo登録。文字・画像・Path・四角の変形規則を担当する。
+- ObjectProperties/Pages/: カテゴリ切替、影、未対応装飾のページ専用UIを配置する。
+- ObjectPropertiesControlは入力検証と表示同期を担当し、選択判定と変形を上記ユニットへ委譲する。
+
+
+レイヤー一覧のスクロール（2026-09-09）:
+- Lib/VerticalScrollBar/VerticalScrollBarControl.pas: Windows標準スクロールバーに依存しない暗色の縦スクロールバー。範囲・ページ量・ホイール・キー・つまみ操作を担当する。
+- Layers/VectArtDesignerLayerRenderer.pas: 下端基準の行順を保ったスクロール量、全行の内容高、1行単位の移動量を担当する。
+- Layers/VectArtDesignerLayerList.pas: 表示範囲、スクロールバー同期、ホイール入力、スクロール後のクリック判定を担当する。グループ展開とDocument変更時は表示行数から範囲を再計算する。

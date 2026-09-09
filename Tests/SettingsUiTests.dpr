@@ -2,7 +2,7 @@
 program SettingsUiTests;
 {$APPTYPE CONSOLE}
 uses
-  Winapi.Windows, Winapi.Messages, System.Diagnostics, System.UITypes, System.Classes, System.SysUtils, System.Types, System.Math,
+  VectArtDesignerSettingsSections,  Winapi.Windows, Winapi.Messages, System.Diagnostics, System.UITypes, System.Classes, System.SysUtils, System.Types, System.Math,
   Vcl.Buttons, Vcl.Dialogs, Vcl.Forms, Vcl.Grids, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.Graphics,
   Vcl.Themes, Vcl.Styles, Vcl.Imaging.pngimage,
   VectArtDesignerCanvas, VectArtDesignerCreationColors, VectArtDesignerToolPalette, VectArtDesignerNumericSlider, ColorPickerSVArea, TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
@@ -32,6 +32,22 @@ begin
     if Parent.Controls[I] is TWinControl then
     begin
       Result := FindControl(TWinControl(Parent.Controls[I]), Kind);
+      if Result <> nil then Exit;
+    end;
+  end;
+end;
+
+function FindCaptionControl(Parent: TWinControl; const Caption: string): TControl;
+var I: Integer; Child: TControl;
+begin
+  Result := nil;
+  for I := 0 to Parent.ControlCount-1 do
+  begin
+    Child := Parent.Controls[I];
+    if (Child is TStaticText) and (TStaticText(Child).Caption=Caption) then Exit(Child);
+    if Child is TWinControl then
+    begin
+      Result := FindCaptionControl(TWinControl(Child),Caption);
       if Result <> nil then Exit;
     end;
   end;
@@ -178,7 +194,7 @@ var
   S: TVectArtEditorState;
   F: TForm;
   UI: TVectArtObjectPropertiesControl;
-  Tabs: TPageControl;
+  Sections: TVectArtSettingsSections;
   Picker: TVectArtTemplatePicker;
   Creation: TVectArtShapeCreation;
   R: TVectArtRectangleData;
@@ -197,6 +213,7 @@ var
   PreviewTimer: TStopwatch;
   PreviewIteration: Integer;
   Exceptions: TUiExceptionRecorder;
+  TransparencyLabel: TControl;
 begin
   Application.Initialize;
   // キャンバスの文字描画はDLL読込だけでなくTextRenderer側のAcquireも必要。
@@ -231,9 +248,47 @@ begin
     R.Visible := True; R.Filled := True; R.Opacity := 1; R.FillColor := clRed;
     R.Name := 'Rectangle'; R.StrokeWidth := 2;
     D.InsertRectangle(1,R); D.SelectedIndex := 1; UI.RefreshFromDocument;
-    Tabs := TPageControl(FindControl(UI,TPageControl));
-    Check(Tabs <> nil,'Settings tabs missing');
-    ColorEdit := TEdit(FindControl(Tabs.ActivePage,TEdit));
+    with TVectArtNumericSlider(UI.FindComponent('TransparencySlider')) do
+    begin
+      Check(Value=0,'Opaque object must show zero transparency');
+      Edit.Text:='25'; Edit.OnExit(Edit);
+      Check(Abs(D[1].Opacity-0.75)<0.001,'Transparency conversion');
+      H.Undo; UI.RefreshFromDocument; Check(Value=0,'Transparency undo');
+      TrackBar.Position:=100;
+      Check(D[1].Opacity=0,'Full transparency via slider');
+      H.Undo; UI.RefreshFromDocument;
+    end;
+    with TVectArtNumericSlider(UI.FindComponent('StrokeWidthSlider')) do
+    begin
+      TrackBar.Position:=8;
+      Check(TVectArtRectangleLayer(D[1]).StrokeWidth=8,'Stroke slider apply');
+      H.Undo; UI.RefreshFromDocument;
+      Check(Value=2,'Stroke slider undo');
+    end;
+    Sections := TVectArtSettingsSections(FindControl(UI,TVectArtSettingsSections));
+    Check(Sections <> nil,'Settings icon selector missing');
+    Check(FindControl(UI,TPageControl)=nil,'PageControl is still present');
+    Check(FindCaptionControl(Sections.ActiveSection,'位置・サイズ (px)')=nil,
+      'Position and size caption still consumes a row');
+    TransparencyLabel := FindCaptionControl(Sections.ActiveSection,'透明度 (%)');
+    Check(TransparencyLabel<>nil,'Transparency label missing');
+    with TVectArtNumericSlider(UI.FindComponent('TransparencySlider')) do
+      Check((Left>TransparencyLabel.Left) and
+        (Abs((Top+Height div 2)-(TransparencyLabel.Top+TransparencyLabel.Height div 2))<=4),
+        'Transparency label, bar and value are not on one row');
+    F.ClientWidth:=150; Application.ProcessMessages;
+    for I:=0 to Sections.SectionCount-1 do
+      if Sections.Sections[I].Available then
+      begin
+        Check(Sections.IconRect(Sections.Sections[I].Category).Right<=Sections.ClientWidth,'Icon clipped at narrow width');
+        Check(Sections.IconRect(Sections.Sections[I].Category).Bottom<Sections.ActiveSection.Top,'Icons overlap panel');
+      end;
+    F.ClientWidth:=290; Application.ProcessMessages;
+    Sections.Perform(WM_KEYDOWN,VK_RIGHT,0);
+    Check(Sections.ActiveSection.Category=vscLine,'Right key did not select next icon');
+    Sections.Perform(WM_KEYDOWN,VK_LEFT,0);
+    Check(Sections.ActiveSection.Category=vscInfo,'Left key did not restore information panel');
+    ColorEdit := TEdit(FindControl(Sections.ActiveSection,TEdit));
     ColorEdit.Text := '12.5'; ColorEdit.OnExit(ColorEdit);
     Check(TVectArtRectangleLayer(D[1]).Bounds.Left = 10,'Fractional pixels accepted');
     Check(ColorEdit.Text = '10','Invalid pixel input not restored');
@@ -244,9 +299,9 @@ begin
     Check(ColorEdit.Width > 30,'Pixel field collapsed after resize');
     F.ClientWidth := 290; Application.ProcessMessages;
     Capture(F,'settings-info');
-    for I := 0 to Tabs.PageCount-1 do
-      if Tabs.Pages[I].Caption = '塗り色' then Tabs.ActivePage := Tabs.Pages[I];
-    Swatch := TVectArtColorSwatch(FindControl(Tabs.ActivePage,TVectArtColorSwatch));
+    for I := 0 to Sections.SectionCount-1 do
+      if Sections.Sections[I].Caption = '塗り色' then Sections.ActiveSection := Sections.Sections[I];
+    Swatch := TVectArtColorSwatch(FindControl(Sections.ActiveSection,TVectArtColorSwatch));
     Swatch.OnClick(Swatch);
     ColorForm := nil;
     for I := 0 to Screen.FormCount-1 do
@@ -404,8 +459,8 @@ begin
     Capture(ColorForm,'paint-texture');
     ModeCombo.ItemIndex := 1; ModeCombo.OnChange(ModeCombo);
     CloseVectArtColorPopup(UI);
-    for I := 0 to Tabs.PageCount-1 do
-      if Tabs.Pages[I].Caption = '線' then Tabs.ActivePage := Tabs.Pages[I];
+    for I := 0 to Sections.SectionCount-1 do
+      if Sections.Sections[I].Caption = '線' then Sections.ActiveSection := Sections.Sections[I];
     Capture(F,'settings-line');
     Command := TVectArtAppearanceModeCommand.Create(D,1,vrmFill);
     try
@@ -414,9 +469,9 @@ begin
       Command.Undo;
       Check(TVectArtRectangleLayer(D[1]).StrokeWidth = 2,'Appearance undo');
     finally Command.Free; end;
-    for I := 0 to Tabs.PageCount-1 do
-      if Tabs.Pages[I].Caption = '線の色' then Tabs.ActivePage := Tabs.Pages[I];
-    Swatch := TVectArtColorSwatch(FindControl(Tabs.ActivePage,TVectArtColorSwatch));
+    for I := 0 to Sections.SectionCount-1 do
+      if Sections.Sections[I].Caption = '線の色' then Sections.ActiveSection := Sections.Sections[I];
+    Swatch := TVectArtColorSwatch(FindControl(Sections.ActiveSection,TVectArtColorSwatch));
     Swatch.OnClick(Swatch);
     ModeCombo := TComboBox(FindControl(ColorForm,TComboBox));
     Check(ModeCombo.Items.Count = 3,'Stroke popup allows texture');
@@ -454,9 +509,9 @@ begin
     T.FontFamily := 'Yu Gothic UI'; T.FontSize := 32; T.Bounds := RectF(20,20,180,80);
     T.Opacity := 1; T.Visible := True; T.TextColor := clWhite;
     D.InsertText(2,T); D.SelectedIndex := 2; UI.RefreshFromDocument;
-    for I := 0 to Tabs.PageCount-1 do
-      if Tabs.Pages[I].Caption = '文字色' then Tabs.ActivePage := Tabs.Pages[I];
-    Swatch := TVectArtColorSwatch(FindControl(Tabs.ActivePage,TVectArtColorSwatch));
+    for I := 0 to Sections.SectionCount-1 do
+      if Sections.Sections[I].Caption = '文字色' then Sections.ActiveSection := Sections.Sections[I];
+    Swatch := TVectArtColorSwatch(FindControl(Sections.ActiveSection,TVectArtColorSwatch));
     Swatch.OnClick(Swatch);
     ModeCombo := TComboBox(FindControl(ColorForm,TComboBox));
     Check(ModeCombo.Items.Count = 3,'Text popup allows texture');
@@ -477,10 +532,10 @@ begin
     Check(TComboBox(ColorForm.FindComponent('GradientKindCombo')).Text = '波状','Text gradient reopen');
     Capture(ColorForm,'text-gradient-popup'); CloseVectArtColorPopup(UI);
 
-    for I := 0 to Tabs.PageCount-1 do
-      if Tabs.Pages[I].Caption = '文字' then Tabs.ActivePage := Tabs.Pages[I];
+    for I := 0 to Sections.SectionCount-1 do
+      if Sections.Sections[I].Caption = '文字' then Sections.ActiveSection := Sections.Sections[I];
     Capture(F,'settings-text');
-    ModeCombo := TComboBox(FindControl(Tabs.ActivePage,TComboBox));
+    ModeCombo := TComboBox(FindControl(Sections.ActiveSection,TComboBox));
     Check(ModeCombo.Text = 'Yu Gothic UI','Font selection lost when tab opens');
     ModeCombo.ItemIndex := ModeCombo.Items.IndexOf('Arial');
     ModeCombo.OnSelect(ModeCombo);
@@ -493,9 +548,9 @@ begin
     Check(TVectArtTextLayer(D[2]).FillStyle.Kind = vfkWave,'Text editing retains gradient');
     D.SetLayerLocked(2,True); UI.RefreshFromDocument;
     Check(not Memo.Enabled,'Locked text editable');
-    for I := 0 to Tabs.PageCount-1 do
-      if Tabs.Pages[I].Caption = '効果' then Tabs.ActivePage := Tabs.Pages[I];
-    ModeCombo := TComboBox(FindControl(Tabs.ActivePage,TComboBox));
+    for I := 0 to Sections.SectionCount-1 do
+      if Sections.Sections[I].Caption = '効果' then Sections.ActiveSection := Sections.Sections[I];
+    ModeCombo := TComboBox(FindControl(Sections.ActiveSection,TComboBox));
     ModeCombo.ItemIndex := 3; ModeCombo.OnChange(ModeCombo);
     Capture(F,'settings-effects');
     L := Default(TVectArtLineData); L.Visible := True; L.Opacity := 1;
@@ -528,9 +583,9 @@ begin
     Check(D[D.LayerCount-1].StrokePaint.Kind = vfkSolid,'Creation must use solid stroke');
     Check(D[D.LayerCount-1].StrokePaint.Angle = 0,'Creation must not inherit stroke angle');
     D.SetSelectedLayers([1,3]); UI.RefreshFromDocument;
-    for I := 0 to Tabs.PageCount-1 do
-      if Tabs.Pages[I].Caption = '線の色' then Tabs.ActivePage := Tabs.Pages[I];
-    Swatch := TVectArtColorSwatch(FindControl(Tabs.ActivePage,TVectArtColorSwatch));
+    for I := 0 to Sections.SectionCount-1 do
+      if Sections.Sections[I].Caption = '線の色' then Sections.ActiveSection := Sections.Sections[I];
+    Swatch := TVectArtColorSwatch(FindControl(Sections.ActiveSection,TVectArtColorSwatch));
     Check(Swatch.Enabled,'Mixed strokes cannot edit'); Swatch.OnClick(Swatch);
     with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
     begin ItemIndex := Items.IndexOf('放射'); OnChange(ColorForm.FindComponent('GradientKindCombo')); end;

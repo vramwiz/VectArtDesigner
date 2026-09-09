@@ -13,6 +13,8 @@ uses
     'Lib\TextRenderer\TextRendererSkiaBootstrap.pas',
   TextRendererSkiaRuntime in
     'Lib\TextRenderer\TextRendererSkiaRuntime.pas',
+  VerticalScrollBarControl in
+    'Lib\VerticalScrollBar\VerticalScrollBarControl.pas',
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerEditCommands in
     'Source\Core\Commands\VectArtDesignerEditCommands.pas',
@@ -47,6 +49,9 @@ type
     procedure DoubleClickRow(RowIndex: Integer);
     procedure ClickLock(RowIndex: Integer);
     procedure ClickVisibility(RowIndex: Integer);
+    procedure ClickAt(Y: Integer);
+    function FindScrollBar: TVerticalScrollBarControl;
+    procedure Wheel(WheelDelta: Integer);
   end;
 
 const
@@ -84,6 +89,26 @@ begin
     RowTop(ClientHeight, RowIndex) + 55);
 end;
 
+procedure TTestLayerList.ClickAt(Y: Integer);
+begin
+  MouseDown(mbLeft, [], 160, Y);
+end;
+
+function TTestLayerList.FindScrollBar: TVerticalScrollBarControl;
+var
+  I: Integer;
+begin
+  Result := nil;
+  for I := 0 to ControlCount - 1 do
+    if Controls[I] is TVerticalScrollBarControl then
+      Exit(TVerticalScrollBarControl(Controls[I]));
+end;
+
+procedure TTestLayerList.Wheel(WheelDelta: Integer);
+begin
+  DoMouseWheel([], WheelDelta, Point(0, 0));
+end;
+
 procedure Require(Condition: Boolean; const MessageText: string);
 begin
   if not Condition then
@@ -109,6 +134,7 @@ var
   History: TVectArtEditHistory;
   LayerList: TTestLayerList;
   Renderer: TVectArtLayerRenderer;
+  ScrollBar: TVerticalScrollBarControl;
 begin
   Document := TVectArtDocument.Create;
   Form := TForm.CreateNew(nil);
@@ -174,6 +200,21 @@ begin
     History.Undo;
     Require(not Document[1].Locked and not Document[3].Locked,
       'Group-row lock undo failed');
+    Document.InsertRectangle(4, RectangleData('Four'));
+    Document.InsertRectangle(5, RectangleData('Five'));
+    Document.InsertRectangle(6, RectangleData('Six'));
+    Document.InsertRectangle(7, RectangleData('Seven'));
+    LayerList.SetBounds(0, 0, 320, 180);
+    LayerList.Wheel(240);
+    ScrollBar := LayerList.FindScrollBar;
+    Require((ScrollBar <> nil) and ScrollBar.Visible and
+      (ScrollBar.Maximum > 0),
+      'Overflowing layer rows did not show the custom scroll bar');
+    Require(ScrollBar.Position = 0,
+      'Mouse wheel did not scroll to the upper end of the layer list');
+    LayerList.ClickAt(49);
+    Require(Document.SelectedIndex = 7,
+      'Scrolled row hit testing did not follow the visible layer');
     Writeln('PASS collapsed/expanded flat-group layer rows');
   finally
     Renderer.Free;

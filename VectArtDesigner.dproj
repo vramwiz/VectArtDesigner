@@ -128,11 +128,14 @@
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
+        <DCCReference Include="Source\Core\Commands\Geometry\VectArtDesignerSettingsGeometry.pas"/>
+        <DCCReference Include="Source\Core\Selection\VectArtDesignerSettingsSelection.pas"/>
         <DCCReference Include="Source\ToolPalette\VectArtDesignerCreationColors.pas"/>
         <DCCReference Include="Source\Persistence\Svg\Paint\VectArtDesignerSvgPaintReader.pas"/>
         <DCCReference Include="Source\Persistence\VectArtDesignerTextureImage.pas"/>
         <DCCReference Include="Source\ObjectProperties\Color\VectArtDesignerPaintPreview.pas"/>
         <DCCReference Include="Source\Rendering\Paint\VectArtDesignerGradientGeometry.pas"/>
+        <DCCReference Include="Source\UI\VectArtDesignerSettingsFont.pas"/>
         <DCCReference Include="Source\UI\VectArtDesignerNumericSlider.pas"/>
         <DCCReference Include="Lib\ColorPicker\ColorPickerColorMath.pas"/>
         <DCCReference Include="Lib\ColorPicker\ColorPickerHueBar.pas"/>
@@ -155,6 +158,7 @@
         <DCCReference Include="Lib\ShortcutAction\ShortcutAction.pas"/>
         <DCCReference Include="Lib\HorizontalTrackBar\HorizontalTrackBarRenderer.pas"/>
         <DCCReference Include="Lib\HorizontalTrackBar\HorizontalTrackBarControl.pas"/>
+        <DCCReference Include="Lib\VerticalScrollBar\VerticalScrollBarControl.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerMainForm.pas">
             <Form>MainForm</Form>
         </DCCReference>
@@ -168,8 +172,9 @@
         <DCCReference Include="Source\Rendering\Paint\VectArtDesignerShadowPaint.pas"/>
         <DCCReference Include="Source\Persistence\Mif\Rendering\VectArtDesignerMifShadow.pas"/>
         <DCCReference Include="Source\Core\Commands\Appearance\VectArtDesignerShadowCommand.pas"/>
-        <DCCReference Include="Source\ObjectProperties\VectArtDesignerShadowSettings.pas"/>
+        <DCCReference Include="Source\ObjectProperties\Pages\VectArtDesignerShadowSettings.pas"/>
         <DCCReference Include="Source\Persistence\Svg\Paint\VectArtDesignerSvgShadow.pas"/>
+        <DCCReference Include="Source\ObjectProperties\Pages\VectArtDesignerSettingsSections.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerDocument.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerGeometry.pas"/>
         <DCCReference Include="Source\Rendering\VectArtDesignerRenderer.pas"/>
@@ -220,7 +225,7 @@
         <DCCReference Include="Source\Core\Commands\Appearance\VectArtDesignerFillCommand.pas"/>
         <DCCReference Include="Source\Core\Commands\Appearance\VectArtDesignerAppearanceModeCommand.pas"/>
         <DCCReference Include="Source\ObjectProperties\Color\VectArtDesignerPaintPopup.pas"/>
-        <DCCReference Include="Source\ObjectProperties\VectArtDesignerSettingsDrafts.pas"/>
+        <DCCReference Include="Source\ObjectProperties\Pages\VectArtDesignerSettingsDrafts.pas"/>
         <DCCReference Include="Source\Editor\Geometry\VectArtDesignerTemplateGeometry.pas"/>
         <DCCReference Include="Source\ToolPalette\VectArtDesignerTemplatePicker.pas"/>
         <BuildConfiguration Include="Base">

@@ -13,6 +13,8 @@ uses
     'Lib\TextRenderer\TextRendererSkiaBootstrap.pas',
   TextRendererSkiaRuntime in
     'Lib\TextRenderer\TextRendererSkiaRuntime.pas',
+  VerticalScrollBarControl in
+    'Lib\VerticalScrollBar\VerticalScrollBarControl.pas',
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerTextGeometry in

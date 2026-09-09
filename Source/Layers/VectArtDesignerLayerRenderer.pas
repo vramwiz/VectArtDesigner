@@ -46,6 +46,7 @@ type
       TVectArtGroupThumbnailCacheEntry>;
     FImageThumbnails: TObjectDictionary<TVectArtImageLayer,
       TVectArtImageThumbnailCacheEntry>;
+    FScrollOffset: Integer;
     FThumbnailBackground: TVectArtLayerThumbnailBackground;
     FThumbnailRevision: Int64;
     procedure DrawFillThumbnail(ACanvas: TCustomCanvas; const Bounds: TRect; Layer: TVectArtLayer);
@@ -96,9 +97,13 @@ type
     function LayerItemRect(const Bounds: TRect; Index: Integer): TRect;
     function LayerSourceIndexAt(RowIndex: Integer): Integer;
     function LockButtonRect(const ItemRect: TRect): TRect;
+    function MaximumScrollOffset(const Bounds: TRect): Integer;
+    function ScrollStep: Integer;
+    procedure SetScrollOffset(Value: Integer);
     function VisibilityButtonRect(const ItemRect: TRect): TRect;
     procedure ToggleGroupExpanded(GroupId: TVectArtGroupId);
     property Document: TVectArtDocument read FDocument write SetDocument;
+    property ScrollOffset: Integer read FScrollOffset write SetScrollOffset;
     property ThumbnailBackground: TVectArtLayerThumbnailBackground
       read FThumbnailBackground write SetThumbnailBackground;
   end;
@@ -1183,6 +1188,7 @@ begin
   if FDocument = Value then
     Exit;
   FDocument := Value;
+  FScrollOffset := 0;
   SetLength(FEntries, 0);
   FEntriesRelationRevision := -1;
   FExpandedGroups.Clear;
@@ -1659,10 +1665,35 @@ begin
   if Index <= 0 then
     Exit(TRect.Empty);
   ItemBottom := Bounds.Bottom - LAYER_LIST_PADDING -
-    (Index - 1) * (LAYER_ROW_HEIGHT + LAYER_GAP);
+    (Index - 1) * (LAYER_ROW_HEIGHT + LAYER_GAP) + FScrollOffset;
   Result := Rect(Bounds.Left + LAYER_LIST_PADDING,
     ItemBottom - LAYER_ROW_HEIGHT,
     Bounds.Right - LAYER_LIST_PADDING, ItemBottom);
+end;
+
+function TVectArtLayerRenderer.MaximumScrollOffset(
+  const Bounds: TRect): Integer;
+var
+  ContentHeight: Integer;
+  ItemCount: Integer;
+begin
+  SyncEntries;
+  ItemCount := Length(FEntries);
+  if ItemCount = 0 then
+    Exit(0);
+  ContentHeight := ItemCount * LAYER_ROW_HEIGHT +
+    Max(ItemCount - 1, 0) * LAYER_GAP + 2 * LAYER_LIST_PADDING;
+  Result := Max(ContentHeight - Bounds.Height, 0);
+end;
+
+function TVectArtLayerRenderer.ScrollStep: Integer;
+begin
+  Result := LAYER_ROW_HEIGHT + LAYER_GAP;
+end;
+
+procedure TVectArtLayerRenderer.SetScrollOffset(Value: Integer);
+begin
+  FScrollOffset := Max(Value, 0);
 end;
 
 function TVectArtLayerRenderer.ExpandButtonRect(

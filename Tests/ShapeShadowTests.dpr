@@ -1,7 +1,7 @@
 ﻿// 提供MIFの影を編集可能に復元し、描画・保存・履歴・作成引継ぎの接続を確認する。
 program ShapeShadowTests;
 {$APPTYPE CONSOLE}
-uses System.Classes, System.SysUtils, System.Types, System.IOUtils, Vcl.Graphics,
+uses VectArtDesignerNumericSlider, System.Classes, System.SysUtils, System.Types, System.IOUtils, Vcl.Graphics,
   Winapi.Windows, Vcl.Forms, Vcl.StdCtrls, Vcl.Controls,
   TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
   VectArtDesignerDocument, VectArtDesignerRenderer, VectArtDesignerDocumentJson,
@@ -70,7 +70,7 @@ begin
     RenderVectArtDocument(D,B,D.CanvasLayer.Width,D.CanvasLayer.Height);
     Check(B.Pixels[170*B.Width+108].A=0,'Disabled shadow still visible');
     V.Enabled:=True; R.Shadow:=V;
-    D.SetSelectedLayers([1]); UI:=TVectArtShadowSettings.Create(F); UI.Parent:=F; UI.Align:=alClient;
+    D.SetSelectedLayers([1]); UI:=TVectArtShadowSettings.CreateForParent(F,F); UI.Parent:=F; UI.Align:=alClient;
     F.ClientWidth:=300; F.ClientHeight:=400; UI.Configure(D,H); F.Show; Application.ProcessMessages;
     Bitmap:=Vcl.Graphics.TBitmap.Create; Layers:=TVectArtLayerRenderer.Create;
     try
@@ -83,7 +83,7 @@ begin
       Layers.DrawLayers(Bitmap.Canvas,Rect(0,0,320,240));
       Bitmap.SaveToFile('TestOutput/shadow-thumbnails.bmp');
     finally Layers.Free; Bitmap.Free; end;
-    Edit:=TEdit(UI.FindComponent('ShadowOffsetX')); Edit.Text:='23'; Edit.OnExit(Edit);
+    Edit:=TVectArtNumericSlider(UI.FindComponent('ShadowOffsetX')).Edit; Edit.Text:='23'; Edit.OnExit(Edit);
     Check(D[1].Shadow.OffsetX=23,'UI offset'); H.Undo; Check(D[1].Shadow.OffsetX=-12,'UI undo');
     UI.Configure(D,H); CheckBox:=TCheckBox(UI.FindComponent('ShadowEnabled'));
     CheckBox.Checked:=False; Check(not D[1].Shadow.Enabled,'UI disable'); H.Undo;

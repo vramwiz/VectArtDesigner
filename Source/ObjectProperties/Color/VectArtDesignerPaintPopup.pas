@@ -21,7 +21,7 @@ procedure CloseVectArtColorPopup(Target: TComponent);
 
 implementation
 
-uses
+uses VectArtDesignerSettingsFont,
   System.SysUtils, System.Math, System.UITypes, Winapi.Windows, Vcl.Dialogs,
   VectArtDesignerNumericSlider, ColorPickerHueBar, ColorPickerSVArea, ColorPickerColorMath, VectArtDesignerTextureImage, VectArtDesignerPaintPreview, VectArtDesignerColorSwatch;
 
@@ -82,8 +82,8 @@ begin
   Position := poScreenCenter;
   ClientWidth := 370;
   ClientHeight := 466;
-  Font.Name := 'Yu Gothic UI';
-  Font.Size := 9;
+  Font.Name := VECTART_SETTINGS_FONT_NAME;
+  Font.Height := VECTART_SETTINGS_FONT_HEIGHT;
   FTexture := TPicture.Create;
   FPreviewBitmap := Vcl.Graphics.TBitmap.Create;
   FPreviewBitmap.PixelFormat := pf32bit;
@@ -166,10 +166,17 @@ begin
   FSV := TColorPickerSVArea.Create(Self); FSV.Parent := Self;
   FSV.Name := 'SVPicker'; FSV.OnChange := PickerChanged;
 
+  ApplyVectArtSettingsFont(Self);
 end;
 
 destructor TVectArtPaintPopup.Destroy;
 begin
+  // Applicationが先にこのフォームを破棄しても、主画面の終了処理へ参照を残さない。
+  if Popup = Self then Popup := nil;
+  FChanged := nil;
+  FFillChanged := nil;
+  if FTarget <> nil then FTarget.RemoveFreeNotification(Self);
+  FTarget := nil;
   FPreviewBitmap.Free;
   FTexture.Free;
   inherited;
@@ -183,7 +190,7 @@ begin
     FTarget := nil;
     FChanged := nil;
     FFillChanged := nil;
-    Hide;
+    if not (csDestroying in ComponentState) then Hide;
   end;
 end;
 

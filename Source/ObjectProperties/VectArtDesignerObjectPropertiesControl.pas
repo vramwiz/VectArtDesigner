@@ -5,7 +5,7 @@ unit VectArtDesignerObjectPropertiesControl;
 interface
 
 uses
-  VectArtDesignerShadowSettings, System.Classes, System.Types, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Forms, Vcl.Graphics, VectArtDesignerColorSwatch, VectArtDesignerPaintPopup,
+  VectArtDesignerNumericSlider, VectArtDesignerSettingsSections, VectArtDesignerShadowSettings, System.Classes, System.Types, Vcl.Controls, Vcl.StdCtrls,  Vcl.Forms, Vcl.Graphics, VectArtDesignerColorSwatch, VectArtDesignerPaintPopup,
   VectArtDesignerDocument, VectArtDesignerEditCommands,
   VectArtDesignerEditHistory, VectArtDesignerEditorState,
   VectArtDesignerLineStyleControls, VectArtDesignerStrokeStyleCombo;
@@ -13,9 +13,9 @@ uses
 type
   TVectArtObjectPropertiesControl = class(TCustomControl)
   private
-    FPages: TPageControl;
-    FInfoPage, FTextPage, FLinePage, FFillPage, FStrokePage: TTabSheet;
-    FShadowPage, FOutlinePage, FEffectsPage: TTabSheet;
+    FSections: TVectArtSettingsSections;
+    FInfoPanel, FTextPanel, FLinePanel, FFillPanel, FStrokePanel: TVectArtSettingsPanel;
+    FShadowPanel, FOutlinePanel, FEffectsPanel: TVectArtSettingsPanel;
     FShadowSettings: TVectArtShadowSettings;
     FFillSwatch, FStrokeSwatch: TVectArtColorSwatch;
     FTextMemo: TMemo;
@@ -36,6 +36,7 @@ type
     FLineSpacingEdit: TEdit;
     FVerticalTextCheck: TCheckBox;
     FOpacityEdit: TEdit;
+    FTransparencySlider, FStrokeWidthSlider: TVectArtNumericSlider;
     FStrokeColorEdit: TEdit;
     FStrokeStyleCombo: TVectArtStrokeStyleCombo;
     FPathLineCapButtons: array[TVectArtLineCap] of TVectArtLineCapButton;
@@ -47,9 +48,11 @@ type
     FPathStartMarkerSizeEdit: TEdit;
     FStrokeWidthEdit: TEdit;
     FUpdating: Boolean;
+    FBuildingSettings: Boolean;
     FWidthEdit: TEdit;
     FXEdit: TEdit;
     FYEdit: TEdit;
+    procedure NumericSettingChanged(Sender: TObject);
     procedure ApplySelectedLineCap(Sender: TObject);
     procedure ApplySelectedLineJoin(Sender: TObject);
     procedure ApplySelectedLineAntiAlias(Sender: TObject);
@@ -121,8 +124,8 @@ type
 
 implementation
 
-uses
-  System.Generics.Collections, System.Math, System.SysUtils, Winapi.Windows,
+uses VectArtDesignerSettingsFont,
+  VectArtDesignerSettingsSelection, VectArtDesignerSettingsGeometry, System.Math, System.SysUtils, Winapi.Windows,
   VectArtDesignerFillCommand, VectArtDesignerAppearanceModeCommand, VectArtDesignerSettingsDrafts, VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
   VectArtDesignerTextGeometry;
 
@@ -132,7 +135,6 @@ const
   COLOR_LABEL = TColor($00BDBDBD);
   COLOR_TEXT = TColor($00EEEEEE);
   EDIT_HEIGHT = 25;
-  MIN_OBJECT_SIZE = 1.0;
 
 constructor TVectArtObjectPropertiesControl.Create(AOwner: TComponent);
 var
@@ -145,8 +147,8 @@ begin
   ParentDoubleBuffered := False;
   DoubleBuffered := False;
   Font.Color := COLOR_TEXT;
-  Font.Name := 'Segoe UI';
-  Font.Height := -11;
+  Font.Name := VECTART_SETTINGS_FONT_NAME;
+  Font.Height := VECTART_SETTINGS_FONT_HEIGHT;
   FXEdit := NewDarkEdit;
   FYEdit := NewDarkEdit;
   FWidthEdit := NewDarkEdit;
@@ -908,191 +910,28 @@ begin
 end;
 
 procedure TVectArtObjectPropertiesControl.ApplyGeometry;
-var
-  Bounds: TRectF;
-  HeightValue: Double;
-  I: Integer;
-  LayerIndices: TArray<Integer>;
-  NewBounds: TArray<TRectF>;
-  NewImagePoints: TVectArtImagePoints;
-  NewSelectionBounds: TRectF;
-  OldBounds: TArray<TRectF>;
-  OldPoints: TArray<TPointF>;
-  OldImagePoints: TVectArtImagePoints;
-  OldSelectionBounds: TRectF;
-  PathLayer: TVectArtPathLayer;
-  NewTextData: TVectArtTextData;
-  OldTextData: TVectArtTextData;
-  ImageLayer: TVectArtImageLayer;
-  PathPoints: TArray<TPointF>;
-  PointIndex: Integer;
-  ScaleX: Single;
-  ScaleY: Single;
-  WidthValue: Double;
-  ULength: Single;
-  VLength: Single;
-  XValue: Double;
-  YValue: Double;
+var XValue, YValue, WidthValue, HeightValue: Double;
 begin
-  if FUpdating or (FDocument = nil) or
-    (FDocument.SelectionCount = 0) or SelectedLayersHaveLock then
-    Exit;
+  if FUpdating then Exit;
   if not TryStrToFloat(Trim(FXEdit.Text), XValue) or
     not TryStrToFloat(Trim(FYEdit.Text), YValue) or
     not TryStrToFloat(Trim(FWidthEdit.Text), WidthValue) or
     not TryStrToFloat(Trim(FHeightEdit.Text), HeightValue) then
-  begin
-    RefreshFromDocument;
-    Exit;
-  end;
-  WidthValue := Max(WidthValue, MIN_OBJECT_SIZE);
-  HeightValue := Max(HeightValue, MIN_OBJECT_SIZE);
-  if (FDocument.SelectionCount = 1) and
-    (FDocument[FDocument.SelectedIndex] is TVectArtTextLayer) then
-  begin
-    OldTextData := CaptureVectArtTextData(
-      TVectArtTextLayer(FDocument[FDocument.SelectedIndex]));
-    NewTextData := OldTextData;
-    NewTextData.Bounds := RectF(XValue, YValue, XValue + WidthValue,
-      YValue + HeightValue);
-    FDocument.SetTextData(FDocument.SelectedIndex, NewTextData);
-    if FEditHistory <> nil then
-      FEditHistory.AddApplied(TVectArtTextDataCommand.Create(FDocument,
-        FDocument.SelectedIndex, OldTextData, NewTextData));
-    Exit;
-  end;
-  if (FDocument.SelectionCount = 1) and
-    (FDocument[FDocument.SelectedIndex] is TVectArtImageLayer) then
-  begin
-    ImageLayer := TVectArtImageLayer(FDocument[FDocument.SelectedIndex]);
-    OldImagePoints := ImageLayer.Points;
-    ULength := Hypot(OldImagePoints[1].X - OldImagePoints[0].X,
-      OldImagePoints[1].Y - OldImagePoints[0].Y);
-    VLength := Hypot(OldImagePoints[3].X - OldImagePoints[0].X,
-      OldImagePoints[3].Y - OldImagePoints[0].Y);
-    if (ULength <= 0) or (VLength <= 0) then
-    begin
-      RefreshFromDocument;
-      Exit;
-    end;
-    NewImagePoints[0] := TPointF.Create(XValue, YValue);
-    NewImagePoints[1] := TPointF.Create(XValue +
-      (OldImagePoints[1].X - OldImagePoints[0].X) / ULength * WidthValue,
-      YValue + (OldImagePoints[1].Y - OldImagePoints[0].Y) / ULength *
-        WidthValue);
-    NewImagePoints[3] := TPointF.Create(XValue +
-      (OldImagePoints[3].X - OldImagePoints[0].X) / VLength * HeightValue,
-      YValue + (OldImagePoints[3].Y - OldImagePoints[0].Y) / VLength *
-        HeightValue);
-    NewImagePoints[2] := TPointF.Create(NewImagePoints[1].X +
-      NewImagePoints[3].X - NewImagePoints[0].X,
-      NewImagePoints[1].Y + NewImagePoints[3].Y - NewImagePoints[0].Y);
-    FDocument.SetImagePoints(FDocument.SelectedIndex, NewImagePoints);
-    if FEditHistory <> nil then
-      FEditHistory.AddApplied(TVectArtImagePointsCommand.Create(FDocument,
-        FDocument.SelectedIndex, OldImagePoints, NewImagePoints));
-    Exit;
-  end;
-  if (FDocument.SelectionCount = 1) and
-    (FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) then
-  begin
-    PathLayer := TVectArtPathLayer(FDocument[FDocument.SelectedIndex]);
-    OldPoints := Copy(PathLayer.Points);
-    OldSelectionBounds := PointsBounds(OldPoints);
-    if SameValue(OldSelectionBounds.Width, 0.0) or
-      SameValue(OldSelectionBounds.Height, 0.0) then
-    begin
-      RefreshFromDocument;
-      Exit;
-    end;
-    ScaleX := WidthValue / OldSelectionBounds.Width;
-    ScaleY := HeightValue / OldSelectionBounds.Height;
-    SetLength(PathPoints, Length(OldPoints));
-    for PointIndex := 0 to High(OldPoints) do
-      PathPoints[PointIndex] := TPointF.Create(
-        XValue + (OldPoints[PointIndex].X - OldSelectionBounds.Left) * ScaleX,
-        YValue + (OldPoints[PointIndex].Y - OldSelectionBounds.Top) * ScaleY);
-    FDocument.SetPathPoints(FDocument.SelectedIndex, PathPoints);
-    if FEditHistory <> nil then
-      FEditHistory.AddApplied(TVectArtPathPointsCommand.Create(FDocument,
-        FDocument.SelectedIndex, OldPoints, PathPoints));
-    Exit;
-  end;
-  if not SelectedBounds(OldSelectionBounds) then
-    Exit;
-  NewSelectionBounds := TRectF.Create(XValue, YValue, XValue + WidthValue,
-    YValue + HeightValue);
-  ScaleX := NewSelectionBounds.Width / OldSelectionBounds.Width;
-  ScaleY := NewSelectionBounds.Height / OldSelectionBounds.Height;
-  LayerIndices := GetSelectedRectangleIndices;
-  SetLength(OldBounds, Length(LayerIndices));
-  SetLength(NewBounds, Length(LayerIndices));
-  for I := 0 to High(LayerIndices) do
-  begin
-    OldBounds[I] := TVectArtRectangleLayer(
-      FDocument[LayerIndices[I]]).Bounds;
-    Bounds := OldBounds[I];
-    NewBounds[I].Left := NewSelectionBounds.Left +
-      (Bounds.Left - OldSelectionBounds.Left) * ScaleX;
-    NewBounds[I].Right := NewSelectionBounds.Left +
-      (Bounds.Right - OldSelectionBounds.Left) * ScaleX;
-    NewBounds[I].Top := NewSelectionBounds.Top +
-      (Bounds.Top - OldSelectionBounds.Top) * ScaleY;
-    NewBounds[I].Bottom := NewSelectionBounds.Top +
-      (Bounds.Bottom - OldSelectionBounds.Top) * ScaleY;
-    FDocument.SetRectangleBounds(LayerIndices[I], NewBounds[I]);
-  end;
-  if (FEditHistory <> nil) and
-    (not SameValue(OldSelectionBounds.Left, NewSelectionBounds.Left) or
-     not SameValue(OldSelectionBounds.Top, NewSelectionBounds.Top) or
-     not SameValue(OldSelectionBounds.Right, NewSelectionBounds.Right) or
-     not SameValue(OldSelectionBounds.Bottom, NewSelectionBounds.Bottom)) then
-    FEditHistory.AddApplied(TVectArtBoundsCommand.Create(FDocument,
-      LayerIndices, OldBounds, NewBounds));
+  begin RefreshFromDocument; Exit; end;
+  ApplyVectArtSettingsGeometry(FDocument,FEditHistory,XValue,YValue,WidthValue,HeightValue);
+  RefreshFromDocument;
 end;
 
 function TVectArtObjectPropertiesControl.GetSelectedFillIndices:
   TArray<Integer>;
-var
-  I: Integer;
-  Indices: TList<Integer>;
 begin
-  Indices := TList<Integer>.Create;
-  try
-    if FDocument <> nil then
-      for I := 1 to FDocument.LayerCount - 1 do
-        if FDocument.IsLayerSelected(I) and
-          ((FDocument[I] is TVectArtRectangleLayer) or
-           (FDocument[I] is TVectArtPathLayer) or
-           (FDocument[I] is TVectArtTextLayer)) then
-          Indices.Add(I);
-    Result := Indices.ToArray;
-  finally
-    Indices.Free;
-  end;
+  Result := VectArtDesignerSettingsSelection.GetSelectedFillIndices(FDocument);
 end;
 
 function TVectArtObjectPropertiesControl.GetSelectedOpacityIndices:
   TArray<Integer>;
-var
-  I: Integer;
-  Indices: TList<Integer>;
 begin
-  Indices := TList<Integer>.Create;
-  try
-    if FDocument <> nil then
-      for I := 1 to FDocument.LayerCount - 1 do
-        if FDocument.IsLayerSelected(I) and
-          ((FDocument[I] is TVectArtRectangleLayer) or
-           (FDocument[I] is TVectArtLineLayer) or
-           (FDocument[I] is TVectArtPathLayer) or
-           (FDocument[I] is TVectArtImageLayer) or
-           (FDocument[I] is TVectArtTextLayer)) then
-          Indices.Add(I);
-    Result := Indices.ToArray;
-  finally
-    Indices.Free;
-  end;
+  Result := VectArtDesignerSettingsSelection.GetSelectedOpacityIndices(FDocument);
 end;
 
 procedure TVectArtObjectPropertiesControl.ApplyTextSpacing;
@@ -1181,6 +1020,13 @@ begin
       FDocument.SelectedIndex, OldData, NewData));
 end;
 
+procedure TVectArtObjectPropertiesControl.NumericSettingChanged(Sender: TObject);
+begin
+  if FUpdating then Exit;
+  if Sender = FStrokeWidthSlider then ApplyStrokeWidth
+  else if Sender = FTransparencySlider then ApplyOpacity;
+end;
+
 procedure TVectArtObjectPropertiesControl.ApplyOpacity;
 var
   Command: TVectArtCompoundCommand;
@@ -1198,7 +1044,8 @@ begin
     RefreshFromDocument;
     Exit;
   end;
-  NewValue := EnsureRange(NewValue, 0.0, 100.0) / 100.0;
+  // モデルの不透明度は維持し、UIの透明度だけ反転して変換する。
+  NewValue := 1.0 - EnsureRange(NewValue, 0.0, 100.0) / 100.0;
   LayerIndices := GetSelectedOpacityIndices;
   Command := nil;
   if FEditHistory <> nil then
@@ -1281,8 +1128,8 @@ begin
   Result.ItemHeight := 19;
   Result.DropDownCount := 9;
   Result.Color := COLOR_EDIT;
-  Result.Font.Name := 'Segoe UI';
-  Result.Font.Height := -11;
+  Result.Font.Name := VECTART_SETTINGS_FONT_NAME;
+  Result.Font.Height := VECTART_SETTINGS_FONT_HEIGHT;
   Result.Font.Color := COLOR_TEXT;
   Result.ParentColor := False;
   Result.ParentFont := False;
@@ -1311,8 +1158,8 @@ begin
   Result.AutoSize := False;
   Result.Height := EDIT_HEIGHT;
   Result.Color := COLOR_EDIT;
-  Result.Font.Name := 'Segoe UI';
-  Result.Font.Height := -11;
+  Result.Font.Name := VECTART_SETTINGS_FONT_NAME;
+  Result.Font.Height := VECTART_SETTINGS_FONT_HEIGHT;
   Result.Font.Color := COLOR_TEXT;
   Result.ParentColor := False;
   Result.ParentFont := False;
@@ -1323,60 +1170,25 @@ end;
 
 function TVectArtObjectPropertiesControl.GetSelectedRectangleIndices:
   TArray<Integer>;
-var
-  I: Integer;
-  Indices: TList<Integer>;
 begin
-  Indices := TList<Integer>.Create;
-  try
-    if FDocument <> nil then
-      for I := 1 to FDocument.LayerCount - 1 do
-        if FDocument.IsLayerSelected(I) and
-          (FDocument[I] is TVectArtRectangleLayer) then
-          Indices.Add(I);
-    Result := Indices.ToArray;
-  finally
-    Indices.Free;
-  end;
+  Result := VectArtDesignerSettingsSelection.GetSelectedRectangleIndices(FDocument);
 end;
 
 function TVectArtObjectPropertiesControl.GetSelectedStrokeIndices:
   TArray<Integer>;
-var
-  I: Integer;
-  Indices: TList<Integer>;
 begin
-  Indices := TList<Integer>.Create;
-  try
-    if FDocument <> nil then
-      for I := 1 to FDocument.LayerCount - 1 do
-        if FDocument.IsLayerSelected(I) and
-          ((FDocument[I] is TVectArtRectangleLayer) or
-           (FDocument[I] is TVectArtLineLayer) or
-           (FDocument[I] is TVectArtPathLayer)) then
-          Indices.Add(I);
-    Result := Indices.ToArray;
-  finally
-    Indices.Free;
-  end;
+  Result := VectArtDesignerSettingsSelection.GetSelectedStrokeIndices(FDocument);
 end;
 
 function TVectArtObjectPropertiesControl.SelectedLayersHaveLock: Boolean;
-var
-  I: Integer;
 begin
-  Result := False;
-  if FDocument = nil then
-    Exit;
-  for I := 1 to FDocument.LayerCount - 1 do
-    if FDocument.IsLayerSelected(I) and FDocument[I].Locked then
-      Exit(True);
+  Result := VectArtDesignerSettingsSelection.SelectedLayersHaveLock(FDocument);
 end;
 
 procedure TVectArtObjectPropertiesControl.CreateWnd;
 begin
   inherited;
-  if FPages = nil then
+  if FSections = nil then
   begin
     BuildSettingsUI;
     RefreshFromDocument;
@@ -1386,14 +1198,14 @@ end;
 procedure TVectArtObjectPropertiesControl.SetParent(AParent: TWinControl);
 begin
   inherited;
-  if (AParent <> nil) and (GetParentForm(Self) <> nil) and (FPages = nil) then BuildSettingsUI;
+  if (AParent <> nil) and (GetParentForm(Self) <> nil) and (FSections = nil) then BuildSettingsUI;
 end;
 
 procedure TVectArtObjectPropertiesControl.Paint;
 var Title: string;
 begin
   Canvas.Brush.Color := COLOR_BACKGROUND;
-  Canvas.FillRect(ClientRect);
+  Canvas.FillRect(Rect(0,0,ClientWidth,Min(34,ClientHeight)));
   Canvas.Font.Color := COLOR_TEXT;
   if (FDocument = nil) or (FDocument.SelectionCount = 0) then Title := 'オブジェクトを選択'
   else if FDocument.SelectionCount = 1 then Title := FDocument[FDocument.SelectedIndex].Name
@@ -1420,7 +1232,9 @@ var
   StrokeStyleValue: TVectArtStrokeStyle;
   StrokeWidthValue: Single;
   TextLayer: TVectArtTextLayer;
+  SliderValue: Double;
 begin
+  if FBuildingSettings then Exit;
   FUpdating := True;
   try
     SetPathStyleControlsVisible(False);
@@ -1438,12 +1252,12 @@ begin
       ColorValue := ColorToRGB(RectangleLayer.FillColor);
       FColorEdit.Text := Format('#%.2x%.2x%.2x', [GetRValue(ColorValue),
         GetGValue(ColorValue), GetBValue(ColorValue)]);
-      FOpacityEdit.Text := FormatFloat('0.##', RectangleLayer.Opacity * 100);
+      FOpacityEdit.Text := FormatFloat('0.##', (1 - RectangleLayer.Opacity) * 100);
       StrokeColorValue := ColorToRGB(RectangleLayer.StrokeColor);
       FStrokeColorEdit.Text := Format('#%.2x%.2x%.2x',
         [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
          GetBValue(StrokeColorValue)]);
-      FStrokeWidthEdit.Text := FormatFloat('0', RectangleLayer.StrokeWidth);
+      FStrokeWidthEdit.Text := FormatFloat('0.##', RectangleLayer.StrokeWidth);
       FStrokeStyleCombo.SetPendingItemIndex(
         Ord(RectangleLayer.StrokeStyle));
       SetEditorsEnabled(True);
@@ -1471,7 +1285,7 @@ begin
       ColorValue := ColorToRGB(TextLayer.TextColor);
       FColorEdit.Text := Format('#%.2x%.2x%.2x', [GetRValue(ColorValue),
         GetGValue(ColorValue), GetBValue(ColorValue)]);
-      FOpacityEdit.Text := FormatFloat('0.##', TextLayer.Opacity * 100);
+      FOpacityEdit.Text := FormatFloat('0.##', (1 - TextLayer.Opacity) * 100);
       ClearEditValue(FStrokeColorEdit);
       ClearEditValue(FStrokeWidthEdit);
       FStrokeStyleCombo.SetPendingItemIndex(-1);
@@ -1514,7 +1328,7 @@ begin
       ClearEditValue(FStrokeColorEdit);
       ClearEditValue(FStrokeWidthEdit);
       FStrokeStyleCombo.SetPendingItemIndex(-1);
-      FOpacityEdit.Text := FormatFloat('0.##', ImageLayer.Opacity * 100);
+      FOpacityEdit.Text := FormatFloat('0.##', (1 - ImageLayer.Opacity) * 100);
       SetEditorsEnabled(True);
       FColorEdit.Enabled := False;
       FStrokeColorEdit.Enabled := False;
@@ -1542,12 +1356,12 @@ begin
       ColorValue := ColorToRGB(PathLayer.FillColor);
       FColorEdit.Text := Format('#%.2x%.2x%.2x', [GetRValue(ColorValue),
         GetGValue(ColorValue), GetBValue(ColorValue)]);
-      FOpacityEdit.Text := FormatFloat('0.##', PathLayer.Opacity * 100);
+      FOpacityEdit.Text := FormatFloat('0.##', (1 - PathLayer.Opacity) * 100);
       StrokeColorValue := ColorToRGB(PathLayer.StrokeColor);
       FStrokeColorEdit.Text := Format('#%.2x%.2x%.2x',
         [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
          GetBValue(StrokeColorValue)]);
-      FStrokeWidthEdit.Text := FormatFloat('0', PathLayer.StrokeWidth);
+      FStrokeWidthEdit.Text := FormatFloat('0.##', PathLayer.StrokeWidth);
       FStrokeStyleCombo.SetPendingItemIndex(Ord(PathLayer.StrokeStyle));
       SetPathStyleControlsVisible(True);
       FPathLineCapButtons[vlcButt].Selected := PathLayer.LineCap = vlcButt;
@@ -1602,12 +1416,12 @@ begin
       FWidthEdit.Text := FormatFloat('0', LineLayer.EndPoint.X);
       FHeightEdit.Text := FormatFloat('0', LineLayer.EndPoint.Y);
       ClearEditValue(FColorEdit);
-      FOpacityEdit.Text := FormatFloat('0.##', LineLayer.Opacity * 100);
+      FOpacityEdit.Text := FormatFloat('0.##', (1 - LineLayer.Opacity) * 100);
       StrokeColorValue := ColorToRGB(LineLayer.StrokeColor);
       FStrokeColorEdit.Text := Format('#%.2x%.2x%.2x',
         [GetRValue(StrokeColorValue), GetGValue(StrokeColorValue),
          GetBValue(StrokeColorValue)]);
-      FStrokeWidthEdit.Text := FormatFloat('0', LineLayer.StrokeWidth);
+      FStrokeWidthEdit.Text := FormatFloat('0.##', LineLayer.StrokeWidth);
       FStrokeStyleCombo.SetPendingItemIndex(Ord(LineLayer.StrokeStyle));
       SetEditorsEnabled(True);
       FXEdit.Enabled := False;
@@ -1679,7 +1493,7 @@ begin
       else
         ClearEditValue(FColorEdit);
       if CommonOpacity then
-        FOpacityEdit.Text := FormatFloat('0.##', OpacityValue * 100)
+        FOpacityEdit.Text := FormatFloat('0.##', (1 - OpacityValue) * 100)
       else
         ClearEditValue(FOpacityEdit);
       if CommonStrokeColor then
@@ -1692,7 +1506,7 @@ begin
       else
         ClearEditValue(FStrokeColorEdit);
       if CommonStrokeWidth then
-        FStrokeWidthEdit.Text := FormatFloat('0', StrokeWidthValue)
+        FStrokeWidthEdit.Text := FormatFloat('0.##', StrokeWidthValue)
       else
         ClearEditValue(FStrokeWidthEdit);
       if CommonStrokeStyle then
@@ -1730,46 +1544,38 @@ begin
   finally
     FUpdating := False;
   end;
+  // 編集欄の共通値・混在状態とロック状態をスライダーにも反映する。
+  if (FStrokeWidthSlider = nil) or (FTransparencySlider = nil) then Exit;
+  FStrokeWidthSlider.Enabled := FStrokeWidthEdit.Enabled;
+  FTransparencySlider.Enabled := FOpacityEdit.Enabled;
+  if TryStrToFloat(FStrokeWidthEdit.Text, SliderValue) then
+    FStrokeWidthSlider.SetDisplay(SliderValue)
+  else FStrokeWidthSlider.SetDisplay(0,True);
+  if TryStrToFloat(FOpacityEdit.Text, SliderValue) then
+    FTransparencySlider.SetDisplay(SliderValue)
+  else FTransparencySlider.SetDisplay(0,True);
   RefreshSettingsUI;
+  // 選択変更では配置が同じでも子の背景が消去されるため、入力欄とラベルも無効化する。
+  // 値・有効状態の更新がすべて終わってから要求し、通常の描画処理にまとめて任せる。
+  if (FSections <> nil) and (FSections.ActiveSection <> nil) and
+    FSections.ActiveSection.HandleAllocated then
+    RedrawWindow(FSections.ActiveSection.Handle, nil, 0,
+      RDW_INVALIDATE or RDW_ERASE or RDW_ALLCHILDREN);
   Invalidate;
 end;
 
 function TVectArtObjectPropertiesControl.SelectedBounds(
   out Bounds: TRectF): Boolean;
-var
-  I: Integer;
-  LayerBounds: TRectF;
 begin
-  Bounds := TRectF.Empty;
-  Result := False;
-  if FDocument = nil then
-    Exit;
-  for I := 1 to FDocument.LayerCount - 1 do
-    if FDocument.IsLayerSelected(I) and
-      (FDocument[I] is TVectArtRectangleLayer) then
-    begin
-      LayerBounds := TVectArtRectangleLayer(FDocument[I]).Bounds;
-      if not Result then
-      begin
-        Bounds := LayerBounds;
-        Result := True;
-      end
-      else
-      begin
-        Bounds.Left := Min(Bounds.Left, LayerBounds.Left);
-        Bounds.Top := Min(Bounds.Top, LayerBounds.Top);
-        Bounds.Right := Max(Bounds.Right, LayerBounds.Right);
-        Bounds.Bottom := Max(Bounds.Bottom, LayerBounds.Bottom);
-      end;
-    end;
+  Result := VectArtDesignerSettingsSelection.SelectedBounds(FDocument, Bounds);
 end;
 
 procedure TVectArtObjectPropertiesControl.Resize;
 begin
   inherited;
-  if FPages <> nil then
+  if FSections <> nil then
   begin
-    FPages.SetBounds(0, 34, ClientWidth, Max(0, ClientHeight - 34));
+    FSections.SetBounds(0, 34, ClientWidth, Max(0, ClientHeight - 34));
     LayoutSettings(nil);
   end;
 end;

@@ -4,9 +4,11 @@ unit VectArtDesignerLayerList;
 interface
 
 uses
-  System.Classes, Vcl.Controls, Vcl.Direct2D, VectArtDesignerDocument,
+  System.Classes, System.Types, Vcl.Controls, Vcl.Direct2D,
+  VectArtDesignerDocument,
   VectArtDesignerEditCommands, VectArtDesignerEditHistory,
-  VectArtDesignerLayerRenderer, VectArtDesignerObjectContextMenu;
+  VectArtDesignerLayerRenderer, VectArtDesignerObjectContextMenu,
+  VerticalScrollBarControl;
 
 type
   TVectArtLayerListControl = class(TCustomControl)
@@ -16,21 +18,30 @@ type
     FEditHistory: TVectArtEditHistory;
     FObjectPopup: TVectArtObjectContextMenu;
     FRenderer: TVectArtLayerRenderer;
+    FScrollBar: TVerticalScrollBarControl;
     FSelectionAnchorIndex: Integer;
+    FUpdatingScrollBar: Boolean;
     function GetThumbnailBackground: TVectArtLayerThumbnailBackground;
+    function LayerBounds: TRect;
+    function ScrollBarWidth: Integer;
     procedure ApplyGroupBoolean(GroupId: TVectArtGroupId;
       PropertyKind: TVectArtLayerBooleanProperty);
     procedure PaintDirect2D;
     procedure PaintGDI;
     procedure ObjectMenuExecuted(Sender: TObject);
+    procedure ScrollBarChanged(Sender: TObject);
     procedure SetDocument(const Value: TVectArtDocument);
     procedure SetThumbnailBackground(
       const Value: TVectArtLayerThumbnailBackground);
+    procedure UpdateScrollBar;
   protected
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
     function PrepareObjectContextSelection(Index: Integer): Boolean;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer); override;
     procedure Paint; override;
+    procedure Resize; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -46,10 +57,12 @@ type
 implementation
 
 uses
-  System.Types, Vcl.Graphics;
+  System.Math, Winapi.Windows, Vcl.Graphics;
 
 const
   COLOR_LIST_BACKGROUND = TColor($001A1A1A);
+  LAYER_SCROLL_BAR_WIDTH = 14;
+  LAYER_WHEEL_ROWS = 3;
 
 constructor TVectArtLayerListControl.Create(AOwner: TComponent);
 begin
@@ -60,9 +73,32 @@ begin
   TabStop := True;
   FDirect2DEnabled := TDirect2DCanvas.Supported;
   FRenderer := TVectArtLayerRenderer.Create;
+  FScrollBar := TVerticalScrollBarControl.Create(Self);
+  FScrollBar.Parent := Self;
+  FScrollBar.Visible := False;
+  FScrollBar.OnChange := ScrollBarChanged;
   FObjectPopup := TVectArtObjectContextMenu.Create(Self);
   FObjectPopup.OnExecuted := ObjectMenuExecuted;
   FSelectionAnchorIndex := -1;
+end;
+
+function TVectArtLayerListControl.DoMouseWheel(Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint): Boolean;
+var
+  Delta: Integer;
+begin
+  UpdateScrollBar;
+  Result := FScrollBar.Visible and (WheelDelta <> 0);
+  if Result then
+  begin
+    Delta := MulDiv(WheelDelta,
+      FRenderer.ScrollStep * LAYER_WHEEL_ROWS, WHEEL_DELTA);
+    FRenderer.ScrollOffset := FRenderer.ScrollOffset + Delta;
+    UpdateScrollBar;
+    Invalidate;
+  end
+  else
+    Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
 end;
 
 destructor TVectArtLayerListControl.Destroy;
@@ -75,6 +111,14 @@ function TVectArtLayerListControl.GetThumbnailBackground:
   TVectArtLayerThumbnailBackground;
 begin
   Result := FRenderer.ThumbnailBackground;
+end;
+
+function TVectArtLayerListControl.LayerBounds: TRect;
+begin
+  Result := ClientRect;
+  if (FScrollBar <> nil) and FScrollBar.Visible then
+    Result.Right := Max(Result.Left,
+      Result.Right - FScrollBar.Width - 1);
 end;
 
 procedure TVectArtLayerListControl.ApplyGroupBoolean(
@@ -140,7 +184,7 @@ begin
   begin
     if CanFocus then
       SetFocus;
-    Index := FRenderer.LayerIndexAt(ClientRect, Y);
+    Index := FRenderer.LayerIndexAt(LayerBounds, Y);
     if Index >= 0 then
     begin
       Entry := FRenderer.EntryAt(Index);
@@ -157,7 +201,7 @@ begin
         FObjectPopup.Popup(ScreenPoint.X, ScreenPoint.Y);
         Exit;
       end;
-      ItemRect := FRenderer.LayerItemRect(ClientRect, Index);
+      ItemRect := FRenderer.LayerItemRect(LayerBounds, Index);
       Layer := FDocument[SourceIndex];
       if Entry.IsGroupHeader and
         PtInRect(FRenderer.ExpandButtonRect(ItemRect), Point(X, Y)) then
@@ -167,6 +211,7 @@ begin
         if not (ssDouble in Shift) then
           FRenderer.ToggleGroupExpanded(Entry.GroupId);
         FSelectionAnchorIndex := -1;
+        UpdateScrollBar;
         Invalidate;
         Exit;
       end;
@@ -174,6 +219,7 @@ begin
       begin
         FRenderer.ToggleGroupExpanded(Entry.GroupId);
         FSelectionAnchorIndex := -1;
+        UpdateScrollBar;
         Invalidate;
         Exit;
       end;
@@ -262,6 +308,7 @@ end;
 
 procedure TVectArtLayerListControl.Paint;
 begin
+  UpdateScrollBar;
   if FDirect2DEnabled then
     try
       PaintDirect2D;
@@ -276,11 +323,11 @@ procedure TVectArtLayerListControl.PaintDirect2D;
 var
   Direct2DCanvas: TDirect2DCanvas;
 begin
-  Direct2DCanvas := TDirect2DCanvas.Create(Canvas, ClientRect);
+  Direct2DCanvas := TDirect2DCanvas.Create(Canvas, LayerBounds);
   try
     Direct2DCanvas.BeginDraw;
     try
-      FRenderer.DrawLayers(Direct2DCanvas, ClientRect);
+      FRenderer.DrawLayers(Direct2DCanvas, LayerBounds);
     finally
       Direct2DCanvas.EndDraw;
     end;
@@ -291,7 +338,31 @@ end;
 
 procedure TVectArtLayerListControl.PaintGDI;
 begin
-  FRenderer.DrawLayers(Canvas, ClientRect);
+  FRenderer.DrawLayers(Canvas, LayerBounds);
+end;
+
+procedure TVectArtLayerListControl.Resize;
+begin
+  inherited;
+  if FScrollBar <> nil then
+  begin
+    FScrollBar.SetBounds(Max(ClientWidth - ScrollBarWidth, 0), 0,
+      ScrollBarWidth, ClientHeight);
+    UpdateScrollBar;
+  end;
+end;
+
+function TVectArtLayerListControl.ScrollBarWidth: Integer;
+begin
+  Result := MulDiv(LAYER_SCROLL_BAR_WIDTH, CurrentPPI, 96);
+end;
+
+procedure TVectArtLayerListControl.ScrollBarChanged(Sender: TObject);
+begin
+  if FUpdatingScrollBar then
+    Exit;
+  FRenderer.ScrollOffset := FScrollBar.Maximum - FScrollBar.Position;
+  Invalidate;
 end;
 
 procedure TVectArtLayerListControl.SetDocument(
@@ -302,6 +373,7 @@ begin
   FDocument := Value;
   FSelectionAnchorIndex := -1;
   FRenderer.Document := Value;
+  UpdateScrollBar;
   Invalidate;
 end;
 
@@ -312,6 +384,34 @@ begin
     Exit;
   FRenderer.ThumbnailBackground := Value;
   Invalidate;
+end;
+
+procedure TVectArtLayerListControl.UpdateScrollBar;
+var
+  Bounds: TRect;
+  MaximumOffset: Integer;
+begin
+  if (FScrollBar = nil) or (FRenderer = nil) then
+    Exit;
+  Bounds := LayerBounds;
+  MaximumOffset := FRenderer.MaximumScrollOffset(Bounds);
+  FUpdatingScrollBar := True;
+  try
+    FScrollBar.Visible := MaximumOffset > 0;
+    FScrollBar.SetBounds(Max(ClientWidth - ScrollBarWidth, 0), 0,
+      ScrollBarWidth, ClientHeight);
+    Bounds := LayerBounds;
+    MaximumOffset := FRenderer.MaximumScrollOffset(Bounds);
+    FRenderer.ScrollOffset := EnsureRange(FRenderer.ScrollOffset, 0,
+      MaximumOffset);
+    FScrollBar.SmallChange := FRenderer.ScrollStep;
+    FScrollBar.LargeChange := Max(Bounds.Height -
+      FRenderer.ScrollStep, FRenderer.ScrollStep);
+    FScrollBar.SetRange(MaximumOffset, Max(Bounds.Height, 1));
+    FScrollBar.Position := MaximumOffset - FRenderer.ScrollOffset;
+  finally
+    FUpdatingScrollBar := False;
+  end;
 end;
 
 end.

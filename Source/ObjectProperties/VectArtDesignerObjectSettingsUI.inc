@@ -7,52 +7,77 @@ var
   C: TComboBox;
   Check: TCheckBox;
   Draft: TVectArtSettingsDraft;
-  LastLabel: TStaticText;
-  function Page(const Caption: string; out Tab: TTabSheet): TScrollBox;
+  RowTop, SourceLabelY, StandaloneY, StandaloneTop: Integer;
+  HasRow: Boolean;
+  function Panel(Category: TVectArtSettingsCategory; const Caption: string;
+    out Section: TVectArtSettingsPanel): TScrollBox;
   begin
-    Tab := TTabSheet.Create(Self);
-    Tab.PageControl := FPages;
-    Tab.Caption := Caption;
-    Tab.ParentDoubleBuffered := False;
-    Tab.DoubleBuffered := False;
-    Result := TScrollBox.Create(Self);
-    Result.Parent := Tab;
-    Result.Align := alClient;
-    Result.Font.Assign(Font);
-    Result.Font.Height := -13;
-    Result.BorderStyle := bsNone;
-    Result.ParentBackground := False;
-    Result.Color := COLOR_BACKGROUND;
-    Result.ParentDoubleBuffered := False;
-    Result.DoubleBuffered := False;
-    Result.HorzScrollBar.Visible := False;
+    Section := FSections.AddSection(Category,Caption);
+    Result := Section;
+    RowTop := 8; StandaloneY:=-1000; StandaloneTop:=8; SourceLabelY := -1000; HasRow := False;
   end;
   procedure Put(Control: TControl; X, Y, W, H: Integer);
   begin
     Control.Parent := PageBody;
-    // Use the same inherited font as the draft pages; prevent the VCL style
-    // from substituting its own font for native static labels and edits.
+    if PageBody=FInfoPanel then
+    begin
+      TControlFontAccess(Control).ParentFont:=True;
+      Control.StyleElements:=Control.StyleElements-[seFont];
+      Control.SetBounds(X,MulDiv(Y,9,10),W,MulDiv(H,9,10));
+      if W>=200 then Control.Tag:=240;
+      Exit;
+    end;
+    // ページの共通フォントを継承し、VCLスタイルによる入力欄だけの字体変更を防ぐ。
     TControlFontAccess(Control).ParentFont := True;
     Control.StyleElements := Control.StyleElements - [seFont];
-    Control.SetBounds(X, MulDiv(Y, 9, 10), W, MulDiv(H, 9, 10));
-    if W >= 200 then Control.Tag := 240;
+    if (Control is TStaticText) then
+    begin
+      Control.SetBounds(X,Y,W,H);
+      RowTop:=Y+H+6;
+      if W>=200 then Control.Tag:=240;
+    end
+    else if HasRow and (Y>=SourceLabelY) and (Y<=SourceLabelY+28) then
+    begin
+      // 同じ項目の入力欄・ボタン群はラベル右側の1行にまとめる。
+      Control.SetBounds(108+(X-12)*144 div 240,RowTop,
+        Max(28,W*144 div 240),H);
+      Control.Tag:=260+X;
+      Control.HelpContext:=W;
+      if H>40 then Inc(RowTop,H-34);
+    end
+    else
+    begin
+      if HasRow then begin Inc(RowTop,40); HasRow:=False; end;
+      if StandaloneY<>Y then
+      begin StandaloneY:=Y; StandaloneTop:=RowTop; Inc(RowTop,H+6); end;
+      Control.SetBounds(X,StandaloneTop,W,H);
+      if W>=200 then Control.Tag:=240;
+    end;
     Control.Anchors := [akLeft, akTop];
   end;
   procedure LabelAt(const Caption: string; Y: Integer);
   var L: TStaticText;
   begin
     L := TStaticText.Create(Self);
-    LastLabel := L;
+    L.Parent := PageBody;
     L.AutoSize := False;
     L.ParentColor := False;
     L.Color := COLOR_BACKGROUND;
     L.Font.Color := COLOR_TEXT;
-    L.Caption := Caption;
-    Put(L, 12, Y, 240, 22);
+    if PageBody=FInfoPanel then
+    begin
+      L.Caption:=Caption; Put(L,12,Y,240,22); Exit;
+    end;
+    if HasRow then Inc(RowTop,40);
+    HasRow:=True; SourceLabelY:=Y;
+    L.Caption := Caption + '：';
+    L.Hint:=Caption; L.ShowHint:=True;
+    L.SetBounds(8,RowTop+4,96,32);
+    L.StyleElements:=L.StyleElements-[seFont];
   end;
   procedure PendingCombo(const Caption: string; Y: Integer; const Items: array of string);
   begin
-    LabelAt(Caption + '（準備中）', Y);
+    LabelAt(Caption, Y);
     C := TComboBox.Create(Self);
     C.Parent := PageBody;
     C.Style := csDropDownList;
@@ -62,34 +87,47 @@ var
     Put(C, 12, Y + 24, 240, 28);
   end;
 begin
-  FPages := TPageControl.Create(Self);
-  FPages.Parent := Self;
-  FPages.ParentDoubleBuffered := False;
-  FPages.DoubleBuffered := False;
-  FPages.MultiLine := True;
-  FPages.OnChange := LayoutSettings;
-  FPages.Width := 284;
-  FPages.Height := 620;
-  PageBody := Page('情報', FInfoPage);
+  FBuildingSettings := True;
+  try
+  FSections := TVectArtSettingsSections.Create(Self);
+  // スライダーの子ウィンドウはフォームへ接続した後に生成する。
+  FStrokeWidthEdit.Free;
+  FStrokeWidthSlider := TVectArtNumericSlider.CreateForParent(Self, Self);
+  FStrokeWidthSlider.Name := 'StrokeWidthSlider';
+  FStrokeWidthSlider.Configure(0,10000,1,2);
+  FStrokeWidthSlider.SetSliderRange(0,100);
+  FStrokeWidthSlider.OnChange := NumericSettingChanged;
+  FStrokeWidthEdit := FStrokeWidthSlider.Edit;
+  FOpacityEdit.Free;
+  FTransparencySlider := TVectArtNumericSlider.CreateForParent(Self, Self);
+  FTransparencySlider.Name := 'TransparencySlider';
+  FTransparencySlider.Configure(0,100,1,2);
+  FTransparencySlider.OnChange := NumericSettingChanged;
+  FOpacityEdit := FTransparencySlider.Edit;
+  FSections.Parent := Self;
+  FSections.OnChange := LayoutSettings;
+  PageBody := Panel(vscInfo, '情報', FInfoPanel);
   FTypeLabel := TStaticText.Create(Self);
   FTypeLabel.AutoSize := False;
   FTypeLabel.Caption := '種類';
   Put(FTypeLabel, 12, 12, 240, 24);
-  LabelAt('位置・サイズ (px)', 42);
-  LabelAt('X', 76); LastLabel.Tag := 0; LastLabel.Width := 96;
-  Put(FXEdit, 44, 72, 80, 26); FXEdit.Tag := 243;
-  LabelAt('Y', 76); LastLabel.Tag := 245;
-  Put(FYEdit, 172, 72, 80, 26); FYEdit.Tag := 244;
-  LabelAt('幅', 108); LastLabel.Tag := 0; LastLabel.Width := 96;
-  Put(FWidthEdit, 44, 104, 80, 26); FWidthEdit.Tag := 243;
-  LabelAt('高さ', 108); LastLabel.Tag := 245;
-  Put(FHeightEdit, 172, 104, 80, 26); FHeightEdit.Tag := 244;
+  LabelAt('X',46); PageBody.Controls[PageBody.ControlCount-1].Width:=28; PageBody.Controls[PageBody.ControlCount-1].Tag:=0;
+  Put(FXEdit,44,42,80,26); FXEdit.Tag:=243;
+  LabelAt('Y',46); PageBody.Controls[PageBody.ControlCount-1].Tag:=245;
+  Put(FYEdit,172,42,80,26); FYEdit.Tag:=244;
+  LabelAt('幅',78); PageBody.Controls[PageBody.ControlCount-1].Width:=28; PageBody.Controls[PageBody.ControlCount-1].Tag:=0;
+  LabelAt('高さ',78); PageBody.Controls[PageBody.ControlCount-1].Tag:=245;
+  Put(FWidthEdit,44,74,80,26); FWidthEdit.Tag:=243;
+  Put(FHeightEdit,172,74,80,26); FHeightEdit.Tag:=244;
   FAspectCheck := TCheckBox.Create(Self);
   FAspectCheck.Caption := '縦横比を保持';
-  Put(FAspectCheck, 44, 136, 180, 26);
-  LabelAt('不透明度 (%)', 174); LastLabel.Tag := 0; LastLabel.Width := 96;
-  Put(FOpacityEdit, 112, 170, 140, 26); FOpacityEdit.Tag := 242;
-  PageBody := Page('文字', FTextPage);
+  Put(FAspectCheck,44,106,180,26);
+  LabelAt('透明度 (%)',144);
+  PageBody.Controls[PageBody.ControlCount-1].Width:=80;
+  PageBody.Controls[PageBody.ControlCount-1].Tag:=0;
+  Put(FTransparencySlider,92,140,160,34);
+  FTransparencySlider.Tag:=242;
+  PageBody := Panel(vscText, '文字', FTextPanel);
   LabelAt('文字列', 12);
   FTextMemo := TMemo.Create(Self);
   FTextMemo.ScrollBars := ssVertical;
@@ -103,12 +141,12 @@ begin
   FFontCombo.OnSelect := TextSettingsChanged;
   FFontCombo.OnExit := TextSettingsChanged;
   Put(FFontCombo, 12, 166, 240, 28);
-  LabelAt('フォントサイズ', 206);
+  LabelAt('サイズ (pt)', 206);
   FFontSize := TEdit.Create(Self);
   FFontSize.OnExit := TextSettingsChanged;
   Put(FFontSize, 12, 230, 112, 26);
   Check := TCheckBox.Create(Self);
-  Check.Caption := '自動（準備中）'; Check.Enabled := False;
+  Check.Caption := '自動'; Check.Hint:='準備中'; Check.ShowHint:=True; Check.Enabled := False;
   Put(Check, 140, 230, 122, 26);
   for I := 0 to 3 do
   begin
@@ -130,18 +168,19 @@ begin
   Check.Checked := True; Check.Enabled := False;
   Put(Check, 12, 660, 240, 26);
 
-  PageBody := Page('線', FLinePage);
-  LabelAt('線の太さ（0で枠なし）', 12); Put(FStrokeWidthEdit, 12, 36, 240, 26);
+  PageBody := Panel(vscLine, '線', FLinePanel);
+  LabelAt('線の太さ', 12); Put(FStrokeWidthSlider, 12, 36, 240, 34);
   LabelAt('線種', 78); Put(FStrokeStyleCombo, 12, 102, 240, 28);
   LabelAt('線端形状', 144);
   for I := 0 to 2 do Put(FPathLineCapButtons[TVectArtLineCap(I)], 12 + I * 80, 168, 74, 30);
   LabelAt('接合形状', 210);
   for I := 0 to 2 do Put(FPathLineJoinButtons[TVectArtLineJoin(I)], 12 + I * 80, 234, 74, 30);
-  LabelAt('始点マーカー / サイズ', 278);
+  LabelAt('始点', 278);
   Put(FPathStartMarkerCombo, 12, 302, 170, 28); Put(FPathStartMarkerSizeEdit, 192, 302, 60, 28);
-  LabelAt('終点マーカー / サイズ', 344);
+  LabelAt('終点', 344);
   Put(FPathEndMarkerCombo, 12, 368, 170, 28); Put(FPathEndMarkerSizeEdit, 192, 368, 60, 28);
-  Put(FPathAntiAliasButton, 12, 414, 64, 30);
+  LabelAt('品質',390);
+  Put(FPathAntiAliasButton,12,414,64,30);
   LabelAt('枠と塗り潰し', 464);
   FAppearanceMode := TComboBox.Create(Self);
   FAppearanceMode.Parent := PageBody;
@@ -150,38 +189,35 @@ begin
   FAppearanceMode.OnChange := AppearanceChanged;
   Put(FAppearanceMode, 12, 488, 240, 28);
 
-  PageBody := Page('塗り色', FFillPage);
-  LabelAt('現在の色・塗り', 12);
+  PageBody := Panel(vscFill, '塗り色', FFillPanel);
+  LabelAt('色・塗り', 12);
   FFillSwatch := TVectArtColorSwatch.Create(Self);
   FFillSwatch.OnClick := OpenColor;
   Put(FFillSwatch, 12, 38, 240, 38);
   Put(FColorEdit, 12, 90, 240, 26); FColorEdit.Visible := False;
-  LabelAt('クリックして色・塗りを編集', 92);
-  LabelAt('閉じた図形の塗りに対応', 132);
-  LabelAt('変更は図形へ即時反映します。', 154);
 
-  PageBody := Page('線の色', FStrokePage);
+
+
+
+  PageBody := Panel(vscStroke, '線の色', FStrokePanel);
   LabelAt('現在の線色', 12);
   FStrokeSwatch := TVectArtColorSwatch.Create(Self);
   FStrokeSwatch.OnClick := OpenColor;
   Put(FStrokeSwatch, 12, 38, 240, 38);
   Put(FStrokeColorEdit, 12, 90, 240, 26); FStrokeColorEdit.Visible := False;
-  LabelAt('クリックして線色・塗りを編集', 92);
 
-  PageBody := Page('影', FShadowPage);
-  FShadowSettings := TVectArtShadowSettings.Create(Self);
+
+  PageBody := Panel(vscShadow, '影', FShadowPanel);
+  FShadowSettings := TVectArtShadowSettings.CreateForParent(Self, PageBody);
   FShadowSettings.Parent := PageBody; FShadowSettings.Align := alClient;
-  PageBody := Page('縁取り', FOutlinePage);
+  PageBody := Panel(vscOutline, '縁取り', FOutlinePanel);
   Draft := TVectArtSettingsDraft.CreateKind(Self, PageBody, 1); Draft.Parent := PageBody; Draft.Align := alClient;
-  PageBody := Page('効果', FEffectsPage);
+  PageBody := Panel(vscEffects, '効果', FEffectsPanel);
   Draft := TVectArtSettingsDraft.CreateKind(Self, PageBody, 2); Draft.Parent := PageBody; Draft.Align := alClient;
-  FLinePage.PageIndex := 0;
-  FStrokePage.PageIndex := 1;
-  FFillPage.PageIndex := 2;
-  FShadowPage.PageIndex := 3;
-  FInfoPage.PageIndex := 4;
-  FPages.ActivePage := FInfoPage;
+  FSections.ActiveSection := FInfoPanel;
   Resize;
+  ApplyVectArtSettingsFont(Self);
+  finally FBuildingSettings := False; end;
 end;
 
 procedure TVectArtObjectPropertiesControl.RefreshSettingsUI;
@@ -196,21 +232,22 @@ var
   Cap: TVectArtLineCap;
   Join: TVectArtLineJoin;
 begin
-  if FPages = nil then Exit;
+  if FSections = nil then Exit;
   FUpdating := True;
   try
     IsText := (FDocument <> nil) and (FDocument.SelectionCount = 1) and
       (FDocument[FDocument.SelectedIndex] is TVectArtTextLayer);
     Editable := (FDocument <> nil) and (FDocument.SelectionCount = 1) and not SelectedLayersHaveLock;
-    FTextPage.TabVisible := IsText;
-    FOutlinePage.TabVisible := IsText;
-    FEffectsPage.TabVisible := IsText;
-    FLinePage.TabVisible := not IsText;
-    FStrokePage.TabVisible := not IsText;
+    FTextPanel.Available := IsText;
+    FOutlinePanel.Available := IsText;
+    FEffectsPanel.Available := IsText;
+    FLinePanel.Available := not IsText;
+    FStrokePanel.Available := not IsText;
     FShadowSettings.Configure(FDocument,FEditHistory);
-    FShadowPage.TabVisible := not IsText;
-    if (FPages.ActivePage = nil) or not FPages.ActivePage.TabVisible then FPages.ActivePage := FInfoPage;
-    if IsText then FFillPage.Caption := '文字色' else FFillPage.Caption := '塗り色';
+    FShadowPanel.Available := not IsText;
+    if (FSections.ActiveSection = nil) or not FSections.ActiveSection.Available then FSections.ActiveSection := FInfoPanel;
+    if IsText then FFillPanel.Caption := '文字色' else FFillPanel.Caption := '塗り色';
+    FSections.RefreshSections;
     FTypeLabel.Caption := '種類：未選択';
     if (FDocument <> nil) and (FDocument.SelectionCount > 0) then
       FTypeLabel.Caption := '種類：' + FDocument[FDocument.SelectedIndex].ClassName.Replace('TVectArt', '').Replace('Layer', '');
@@ -444,17 +481,20 @@ end;
 procedure TVectArtObjectPropertiesControl.LayoutSettings(Sender: TObject);
 var I,J: Integer; Body: TWinControl; Control: TControl; LayoutChanged: Boolean;
 begin
-  if FPages = nil then Exit;
-  LayoutChanged := (Sender <> nil) or (FPages.Width <> ClientWidth) or
-    (FPages.Height <> Max(0,ClientHeight-34));
-  FPages.SetBounds(0, 34, ClientWidth, Max(0, ClientHeight - 34));
-  for I := 0 to FPages.PageCount-1 do
-    if FPages.Pages[I].ControlCount > 0 then
+  if FSections = nil then Exit;
+  LayoutChanged := (Sender <> nil) or (FSections.Width <> ClientWidth) or
+    (FSections.Height <> Max(0,ClientHeight-34));
+  FSections.SetBounds(0, 34, ClientWidth, Max(0, ClientHeight - 34));
+  for I := 0 to FSections.SectionCount-1 do
+    if (FSections.Sections[I] <> nil) and (FSections.Sections[I].ControlCount > 0) then
     begin
-      Body := TWinControl(FPages.Pages[I].Controls[0]);
+      Body := FSections.Sections[I];
       for J := 0 to Body.ControlCount-1 do
       begin
         Control := Body.Controls[J];
+        if (Control.Tag>=260) and (Control.Tag<500) then
+          Control.SetBounds(108+(Control.Tag-260-12)*Max(96,Body.ClientWidth-120) div 240,
+            Control.Top,Max(24,Control.HelpContext*Max(96,Body.ClientWidth-120) div 240),Control.Height);
         if Control.Tag = 240 then Control.Width := Max(100,Body.ClientWidth-24);
         if Control.Tag = 242 then Control.Width := Max(40,Body.ClientWidth-Control.Left-12);
         if Control.Tag = 243 then Control.Width := Max(30,Body.ClientWidth div 2-56);
@@ -463,8 +503,8 @@ begin
         if Control.Tag = 245 then Control.SetBounds(Body.ClientWidth div 2+4,Control.Top,32,22);
       end;
     end;
-  // Color notifications do not change layout and must not erase every child.
-  if LayoutChanged and (FPages.ActivePage <> nil) and FPages.ActivePage.HandleAllocated then
-    RedrawWindow(FPages.ActivePage.Handle, nil, 0,
+  // 色の連続変更では配置が変わらないため、ここで全子の背景を繰り返し消去しない。
+  if LayoutChanged and (FSections.ActiveSection <> nil) and FSections.ActiveSection.HandleAllocated then
+    RedrawWindow(FSections.ActiveSection.Handle, nil, 0,
       RDW_INVALIDATE or RDW_ERASE or RDW_ALLCHILDREN);
 end;
