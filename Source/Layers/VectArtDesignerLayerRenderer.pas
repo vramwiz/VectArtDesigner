@@ -44,7 +44,7 @@ type
     FGroupThumbnailBuffer: TVectArtRenderBuffer;
     FGroupThumbnails: TObjectDictionary<TVectArtGroupId,
       TVectArtGroupThumbnailCacheEntry>;
-    FImageThumbnails: TObjectDictionary<TVectArtImageLayer,
+    FImageThumbnails: TObjectDictionary<TVectArtLayerId,
       TVectArtImageThumbnailCacheEntry>;
     FScrollOffset: Integer;
     FThumbnailBackground: TVectArtLayerThumbnailBackground;
@@ -152,7 +152,7 @@ begin
   FGroupThumbnails := TObjectDictionary<TVectArtGroupId,
     TVectArtGroupThumbnailCacheEntry>.Create([doOwnsValues]);
   FThumbnailBackground := vltbWhite;
-  FImageThumbnails := TObjectDictionary<TVectArtImageLayer,
+  FImageThumbnails := TObjectDictionary<TVectArtLayerId,
     TVectArtImageThumbnailCacheEntry>.Create([doOwnsValues]);
   FEntriesRelationRevision := -1;
   FThumbnailRevision := -1;
@@ -237,10 +237,10 @@ begin
   if (ImageLayer = nil) or (Length(ImageLayer.PngData) = 0) then
     Exit;
   Signature := ImageDataSignature(ImageLayer.PngData);
-  if FImageThumbnails.TryGetValue(ImageLayer, Entry) and
+  if FImageThumbnails.TryGetValue(ImageLayer.LayerId, Entry) and
     (Entry.Signature = Signature) then
     Exit(Entry.Image);
-  FImageThumbnails.Remove(ImageLayer);
+  FImageThumbnails.Remove(ImageLayer.LayerId);
   Entry := TVectArtImageThumbnailCacheEntry.Create;
   Entry.Image := TPngImage.Create;
   Entry.Signature := Signature;
@@ -250,7 +250,7 @@ begin
       Entry.Image.LoadFromStream(Stream);
       if (Entry.Image.Width <= 0) or (Entry.Image.Height <= 0) then
         Exit;
-      FImageThumbnails.Add(ImageLayer, Entry);
+      FImageThumbnails.Add(ImageLayer.LayerId, Entry);
       Result := Entry.Image;
       Entry := nil;
     except
@@ -1211,11 +1211,11 @@ end;
 
 procedure TVectArtLayerRenderer.SyncThumbnailCache;
 var
-  CachedLayer: TVectArtImageLayer;
+  CachedLayerId: TVectArtLayerId;
   CurrentLayer: TVectArtLayer;
   I: Integer;
   IsCurrent: Boolean;
-  Keys: TArray<TVectArtImageLayer>;
+  Keys: TArray<TVectArtLayerId>;
 begin
   if FDocument = nil then
   begin
@@ -1227,20 +1227,20 @@ begin
   if FThumbnailRevision = FDocument.Revision then
     Exit;
   Keys := FImageThumbnails.Keys.ToArray;
-  for CachedLayer in Keys do
+  for CachedLayerId in Keys do
   begin
     IsCurrent := False;
     for I := 1 to FDocument.LayerCount - 1 do
     begin
       CurrentLayer := FDocument[I];
-      if CurrentLayer = CachedLayer then
+      if CurrentLayer.LayerId = CachedLayerId then
       begin
         IsCurrent := True;
         Break;
       end;
     end;
     if not IsCurrent then
-      FImageThumbnails.Remove(CachedLayer);
+      FImageThumbnails.Remove(CachedLayerId);
   end;
   FThumbnailRevision := FDocument.Revision;
 end;

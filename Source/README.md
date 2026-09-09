@@ -11,9 +11,12 @@
 | Persistence | Document JSON、選択画像の埋込PNG変換（TextureImage） |
 | ObjectProperties/Color | 色選択UI、色見本、ペイントプレビュー |
 | Core/Commands/Appearance | 塗り・線・文字のペイントと枠／塗りの有効状態 |
-| Core/Commands/Transform | 選択全体の反転・回転 |
+| Core/Commands/Transform | 選択全体の整列・反転・回転 |
 | Core/Commands/Structure | 挿入・削除・積層順・グループ所属・表示切替 |
 | Core/Commands | 共通編集コマンドと一括挿入 |
+| Core/Transfer | レイヤー状態から挿入・削除用データへの共通転送 |
+| Editor/Clipboard | 選択オブジェクト＋透明PNGのコピー、内部形式優先の貼り付け |
+| Layers/Interaction | レイヤー一覧D&Dの挿入境界、順序計算、Undo／Redo |
 
 MIFの依存方向は公開変換APIからReader／Raster／Paint／Placementへ向ける。ReaderとPNG描画は公開変換APIへ依存しない。SVGの図形読込はPaintReaderへペイント解析を、書出しはPaintWriterへ定義生成を委譲する。XML属性・数値表記の共通処理はSvgPrimitivesへ置く。色ポップアップはTextureImageへ画像変換を委ね、ダイアログと適用通知を担当する。描画用シェーダーはUIや永続化へ依存しない。
 
@@ -24,6 +27,8 @@ MIFの依存方向は公開変換APIからReader／Raster／Paint／Placementへ
 Source内の各フォルダは最大6ユニット（今回の追加後も同じ）。大量のユニットが集中したフォルダはなく、現在の責務別分類を維持する。
 
 作成色はEditorStateのColor1／Color2だけで保持し、ToolPalette/CreationColorsが単色編集を担当する。オブジェクト設定から作成色を更新しない。Dockの親ウィンドウ確定後に色欄を生成する。
+
+テンプレ図形はToolPalette/TemplatePanelFrameを独立した左ドック枠とし、TemplatePickerを埋め込む。TemplatePickerは分類・枠／塗りモード・図形選択だけを担当し、専用色UIを持たない。一覧描画と配置結果はToolPalette下部と同じEditorState.Color1／Color2を参照する。
 
 
 Core/Appearance/ObjectAttributesは線・図形・文字の見た目のスナップショットとデータへの適用を担当する。
@@ -40,9 +45,10 @@ ObjectProperties/Pages/ShadowSettingsは編集UI、Core/Commands/Appearance/Shad
 影付きPNGの領域と、編集対象の本体領域は分離する。文字の影／装飾はこの図形向け機能へ暗黙に含めない。
 
 
-設定カテゴリの切替はObjectProperties/Pages/SettingsSectionsが担当する。PageControl／TabSheetを使用せず、
-アイコン帯と兄弟のスクロールパネルを持ち、選択対象の1枚だけを表示する。パネルの入力欄と編集コマンドは
-ObjectPropertiesControl側の担当を維持する。祖先のPaintで設定本文を全面描画しない。
+設定カテゴリの積み上げはObjectProperties/Pages/SettingsSectionsが担当する。PageControl／TabSheetや
+カテゴリ切替を使用せず、既存の設定パネルを1つの縦スクロール領域へalTopで並べる。利用可能なパネルを
+すべて同時表示し、見出しと1pxベベルを持つホストで区切る。パネルの入力欄と編集コマンドは
+ObjectPropertiesControl側の担当を維持する。
 
 - UI/VectArtDesignerSettingsFont.pas: 設定ページと色ポップアップの共通文字寸法・書体と、入れ子の欄への適用を担当する。
 
@@ -58,3 +64,8 @@ ObjectPropertiesControl側の担当を維持する。祖先のPaintで設定本�
 - Lib/VerticalScrollBar/VerticalScrollBarControl.pas: Windows標準スクロールバーに依存しない暗色の縦スクロールバー。範囲・ページ量・ホイール・キー・つまみ操作を担当する。
 - Layers/VectArtDesignerLayerRenderer.pas: 下端基準の行順を保ったスクロール量、全行の内容高、1行単位の移動量を担当する。
 - Layers/VectArtDesignerLayerList.pas: 表示範囲、スクロールバー同期、ホイール入力、スクロール後のクリック判定を担当する。グループ展開とDocument変更時は表示行数から範囲を再計算する。
+- Layers/Interaction/VectArtDesignerLayerDragDrop.pas: D&Dの編集可否、フラットグループ境界、移動後のLayerId順とUndo／Redoを担当する。LayerListはマウス捕捉、挿入線、自動スクロールだけを保持する。
+
+完成整理（2026-09-09）:
+- ClipboardとLayerDuplicationに重複していたRectangle／Line／Path／Imageのデータ取得と種類別削除をCore/Transferへ集約した。画像バイト列とPath頂点列は元レイヤーの寿命から分離する。
+- LayerListへ追加されたD&Dの順序構築と履歴コマンドをLayers/Interactionへ分離した。表示ControlはDocumentの並びを直接組み替えず、生成された1コマンドを実行する。

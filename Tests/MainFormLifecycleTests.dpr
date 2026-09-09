@@ -18,6 +18,7 @@ begin
     end;
   end;
 end;
+
 // 選択直後の画面を再描画で補修する前に取得し、欠けが隠れないよう比較する。
 procedure CheckSelectionPaint(Control: TWinControl);
 var BeforeImage,AfterImage: TBitmap; DC: HDC; X,Y,Differences: Integer; BeforeRow,AfterRow: PByte;
@@ -55,8 +56,7 @@ end;
 
 var
   Sections: TVectArtSettingsSections;
-  J, K, Cycle, VisibleCount, SelectedLayer: Integer;
-  IconBounds: TRect;
+  J, K, Cycle, VisibleCount, AvailableCount, SelectedLayer: Integer;
   F: TMainForm;
   R: TVectArtRectangleData;
   T: TVectArtTextData;
@@ -103,32 +103,33 @@ begin
             Sections := FindSections(Screen.Forms[FormIndex]);
             if Sections <> nil then Break;
           end;
-        if Sections = nil then raise Exception.Create('Settings tabs missing');
+        if Sections = nil then raise Exception.Create('Stacked settings page missing');
         for Cycle := 1 to 3 do
         begin
           SelectedLayer:=1+(Cycle mod 2);
           F.Document.SelectedIndex:=SelectedLayer; Application.ProcessMessages;
+          VisibleCount:=0; AvailableCount:=0;
           for J := 0 to Sections.SectionCount-1 do
-            if Sections.Sections[J].Available then
-            begin
-              IconBounds:=Sections.IconRect(Sections.Sections[J].Category);
-              Sections.Perform(WM_LBUTTONDOWN,MK_LBUTTON,
-                MakeLParam(IconBounds.CenterPoint.X,IconBounds.CenterPoint.Y));
-              Application.ProcessMessages;
-              if Sections.ActiveSection<>Sections.Sections[J] then raise Exception.Create('Icon selection failed');
-              VisibleCount:=0;
-              for K:=0 to Sections.SectionCount-1 do
-                if Sections.Sections[K].Visible then Inc(VisibleCount);
-              if VisibleCount<>1 then raise Exception.Create('Settings panels overlap');
-              F.Document.SetSelectedLayers([]); Application.ProcessMessages;
-              F.Document.SetSelectedLayers([SelectedLayer]); Application.ProcessMessages;
-              CheckSelectionPaint(Sections.ActiveSection);
-            end;
+          begin
+            if Sections.Sections[J].Available then Inc(AvailableCount);
+            if Sections.Sections[J].Visible then Inc(VisibleCount);
+          end;
+          if (AvailableCount=0) or (VisibleCount<>AvailableCount) then
+            raise Exception.Create('Available settings panels are not visible together');
+          F.Document.SetSelectedLayers([]); Application.ProcessMessages;
+          F.Document.SetSelectedLayers([SelectedLayer]); Application.ProcessMessages;
+          for K:=0 to Sections.SectionCount-1 do
+            if Sections.Sections[K].Visible then
+              CheckSelectionPaint(Sections.Sections[K]);
         end;
         F.Document.SelectedIndex:=1; Application.ProcessMessages;
         // 通常ページと同じ巡回後に、入れ子の影設定も実画面から取得する。
         for J := 0 to Sections.SectionCount-1 do
-          if Sections.Sections[J].Caption = '影' then Sections.ActiveSection := Sections.Sections[J];
+          if Sections.Sections[J].Caption = '影' then
+          begin
+            Sections.ActiveSection := Sections.Sections[J];
+            Sections.ScrollInView(Sections.Sections[J].Parent);
+          end;
         Sections.OnChange(Sections); Application.ProcessMessages;
         if I = 1 then
         begin
@@ -144,7 +145,11 @@ begin
           finally P.Free; B.Free; end;
         end;
         for J := 0 to Sections.SectionCount-1 do
-          if Sections.Sections[J].Caption = '線' then Sections.ActiveSection := Sections.Sections[J];
+          if Sections.Sections[J].Caption = '線' then
+          begin
+            Sections.ActiveSection := Sections.Sections[J];
+            Sections.ScrollInView(Sections.Sections[J].Parent);
+          end;
         Sections.OnChange(Sections);
         Application.ProcessMessages;
         if I = 1 then
@@ -163,7 +168,7 @@ begin
       finally F.Free; end;
       Application.ProcessMessages;
     end;
-    Writeln('PASS main form selection pixels, shape/text icon clicks, exclusive panels, resize and destruction (3 cycles)');
+    Writeln('PASS main form selection pixels, stacked shape/text panels, resize and destruction (3 cycles)');
   finally
     if HadLayout then TFile.WriteAllBytes(LayoutPath,SavedLayout)
     else if TFile.Exists(LayoutPath) then TFile.Delete(LayoutPath);

@@ -504,7 +504,10 @@ begin
       end;
     end;
   // 色の連続変更では配置が変わらないため、ここで全子の背景を繰り返し消去しない。
-  if LayoutChanged and (FSections.ActiveSection <> nil) and FSections.ActiveSection.HandleAllocated then
-    RedrawWindow(FSections.ActiveSection.Handle, nil, 0,
-      RDW_INVALIDATE or RDW_ERASE or RDW_ALLCHILDREN);
+  if LayoutChanged then
+    for I := 0 to FSections.SectionCount - 1 do
+      if (FSections.Sections[I] <> nil) and FSections.Sections[I].Visible and
+        FSections.Sections[I].HandleAllocated then
+        RedrawWindow(FSections.Sections[I].Handle, nil, 0,
+          RDW_INVALIDATE or RDW_ERASE or RDW_ALLCHILDREN);
 end;

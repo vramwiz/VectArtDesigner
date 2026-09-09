@@ -11,24 +11,44 @@ uses
 type
   TVectArtObjectContextMenu = class(TPopupMenu)
   private
+    FAlignItems: array[0..6] of TMenuItem;
+    FAlignMenu: TMenuItem;
+    FAttributePasteItems: array[0..5] of TMenuItem;
+    FAttributePasteMenu: TMenuItem;
+    FCopyItem: TMenuItem;
+    FCutItem: TMenuItem;
+    FDeleteItem: TMenuItem;
     FDocument: TVectArtDocument;
+    FDuplicateItem: TMenuItem;
     FEditHistory: TVectArtEditHistory;
     FFlipHorizontalItem: TMenuItem;
     FFlipVerticalItem: TMenuItem;
     FGroupItem: TMenuItem;
     FGroupMenu: TMenuItem;
     FHideItem: TMenuItem;
+    FMoveBackwardItem: TMenuItem;
+    FMoveForwardItem: TMenuItem;
+    FMoveToBackItem: TMenuItem;
+    FMoveToFrontItem: TMenuItem;
     FOnExecuted: TNotifyEvent;
+    FPasteItem: TMenuItem;
     FRotate180Item: TMenuItem;
     FRotateLeftItem: TMenuItem;
     FRotateRightItem: TMenuItem;
     FUngroupItem: TMenuItem;
+    procedure AlignClick(Sender: TObject);
+    procedure CopyClick(Sender: TObject);
+    procedure CutClick(Sender: TObject);
+    procedure DeleteClick(Sender: TObject);
+    procedure DuplicateClick(Sender: TObject);
     procedure FlipHorizontalClick(Sender: TObject);
     procedure FlipVerticalClick(Sender: TObject);
     procedure GroupClick(Sender: TObject);
     procedure HideClick(Sender: TObject);
     procedure MenuPopup(Sender: TObject);
+    procedure PasteClick(Sender: TObject);
     procedure RotateClick(Sender: TObject);
+    procedure StackClick(Sender: TObject);
     procedure UngroupClick(Sender: TObject);
     procedure NotifyExecuted;
   public
@@ -43,18 +63,72 @@ type
 implementation
 
 uses
+  Winapi.Windows, VectArtDesignerClipboardOperations,
+  VectArtDesignerLayerAlignmentOperations,
   VectArtDesignerLayerFlipOperations,
   VectArtDesignerLayerGroupOperations,
+  VectArtDesignerLayerOperations,
   VectArtDesignerLayerRotationOperations,
   VectArtDesignerLayerVisibilityOperations;
 
 constructor TVectArtObjectContextMenu.Create(AOwner: TComponent);
+const
+  ALIGNMENT_CAPTIONS: array[0..6] of string = ('左揃え(&L)',
+    '左右中央揃え(&H)', '右揃え(&R)', '上揃え(&T)',
+    '上下中央揃え(&V)', '下揃え(&B)', '中央揃え(&C)');
+  ATTRIBUTE_PASTE_CAPTIONS: array[0..5] of string = ('色(&C)',
+    'サイズ(&S)', '文字(&T)', 'フォント名(&F)', '縁取り(&O)', '効果(&E)');
 var
+  AttributeIndex: Integer;
   FlipMenu: TMenuItem;
+  I: Integer;
   RotationMenu: TMenuItem;
+  StackMenu: TMenuItem;
 begin
   inherited Create(AOwner);
   OnPopup := MenuPopup;
+
+  FCutItem := TMenuItem.Create(Self);
+  FCutItem.Caption := '切り取り(&T)';
+  FCutItem.ShortCut := ShortCut(Ord('X'), [ssCtrl]);
+  FCutItem.OnClick := CutClick;
+  Items.Add(FCutItem);
+  FCopyItem := TMenuItem.Create(Self);
+  FCopyItem.Caption := 'コピー(&C)';
+  FCopyItem.ShortCut := ShortCut(Ord('C'), [ssCtrl]);
+  FCopyItem.OnClick := CopyClick;
+  Items.Add(FCopyItem);
+  FPasteItem := TMenuItem.Create(Self);
+  FPasteItem.Caption := '貼り付け(&P)';
+  FPasteItem.ShortCut := ShortCut(Ord('V'), [ssCtrl]);
+  FPasteItem.OnClick := PasteClick;
+  Items.Add(FPasteItem);
+  FAttributePasteMenu := TMenuItem.Create(Self);
+  FAttributePasteMenu.Caption := 'オブジェクト属性の貼り付け(&B)';
+  Items.Add(FAttributePasteMenu);
+  for AttributeIndex := Low(FAttributePasteItems) to
+    High(FAttributePasteItems) do
+  begin
+    if AttributeIndex = 2 then
+      FAttributePasteMenu.Add(NewLine);
+    FAttributePasteItems[AttributeIndex] := TMenuItem.Create(Self);
+    FAttributePasteItems[AttributeIndex].Caption :=
+      ATTRIBUTE_PASTE_CAPTIONS[AttributeIndex];
+    // 選択的な属性適用処理を追加するまで入口だけを表示する。
+    FAttributePasteItems[AttributeIndex].Enabled := False;
+    FAttributePasteMenu.Add(FAttributePasteItems[AttributeIndex]);
+  end;
+  FDeleteItem := TMenuItem.Create(Self);
+  FDeleteItem.Caption := '削除(&D)';
+  FDeleteItem.ShortCut := ShortCut(VK_DELETE, []);
+  FDeleteItem.OnClick := DeleteClick;
+  Items.Add(FDeleteItem);
+  FDuplicateItem := TMenuItem.Create(Self);
+  FDuplicateItem.Caption := '複製(&L)';
+  FDuplicateItem.ShortCut := ShortCut(Ord('D'), [ssCtrl]);
+  FDuplicateItem.OnClick := DuplicateClick;
+  Items.Add(FDuplicateItem);
+  Items.Add(NewLine);
 
   FHideItem := TMenuItem.Create(Self);
   FHideItem.Caption := '非表示(&H)';
@@ -74,6 +148,30 @@ begin
   FUngroupItem.ShortCut := ShortCut(Ord('G'), [ssCtrl, ssShift]);
   FUngroupItem.OnClick := UngroupClick;
   FGroupMenu.Add(FUngroupItem);
+
+  StackMenu := TMenuItem.Create(Self);
+  StackMenu.Caption := '重なり(&A)';
+  Items.Add(StackMenu);
+  FMoveToFrontItem := TMenuItem.Create(Self);
+  FMoveToFrontItem.Caption := '最前面に移動(&T)';
+  FMoveToFrontItem.Tag := Ord(vlaMoveToFront);
+  FMoveToFrontItem.OnClick := StackClick;
+  StackMenu.Add(FMoveToFrontItem);
+  FMoveToBackItem := TMenuItem.Create(Self);
+  FMoveToBackItem.Caption := '最背面に移動(&B)';
+  FMoveToBackItem.Tag := Ord(vlaMoveToBack);
+  FMoveToBackItem.OnClick := StackClick;
+  StackMenu.Add(FMoveToBackItem);
+  FMoveForwardItem := TMenuItem.Create(Self);
+  FMoveForwardItem.Caption := '前面に移動(&U)';
+  FMoveForwardItem.Tag := Ord(vlaMoveForward);
+  FMoveForwardItem.OnClick := StackClick;
+  StackMenu.Add(FMoveForwardItem);
+  FMoveBackwardItem := TMenuItem.Create(Self);
+  FMoveBackwardItem.Caption := '背面に移動(&D)';
+  FMoveBackwardItem.Tag := Ord(vlaMoveBackward);
+  FMoveBackwardItem.OnClick := StackClick;
+  StackMenu.Add(FMoveBackwardItem);
 
   FlipMenu := TMenuItem.Create(Self);
   FlipMenu.Caption := '反転(&F)';
@@ -105,6 +203,58 @@ begin
   FRotate180Item.Tag := 180;
   FRotate180Item.OnClick := RotateClick;
   RotationMenu.Add(FRotate180Item);
+
+  FAlignMenu := TMenuItem.Create(Self);
+  FAlignMenu.Caption := '整列(&I)';
+  Items.Add(FAlignMenu);
+  for I := Low(FAlignItems) to High(FAlignItems) do
+  begin
+    FAlignItems[I] := TMenuItem.Create(Self);
+    FAlignItems[I].Caption := ALIGNMENT_CAPTIONS[I];
+    FAlignItems[I].Tag := I;
+    FAlignItems[I].OnClick := AlignClick;
+    FAlignMenu.Add(FAlignItems[I]);
+  end;
+end;
+
+procedure TVectArtObjectContextMenu.AlignClick(Sender: TObject);
+begin
+  if Sender is TMenuItem then
+    AlignVectArtSelection(FDocument, FEditHistory,
+      TVectArtAlignment(TMenuItem(Sender).Tag));
+  NotifyExecuted;
+end;
+
+procedure TVectArtObjectContextMenu.CopyClick(Sender: TObject);
+begin
+  CopyVectArtSelectionToClipboard(FDocument);
+end;
+
+procedure TVectArtObjectContextMenu.CutClick(Sender: TObject);
+begin
+  CutVectArtSelectionToClipboard(FDocument, FEditHistory);
+  NotifyExecuted;
+end;
+
+procedure TVectArtObjectContextMenu.DeleteClick(Sender: TObject);
+begin
+  DeleteVectArtSelection(FDocument, FEditHistory);
+  NotifyExecuted;
+end;
+
+procedure TVectArtObjectContextMenu.DuplicateClick(Sender: TObject);
+var
+  Operations: TVectArtLayerOperations;
+begin
+  Operations := TVectArtLayerOperations.Create;
+  try
+    Operations.Document := FDocument;
+    Operations.EditHistory := FEditHistory;
+    Operations.Execute(vlaDuplicate);
+  finally
+    Operations.Free;
+  end;
+  NotifyExecuted;
 end;
 
 procedure TVectArtObjectContextMenu.FlipHorizontalClick(Sender: TObject);
@@ -139,7 +289,15 @@ end;
 procedure TVectArtObjectContextMenu.RefreshState;
 var
   Enabled: Boolean;
+  I: Integer;
+  Operations: TVectArtLayerOperations;
 begin
+  FCopyItem.Enabled := CanCopyVectArtSelection(FDocument);
+  FCutItem.Enabled := CanCutVectArtSelection(FDocument);
+  FDeleteItem.Enabled := FCutItem.Enabled;
+  FPasteItem.Enabled := CanPasteVectArtClipboard;
+  FAttributePasteMenu.Enabled := (FDocument <> nil) and
+    (FDocument.SelectionCount > 0);
   FHideItem.Enabled := (FDocument <> nil) and
     (FDocument.SelectionCount > 0);
   FHideItem.Checked := IsVectArtSelectionHidden(FDocument);
@@ -153,6 +311,28 @@ begin
   FRotateLeftItem.Enabled := Enabled;
   FRotateRightItem.Enabled := Enabled;
   FRotate180Item.Enabled := Enabled;
+  Enabled := CanAlignVectArtSelection(FDocument);
+  FAlignMenu.Enabled := Enabled;
+  for I := Low(FAlignItems) to High(FAlignItems) do
+    FAlignItems[I].Enabled := Enabled;
+  Operations := TVectArtLayerOperations.Create;
+  try
+    Operations.Document := FDocument;
+    Operations.EditHistory := FEditHistory;
+    FDuplicateItem.Enabled := Operations.CanExecute(vlaDuplicate);
+    FMoveToFrontItem.Enabled := Operations.CanExecute(vlaMoveToFront);
+    FMoveToBackItem.Enabled := Operations.CanExecute(vlaMoveToBack);
+    FMoveForwardItem.Enabled := Operations.CanExecute(vlaMoveForward);
+    FMoveBackwardItem.Enabled := Operations.CanExecute(vlaMoveBackward);
+  finally
+    Operations.Free;
+  end;
+end;
+
+procedure TVectArtObjectContextMenu.PasteClick(Sender: TObject);
+begin
+  PasteVectArtClipboard(FDocument, FEditHistory);
+  NotifyExecuted;
 end;
 
 procedure TVectArtObjectContextMenu.NotifyExecuted;
@@ -166,6 +346,23 @@ begin
   if Sender is TMenuItem then
     RotateVectArtSelection(FDocument, FEditHistory,
       TMenuItem(Sender).Tag);
+  NotifyExecuted;
+end;
+
+procedure TVectArtObjectContextMenu.StackClick(Sender: TObject);
+var
+  Operations: TVectArtLayerOperations;
+begin
+  if not (Sender is TMenuItem) then
+    Exit;
+  Operations := TVectArtLayerOperations.Create;
+  try
+    Operations.Document := FDocument;
+    Operations.EditHistory := FEditHistory;
+    Operations.Execute(TVectArtLayerAction(TMenuItem(Sender).Tag));
+  finally
+    Operations.Free;
+  end;
   NotifyExecuted;
 end;
 

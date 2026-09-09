@@ -103,6 +103,7 @@ type
       write SetEditHistory;
     property EditorState: TVectArtEditorState read FEditorState
       write SetEditorState;
+    property TextEditing: Boolean read FTextEditing;
     property Zoom: Single read FZoom;
   end;
 

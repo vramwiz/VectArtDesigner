@@ -9,7 +9,7 @@ uses
 
 type
   TVectArtLayerAction = (vlaAdd, vlaDuplicate, vlaDelete,
-    vlaMoveForward, vlaMoveBackward);
+    vlaMoveForward, vlaMoveBackward, vlaMoveToFront, vlaMoveToBack);
 
   TVectArtLayerOperations = class
   private
@@ -20,6 +20,7 @@ type
     function CanMove(Delta: Integer): Boolean;
     procedure DeleteSelectedLayers;
     procedure MoveSelectedLayers(Delta: Integer);
+    procedure MoveSelectedLayersToEdge(Delta: Integer);
     function NextRectangleName: string;
     function SelectedLayersEditable: Boolean;
   public
@@ -125,6 +126,10 @@ begin
     vlaMoveForward:
       Result := SelectedLayersEditable and CanMove(1);
     vlaMoveBackward:
+      Result := SelectedLayersEditable and CanMove(-1);
+    vlaMoveToFront:
+      Result := SelectedLayersEditable and CanMove(1);
+    vlaMoveToBack:
       Result := SelectedLayersEditable and CanMove(-1);
   end;
 end;
@@ -240,6 +245,8 @@ begin
     vlaDelete: DeleteSelectedLayers;
     vlaMoveForward: MoveSelectedLayers(1);
     vlaMoveBackward: MoveSelectedLayers(-1);
+    vlaMoveToFront: MoveSelectedLayersToEdge(1);
+    vlaMoveToBack: MoveSelectedLayersToEdge(-1);
   end;
 end;
 
@@ -281,6 +288,51 @@ begin
             BeforeSelection, AfterSelection));
       end;
   end;
+  if (Command <> nil) and (Command.Count > 0) then
+    FEditHistory.AddApplied(Command)
+  else
+    Command.Free;
+end;
+
+procedure TVectArtLayerOperations.MoveSelectedLayersToEdge(Delta: Integer);
+var
+  AfterSelection: TArray<Integer>;
+  BeforeSelection: TArray<Integer>;
+  Command: TVectArtCompoundCommand;
+  I: Integer;
+begin
+  Command := nil;
+  if FEditHistory <> nil then
+    Command := TVectArtCompoundCommand.Create;
+  while CanMove(Delta) do
+    if Delta > 0 then
+    begin
+      for I := FDocument.LayerCount - 2 downto 1 do
+        if FDocument.IsLayerSelected(I) and
+          not FDocument.IsLayerSelected(I + 1) then
+        begin
+          BeforeSelection := FDocument.GetSelectedLayerIndices;
+          FDocument.MoveLayer(I, I + 1);
+          AfterSelection := FDocument.GetSelectedLayerIndices;
+          if Command <> nil then
+            Command.Add(TVectArtMoveLayerCommand.Create(FDocument, I, I + 1,
+              BeforeSelection, AfterSelection));
+        end;
+    end
+    else
+    begin
+      for I := 2 to FDocument.LayerCount - 1 do
+        if FDocument.IsLayerSelected(I) and
+          not FDocument.IsLayerSelected(I - 1) then
+        begin
+          BeforeSelection := FDocument.GetSelectedLayerIndices;
+          FDocument.MoveLayer(I, I - 1);
+          AfterSelection := FDocument.GetSelectedLayerIndices;
+          if Command <> nil then
+            Command.Add(TVectArtMoveLayerCommand.Create(FDocument, I, I - 1,
+              BeforeSelection, AfterSelection));
+        end;
+    end;
   if (Command <> nil) and (Command.Count > 0) then
     FEditHistory.AddApplied(Command)
   else

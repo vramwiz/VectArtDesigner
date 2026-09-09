@@ -1557,10 +1557,13 @@ begin
   RefreshSettingsUI;
   // 選択変更では配置が同じでも子の背景が消去されるため、入力欄とラベルも無効化する。
   // 値・有効状態の更新がすべて終わってから要求し、通常の描画処理にまとめて任せる。
-  if (FSections <> nil) and (FSections.ActiveSection <> nil) and
-    FSections.ActiveSection.HandleAllocated then
-    RedrawWindow(FSections.ActiveSection.Handle, nil, 0,
-      RDW_INVALIDATE or RDW_ERASE or RDW_ALLCHILDREN);
+  if FSections <> nil then
+    for I := 0 to FSections.SectionCount - 1 do
+      if (FSections.Sections[I] <> nil) and
+        FSections.Sections[I].Visible and
+        FSections.Sections[I].HandleAllocated then
+        RedrawWindow(FSections.Sections[I].Handle, nil, 0,
+          RDW_INVALIDATE or RDW_ERASE or RDW_ALLCHILDREN);
   Invalidate;
 end;
 

@@ -1,4 +1,4 @@
-﻿// 同種の選択Rectangleまたは画像一式の複製、挿入、選択更新を担当する。
+﻿// 選択された全対応レイヤーの複製、挿入、選択更新を担当する。
 unit VectArtDesignerLayerDuplication;
 
 interface
@@ -14,40 +14,54 @@ implementation
 
 uses
   System.Classes, System.Generics.Collections, System.SysUtils, System.Types,
-  VectArtDesignerLayerBatchCommands;
+  VectArtDesignerEditCommands, VectArtDesignerLayerDataTransfer;
 
 const
   DUPLICATE_OFFSET = 24;
 
+type
+  TVectArtDuplicateItem = record
+    Kind: TVectArtLayerKind;
+    RectangleData: TVectArtRectangleData;
+    LineData: TVectArtLineData;
+    PathData: TVectArtPathData;
+    ImageData: TVectArtImageData;
+    TextData: TVectArtTextData;
+  end;
+
+  TVectArtDuplicateCommand = class(TVectArtEditCommand)
+  private
+    FAfterSelection: TArray<Integer>;
+    FBeforeSelection: TArray<Integer>;
+    FDocument: TVectArtDocument;
+    FItems: TArray<TVectArtDuplicateItem>;
+    FStartIndex: Integer;
+  public
+    constructor Create(ADocument: TVectArtDocument; AStartIndex: Integer;
+      const AItems: TArray<TVectArtDuplicateItem>; const ABeforeSelection,
+      AAfterSelection: TArray<Integer>);
+    procedure Execute; override;
+    procedure Undo; override;
+  end;
+
 function CanDuplicateSelectedLayers(ADocument: TVectArtDocument): Boolean;
 var
-  HasImages: Boolean;
-  HasRectangles: Boolean;
-  HasTexts: Boolean;
   I: Integer;
 begin
   Result := (ADocument <> nil) and (ADocument.SelectionCount > 0);
   if not Result then
     Exit;
-  HasImages := False;
-  HasRectangles := False;
-  HasTexts := False;
   for I := 0 to ADocument.LayerCount - 1 do
-    if ADocument.IsLayerSelected(I) and
-      ((I = 0) or ADocument[I].Locked) then
-      Exit(False)
-    else if ADocument.IsLayerSelected(I) then
+    if ADocument.IsLayerSelected(I) then
     begin
-      if ADocument[I] is TVectArtRectangleLayer then
-        HasRectangles := True
-      else if ADocument[I] is TVectArtImageLayer then
-        HasImages := True
-      else if ADocument[I] is TVectArtTextLayer then
-        HasTexts := True
+      if (I = 0) or ADocument[I].Locked then
+        Exit(False);
+      case ADocument[I].Kind of
+        vlkRectangle, vlkLine, vlkPath, vlkImage, vlkText:
+          ;
       else
         Exit(False);
-      if Ord(HasRectangles) + Ord(HasImages) + Ord(HasTexts) > 1 then
-        Exit(False);
+      end;
     end;
 end;
 
@@ -65,52 +79,109 @@ begin
   UsedNames.Add(Result);
 end;
 
+constructor TVectArtDuplicateCommand.Create(ADocument: TVectArtDocument;
+  AStartIndex: Integer; const AItems: TArray<TVectArtDuplicateItem>;
+  const ABeforeSelection, AAfterSelection: TArray<Integer>);
+var
+  I: Integer;
+begin
+  inherited Create;
+  FDocument := ADocument;
+  FStartIndex := AStartIndex;
+  FItems := Copy(AItems);
+  // Undo履歴を元レイヤーの寿命から独立させる必要がある配列だけを複製する。
+  for I := 0 to High(FItems) do
+  begin
+    FItems[I].PathData.Points := Copy(AItems[I].PathData.Points);
+    FItems[I].ImageData.PngData := Copy(AItems[I].ImageData.PngData);
+  end;
+  FBeforeSelection := Copy(ABeforeSelection);
+  FAfterSelection := Copy(AAfterSelection);
+end;
+
+procedure TVectArtDuplicateCommand.Execute;
+var
+  I: Integer;
+begin
+  if FDocument = nil then
+    Exit;
+  FDocument.BeginUpdate;
+  try
+    for I := 0 to High(FItems) do
+      case FItems[I].Kind of
+        vlkRectangle:
+          FDocument.InsertRectangle(FStartIndex + I,
+            FItems[I].RectangleData);
+        vlkLine:
+          FDocument.InsertLine(FStartIndex + I, FItems[I].LineData);
+        vlkPath:
+          FDocument.InsertPath(FStartIndex + I, FItems[I].PathData);
+        vlkImage:
+          FDocument.InsertImage(FStartIndex + I, FItems[I].ImageData);
+        vlkText:
+          FDocument.InsertText(FStartIndex + I, FItems[I].TextData);
+      end;
+    FDocument.SetSelectedLayers(FAfterSelection);
+  finally
+    FDocument.EndUpdate;
+  end;
+end;
+
+procedure TVectArtDuplicateCommand.Undo;
+var
+  I: Integer;
+  ImageData: TVectArtImageData;
+  LineData: TVectArtLineData;
+  PathData: TVectArtPathData;
+  RectangleData: TVectArtRectangleData;
+  TextData: TVectArtTextData;
+begin
+  if FDocument = nil then
+    Exit;
+  FDocument.BeginUpdate;
+  try
+    for I := High(FItems) downto 0 do
+      case FItems[I].Kind of
+        vlkRectangle:
+          FDocument.RemoveRectangle(FStartIndex + I, RectangleData);
+        vlkLine:
+          FDocument.RemoveLine(FStartIndex + I, LineData);
+        vlkPath:
+          FDocument.RemovePath(FStartIndex + I, PathData);
+        vlkImage:
+          FDocument.RemoveImage(FStartIndex + I, ImageData);
+        vlkText:
+          FDocument.RemoveText(FStartIndex + I, TextData);
+      end;
+    FDocument.SetSelectedLayers(FBeforeSelection);
+  finally
+    FDocument.EndUpdate;
+  end;
+end;
+
 procedure DuplicateSelectedLayers(ADocument: TVectArtDocument;
   AEditHistory: TVectArtEditHistory);
 var
   AfterSelection: TArray<Integer>;
   BeforeSelection: TArray<Integer>;
-  Data: TArray<TVectArtRectangleData>;
-  DataList: TList<TVectArtRectangleData>;
+  Command: TVectArtDuplicateCommand;
+  GroupMap: TDictionary<TVectArtGroupId, TVectArtGroupId>;
   I: Integer;
-  DuplicateGroupId: TVectArtGroupId;
-  ImageData: TArray<TVectArtImageData>;
-  ImageDataList: TList<TVectArtImageData>;
-  ImageLayer: TVectArtImageLayer;
-  ImageValue: TVectArtImageData;
-  Index: Integer;
+  Item: TVectArtDuplicateItem;
+  Items: TList<TVectArtDuplicateItem>;
   J: Integer;
-  NewIndices: TList<Integer>;
-  RectangleData: TVectArtRectangleData;
-  RectangleLayer: TVectArtRectangleLayer;
+  Layer: TVectArtLayer;
+  NewGroupId: TVectArtGroupId;
+  OldGroupId: TVectArtGroupId;
   StartIndex: Integer;
-  TextData: TArray<TVectArtTextData>;
-  TextDataList: TList<TVectArtTextData>;
-  TextLayer: TVectArtTextLayer;
-  TextValue: TVectArtTextData;
   UsedNames: TStringList;
 begin
   if not CanDuplicateSelectedLayers(ADocument) then
     Exit;
   BeforeSelection := ADocument.GetSelectedLayerIndices;
-  DuplicateGroupId := VECTART_NO_GROUP;
-  if (Length(BeforeSelection) > 1) and
-    (ADocument[BeforeSelection[0]].GroupId <> VECTART_NO_GROUP) then
-  begin
-    DuplicateGroupId := ADocument[BeforeSelection[0]].GroupId;
-    for I := 1 to High(BeforeSelection) do
-      if ADocument[BeforeSelection[I]].GroupId <> DuplicateGroupId then
-      begin
-        DuplicateGroupId := VECTART_NO_GROUP;
-        Break;
-      end;
-    if DuplicateGroupId <> VECTART_NO_GROUP then
-      DuplicateGroupId := ADocument.AllocateGroupId;
-  end;
-  DataList := TList<TVectArtRectangleData>.Create;
-  ImageDataList := TList<TVectArtImageData>.Create;
-  TextDataList := TList<TVectArtTextData>.Create;
-  NewIndices := TList<Integer>.Create;
+  StartIndex := ADocument.LayerCount;
+  Items := TList<TVectArtDuplicateItem>.Create;
+  GroupMap := TDictionary<TVectArtGroupId, TVectArtGroupId>.Create;
   UsedNames := TStringList.Create;
   try
     UsedNames.CaseSensitive := False;
@@ -119,105 +190,92 @@ begin
     for I := 1 to ADocument.LayerCount - 1 do
       if ADocument.IsLayerSelected(I) then
       begin
-        if ADocument[I] is TVectArtImageLayer then
+        Layer := ADocument[I];
+        Item := Default(TVectArtDuplicateItem);
+        Item.Kind := Layer.Kind;
+        OldGroupId := Layer.GroupId;
+        NewGroupId := VECTART_NO_GROUP;
+        if OldGroupId <> VECTART_NO_GROUP then
         begin
-          ImageLayer := TVectArtImageLayer(ADocument[I]);
-          ImageValue := Default(TVectArtImageData);
-          ImageValue.GroupId := DuplicateGroupId;
-          ImageValue.Name := CopyName(ImageLayer.Name, UsedNames);
-          ImageValue.Locked := False;
-          ImageValue.Opacity := ImageLayer.Opacity;
-          ImageValue.PngData := Copy(ImageLayer.PngData);
-          ImageValue.SourceFileName := ImageLayer.SourceFileName;
-          ImageValue.SourceKind := ImageLayer.SourceKind;
-          ImageValue.Visible := ImageLayer.Visible;
-          for J := 0 to High(ImageLayer.Points) do
-            ImageValue.Points[J] :=
-              TPointF.Create(ImageLayer.Points[J].X + DUPLICATE_OFFSET,
-                ImageLayer.Points[J].Y + DUPLICATE_OFFSET);
-          ImageDataList.Add(ImageValue);
-        end
-        else if ADocument[I] is TVectArtTextLayer then
-        begin
-          TextLayer := TVectArtTextLayer(ADocument[I]);
-          TextValue := CaptureVectArtTextData(TextLayer);
-          TextValue.GroupId := DuplicateGroupId;
-          TextValue.Name := CopyName(TextLayer.Name, UsedNames);
-          TextValue.Locked := False;
-          TextValue.Bounds.Offset(DUPLICATE_OFFSET, DUPLICATE_OFFSET);
-          TextDataList.Add(TextValue);
-        end
-        else
-        begin
-          RectangleLayer := TVectArtRectangleLayer(ADocument[I]);
-          RectangleData := Default(TVectArtRectangleData);
-          RectangleData.GroupId := DuplicateGroupId;
-          RectangleData.Bounds := RectangleLayer.Bounds;
-          RectangleData.Bounds.Offset(DUPLICATE_OFFSET, DUPLICATE_OFFSET);
-          RectangleData.FillStyle := RectangleLayer.FillStyle;
-          RectangleData.FillColor := RectangleLayer.FillColor;
-          RectangleData.Filled := RectangleLayer.Filled;
-          RectangleData.Locked := False;
-          RectangleData.Name := CopyName(RectangleLayer.Name, UsedNames);
-          RectangleData.Opacity := RectangleLayer.Opacity;
-          RectangleData.RotationDegrees := RectangleLayer.RotationDegrees;
-          RectangleData.Shape := RectangleLayer.Shape;
-          RectangleData.Shadow := RectangleLayer.Shadow;
-          RectangleData.StrokePaint := RectangleLayer.StrokePaint;
-          RectangleData.StrokeColor := RectangleLayer.StrokeColor;
-          RectangleData.StrokeStyle := RectangleLayer.StrokeStyle;
-          RectangleData.StrokeWidth := RectangleLayer.StrokeWidth;
-          RectangleData.Visible := RectangleLayer.Visible;
-          DataList.Add(RectangleData);
+          if not GroupMap.TryGetValue(OldGroupId, NewGroupId) then
+          begin
+            NewGroupId := ADocument.AllocateGroupId;
+            GroupMap.Add(OldGroupId, NewGroupId);
+          end;
         end;
+        case Item.Kind of
+          vlkRectangle:
+            begin
+              Item.RectangleData := CaptureVectArtRectangleData(
+                TVectArtRectangleLayer(Layer));
+              Item.RectangleData.Bounds.Offset(DUPLICATE_OFFSET,
+                DUPLICATE_OFFSET);
+              Item.RectangleData.GroupId := NewGroupId;
+              Item.RectangleData.Locked := False;
+              Item.RectangleData.Name := CopyName(Layer.Name, UsedNames);
+            end;
+          vlkLine:
+            begin
+              Item.LineData := CaptureVectArtLineData(
+                TVectArtLineLayer(Layer));
+              Item.LineData.StartPoint.Offset(DUPLICATE_OFFSET,
+                DUPLICATE_OFFSET);
+              Item.LineData.EndPoint.Offset(DUPLICATE_OFFSET,
+                DUPLICATE_OFFSET);
+              Item.LineData.GroupId := NewGroupId;
+              Item.LineData.Locked := False;
+              Item.LineData.Name := CopyName(Layer.Name, UsedNames);
+            end;
+          vlkPath:
+            begin
+              Item.PathData := CaptureVectArtPathData(
+                TVectArtPathLayer(Layer));
+              for J := 0 to High(Item.PathData.Points) do
+                Item.PathData.Points[J].Offset(DUPLICATE_OFFSET,
+                  DUPLICATE_OFFSET);
+              Item.PathData.GroupId := NewGroupId;
+              Item.PathData.Locked := False;
+              Item.PathData.Name := CopyName(Layer.Name, UsedNames);
+            end;
+          vlkImage:
+            begin
+              Item.ImageData := CaptureVectArtImageData(
+                TVectArtImageLayer(Layer));
+              for J := 0 to High(Item.ImageData.Points) do
+                Item.ImageData.Points[J].Offset(DUPLICATE_OFFSET,
+                  DUPLICATE_OFFSET);
+              Item.ImageData.GroupId := NewGroupId;
+              Item.ImageData.Locked := False;
+              Item.ImageData.Name := CopyName(Layer.Name, UsedNames);
+            end;
+          vlkText:
+            begin
+              Item.TextData := CaptureVectArtTextData(
+                TVectArtTextLayer(Layer));
+              Item.TextData.Bounds.Offset(DUPLICATE_OFFSET,
+                DUPLICATE_OFFSET);
+              Item.TextData.GroupId := NewGroupId;
+              Item.TextData.Locked := False;
+              Item.TextData.Name := CopyName(Layer.Name, UsedNames);
+            end;
+        end;
+        Items.Add(Item);
       end;
 
-    StartIndex := ADocument.LayerCount;
-    if ImageDataList.Count > 0 then
-    begin
-      ImageData := ImageDataList.ToArray;
-      for I := 0 to High(ImageData) do
-      begin
-        Index := ADocument.InsertImage(ADocument.LayerCount, ImageData[I]);
-        NewIndices.Add(Index);
-      end;
-    end
-    else if TextDataList.Count > 0 then
-    begin
-      TextData := TextDataList.ToArray;
-      for I := 0 to High(TextData) do
-      begin
-        Index := ADocument.InsertText(ADocument.LayerCount, TextData[I]);
-        NewIndices.Add(Index);
-      end;
-    end
-    else
-    begin
-      Data := DataList.ToArray;
-      for I := 0 to High(Data) do
-      begin
-        Index := ADocument.InsertRectangle(ADocument.LayerCount, Data[I]);
-        NewIndices.Add(Index);
-      end;
-    end;
-    ADocument.SetSelectedLayers(NewIndices.ToArray);
-    AfterSelection := ADocument.GetSelectedLayerIndices;
+    SetLength(AfterSelection, Items.Count);
+    for I := 0 to High(AfterSelection) do
+      AfterSelection[I] := StartIndex + I;
+    Command := TVectArtDuplicateCommand.Create(ADocument, StartIndex,
+      Items.ToArray, BeforeSelection, AfterSelection);
+    Command.Execute;
     if AEditHistory <> nil then
-      if ImageDataList.Count > 0 then
-        AEditHistory.AddApplied(TVectArtInsertImagesCommand.Create(
-          ADocument, StartIndex, ImageData, BeforeSelection, AfterSelection))
-      else if TextDataList.Count > 0 then
-        AEditHistory.AddApplied(TVectArtInsertTextsCommand.Create(
-          ADocument, StartIndex, TextData, BeforeSelection, AfterSelection))
-      else
-        AEditHistory.AddApplied(TVectArtInsertRectanglesCommand.Create(
-          ADocument, StartIndex, Data, BeforeSelection, AfterSelection));
+      AEditHistory.AddApplied(Command)
+    else
+      Command.Free;
   finally
     UsedNames.Free;
-    NewIndices.Free;
-    TextDataList.Free;
-    ImageDataList.Free;
-    DataList.Free;
+    GroupMap.Free;
+    Items.Free;
   end;
 end;
 

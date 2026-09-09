@@ -176,6 +176,7 @@
         <DCCReference Include="Source\Persistence\Svg\Paint\VectArtDesignerSvgShadow.pas"/>
         <DCCReference Include="Source\ObjectProperties\Pages\VectArtDesignerSettingsSections.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerDocument.pas"/>
+        <DCCReference Include="Source\Core\Transfer\VectArtDesignerLayerDataTransfer.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerGeometry.pas"/>
         <DCCReference Include="Source\Rendering\VectArtDesignerRenderer.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerContext.pas"/>
@@ -183,6 +184,7 @@
         <DCCReference Include="Source\Core\Commands\VectArtDesignerEditCommands.pas"/>
         <DCCReference Include="Source\Core\Commands\Structure\VectArtDesignerLayerStructureCommands.pas"/>
         <DCCReference Include="Source\Core\Commands\VectArtDesignerLayerBatchCommands.pas"/>
+        <DCCReference Include="Source\Core\Commands\Transform\VectArtDesignerLayerAlignmentOperations.pas"/>
         <DCCReference Include="Source\Core\Commands\Transform\VectArtDesignerLayerFlipOperations.pas"/>
         <DCCReference Include="Source\Core\Commands\Transform\VectArtDesignerLayerRotationOperations.pas"/>
         <DCCReference Include="Source\Core\Commands\Structure\VectArtDesignerLayerVisibilityOperations.pas"/>
@@ -193,6 +195,7 @@
         <DCCReference Include="Source\Persistence\Mif\VectArtDesignerMifDebugLog.pas"/>
         <DCCReference Include="Source\Persistence\Svg\VectArtDesignerSvgDocument.pas"/>
         <DCCReference Include="Source\Persistence\VectArtDesignerDocumentJson.pas"/>
+        <DCCReference Include="Source\Editor\Clipboard\VectArtDesignerClipboardOperations.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerCanvas.pas"/>
         <DCCReference Include="Source\Editor\Menus\VectArtDesignerObjectContextMenu.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerCanvasInteraction.pas"/>
@@ -205,6 +208,7 @@
         <DCCReference Include="Source\Editor\Geometry\VectArtDesignerSelectionGeometry.pas"/>
         <DCCReference Include="Source\Editor\Rendering\VectArtDesignerSelectionOverlay.pas"/>
         <DCCReference Include="Source\Layers\VectArtDesignerLayerList.pas"/>
+        <DCCReference Include="Source\Layers\Interaction\VectArtDesignerLayerDragDrop.pas"/>
         <DCCReference Include="Source\Layers\VectArtDesignerLayerRenderer.pas"/>
         <DCCReference Include="Source\Layers\VectArtDesignerLayerActions.pas"/>
         <DCCReference Include="Source\Layers\VectArtDesignerLayerOperations.pas"/>
@@ -215,6 +219,7 @@
         <DCCReference Include="Source\ObjectProperties\VectArtDesignerObjectPropertiesControl.pas"/>
         <DCCReference Include="Source\ObjectProperties\VectArtDesignerObjectPropertiesFrame.pas"/>
         <DCCReference Include="Source\ToolPalette\VectArtDesignerToolPaletteFrame.pas"/>
+        <DCCReference Include="Source\ToolPalette\VectArtDesignerTemplatePanelFrame.pas"/>
         <DCCReference Include="Source\ToolPalette\VectArtDesignerToolPalette.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerTextGeometry.pas"/>
         <DCCReference Include="Source\Core\Commands\Structure\VectArtDesignerLayerGroupOperations.pas"/>

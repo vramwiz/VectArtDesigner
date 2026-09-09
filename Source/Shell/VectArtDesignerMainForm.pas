@@ -17,7 +17,8 @@ uses
   VectArtDesignerEditActionsUI, VectArtDesignerFileActionsUI,
   VectArtDesignerMifContainer, VectArtDesignerMifDocument,
   VectArtDesignerObjectPropertiesFrame, VectArtDesignerToolFrames,
-  VectArtDesignerToolPaletteFrame, VectArtDesignerSvgDocument;
+  VectArtDesignerTemplatePanelFrame, VectArtDesignerToolPaletteFrame,
+  VectArtDesignerSvgDocument;
 
 type
   TMainForm = class(TForm)
@@ -49,8 +50,11 @@ type
     FLayerFrame: TLayerPanelFrame;
     FLineToolbar: TVectArtLineToolbarControl;
     FObjectPropertiesFrame: TObjectPropertiesFrame;
+    FDocumentRefreshPending: Boolean;
+    FDocumentRefreshTimer: TTimer;
     FSkiaAcquired: Boolean;
     FShortcuts: TShortcutAction;
+    FTemplateFrame: TTemplatePanelFrame;
     FToolPaletteFrame: TToolPaletteFrame;
     FMainMenu: TMainMenu;
     FViewMenu: TMenuItem;
@@ -59,6 +63,7 @@ type
     FLayoutEditMenuItem: TMenuItem;
     FLayerMenuItem: TMenuItem;
     FObjectPropertiesMenuItem: TMenuItem;
+    FTemplateMenuItem: TMenuItem;
     FToolPaletteMenuItem: TMenuItem;
     FMifContainer: TVectArtMifContainer;
     FMifHasEditableDocument: Boolean;
@@ -72,6 +77,7 @@ type
     procedure CreateStandardMenus;
     function CreateViewMenuItem(const Caption: string): TMenuItem;
     procedure DocumentChanged(Sender: TObject);
+    procedure DocumentRefreshTimer(Sender: TObject);
     procedure FinalizeSkiaRuntime;
     procedure HistoryChanged(Sender: TObject);
     procedure EditorStateChanged(Sender: TObject);
@@ -80,6 +86,7 @@ type
     procedure FileSaveRequest(Sender: TObject; const FileName: string);
     procedure FileSaveShortcut(Sender: TObject);
     procedure InitializeSkiaRuntime;
+    procedure RefreshDocumentPanels;
     procedure InitializeShortcuts;
     function CanUseToolShortcut: Boolean;
     function IsEditingSurfaceFocused: Boolean;
@@ -116,7 +123,8 @@ uses
   {$IFDEF DEBUG} VectArtDesignerMifDebugLog, {$ENDIF}
   TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
   VectArtDesignerCanvasSettingsDialog,
-  VectArtDesignerKeyboardMovement, VectArtDesignerLayerGroupOperations;
+  VectArtDesignerClipboardOperations, VectArtDesignerKeyboardMovement,
+  VectArtDesignerLayerGroupOperations;
 
 {$R *.dfm}
 
@@ -214,6 +222,10 @@ begin
   FEditorFrame := TEditorWorkspaceFrame.Create(Self);
   FEditorFrame.Context := FDesignerContext;
   AttachFrame(FEditorFrame, pnlEditorHost);
+  FDocumentRefreshTimer := TTimer.Create(Self);
+  FDocumentRefreshTimer.Enabled := False;
+  FDocumentRefreshTimer.Interval := 200;
+  FDocumentRefreshTimer.OnTimer := DocumentRefreshTimer;
 
   FDockManager := TVectDockManager.Create(Self, pnlWorkspace,
     pnlLeftDockArea, pnlRightDockArea, pnlLeftDropTarget,
@@ -222,10 +234,13 @@ begin
   FLayerFrame.Context := FDesignerContext;
   FToolPaletteFrame := TToolPaletteFrame.Create(Self);
   FToolPaletteFrame.Context := FDesignerContext;
+  FTemplateFrame := TTemplatePanelFrame.Create(Self);
+  FTemplateFrame.Context := FDesignerContext;
   FObjectPropertiesFrame := TObjectPropertiesFrame.Create(Self);
   FObjectPropertiesFrame.Context := FDesignerContext;
   FDockManager.RegisterTool(FLayerFrame, vdsLeft);
   FDockManager.RegisterTool(FToolPaletteFrame, vdsLeft);
+  FDockManager.RegisterTool(FTemplateFrame, vdsLeft);
   FDockManager.RegisterTool(FObjectPropertiesFrame, vdsRight);
   FDockManager.OnToolVisibilityChanged := ToolVisibilityChanged;
 
@@ -236,6 +251,7 @@ begin
   FViewMenu.Add(NewLine);
   FObjectPropertiesMenuItem := CreateViewMenuItem('Object Properties');
   FToolPaletteMenuItem := CreateViewMenuItem('Tools');
+  FTemplateMenuItem := CreateViewMenuItem('テンプレ図形');
   FLayerMenuItem := CreateViewMenuItem('Layers');
 
   LayoutFolder := TPath.Combine(TPath.GetDocumentsPath, 'VectArtDesigner');
@@ -472,6 +488,32 @@ begin
     FEditorFrame.CanvasControl.Invalidate;
   if (FDocument <> nil) and FDocument.IsInteractiveUpdate then
     Exit;
+  // 文字編集は1文字ごとにDocumentを更新する。キャンバス以外のネイティブUIは
+  // 入力停止後へ集約し、編集欄の再設定と背景消去によるちらつきを避ける。
+  if (FEditorFrame <> nil) and FEditorFrame.CanvasControl.TextEditing then
+  begin
+    FDocumentRefreshPending := True;
+    FDocumentRefreshTimer.Enabled := False;
+    FDocumentRefreshTimer.Enabled := True;
+    Exit;
+  end;
+  if FDocumentRefreshTimer <> nil then
+    FDocumentRefreshTimer.Enabled := False;
+  FDocumentRefreshPending := False;
+  RefreshDocumentPanels;
+end;
+
+procedure TMainForm.DocumentRefreshTimer(Sender: TObject);
+begin
+  FDocumentRefreshTimer.Enabled := False;
+  if not FDocumentRefreshPending then
+    Exit;
+  FDocumentRefreshPending := False;
+  RefreshDocumentPanels;
+end;
+
+procedure TMainForm.RefreshDocumentPanels;
+begin
   if FEditActionsUI <> nil then
     FEditActionsUI.RefreshState;
   if FLayerFrame <> nil then
@@ -550,6 +592,8 @@ begin
     FEditorFrame.CanvasControl.Invalidate;
   if FToolPaletteFrame <> nil then
     FToolPaletteFrame.RefreshState;
+  if FTemplateFrame <> nil then
+    FTemplateFrame.RefreshState;
   if FLineToolbar <> nil then
     FLineToolbar.RefreshState;
   if (FDocument <> nil) and (FDocument.CanvasLayer <> nil) then
@@ -630,6 +674,9 @@ begin
   else if Sender = FToolPaletteMenuItem then
     FDockManager.SetToolVisible(FToolPaletteFrame,
       not FDockManager.ToolVisible(FToolPaletteFrame))
+  else if Sender = FTemplateMenuItem then
+    FDockManager.SetToolVisible(FTemplateFrame,
+      not FDockManager.ToolVisible(FTemplateFrame))
   else if Sender = FObjectPropertiesMenuItem then
     FDockManager.SetToolVisible(FObjectPropertiesFrame,
       not FDockManager.ToolVisible(FObjectPropertiesFrame));
@@ -643,6 +690,11 @@ end;
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   SaveLayoutSettings;
+  if FDocumentRefreshTimer <> nil then
+  begin
+    FDocumentRefreshTimer.Enabled := False;
+    FDocumentRefreshTimer.OnTimer := nil;
+  end;
   FreeAndNil(FShortcuts);
   FreeAndNil(FLineToolbar);
   OnResize := nil;
@@ -657,6 +709,8 @@ begin
     FObjectPropertiesFrame.Context := nil;
   if FToolPaletteFrame <> nil then
     FToolPaletteFrame.Context := nil;
+  if FTemplateFrame <> nil then
+    FTemplateFrame.Context := nil;
   FDesignerContext := nil;
   if FEditorState <> nil then
     FEditorState.OnChanged := nil;
@@ -727,6 +781,35 @@ begin
     begin
       Result := IsEditingSurfaceFocused and (FDocument <> nil) and
         (FDocument.LayerCount > 1);
+    end);
+  FShortcuts.Add(Ord('C'), [ssCtrl],
+    procedure
+    begin
+      CopyVectArtSelectionToClipboard(FDocument);
+    end,
+    function: Boolean
+    begin
+      Result := IsEditingSurfaceFocused and
+        CanCopyVectArtSelection(FDocument);
+    end);
+  FShortcuts.Add(Ord('X'), [ssCtrl],
+    procedure
+    begin
+      CutVectArtSelectionToClipboard(FDocument, FEditHistory);
+    end,
+    function: Boolean
+    begin
+      Result := IsEditingSurfaceFocused and
+        CanCutVectArtSelection(FDocument);
+    end);
+  FShortcuts.Add(Ord('V'), [ssCtrl],
+    procedure
+    begin
+      PasteVectArtClipboard(FDocument, FEditHistory);
+    end,
+    function: Boolean
+    begin
+      Result := IsEditingSurfaceFocused and CanPasteVectArtClipboard;
     end);
   FShortcuts.Add(Ord('D'), [ssCtrl],
     procedure
@@ -1008,6 +1091,7 @@ procedure TMainForm.UpdateToolMenuItems;
 begin
   FLayerMenuItem.Checked := FDockManager.ToolVisible(FLayerFrame);
   FToolPaletteMenuItem.Checked := FDockManager.ToolVisible(FToolPaletteFrame);
+  FTemplateMenuItem.Checked := FDockManager.ToolVisible(FTemplateFrame);
   FObjectPropertiesMenuItem.Checked :=
     FDockManager.ToolVisible(FObjectPropertiesFrame);
 end;

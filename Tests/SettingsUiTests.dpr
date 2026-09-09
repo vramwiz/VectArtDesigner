@@ -3,7 +3,7 @@ program SettingsUiTests;
 {$APPTYPE CONSOLE}
 uses
   VectArtDesignerSettingsSections,  Winapi.Windows, Winapi.Messages, System.Diagnostics, System.UITypes, System.Classes, System.SysUtils, System.Types, System.Math,
-  Vcl.Buttons, Vcl.Dialogs, Vcl.Forms, Vcl.Grids, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.Graphics,
+  Vcl.Buttons, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.Forms, Vcl.Grids, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.Graphics,
   Vcl.Themes, Vcl.Styles, Vcl.Imaging.pngimage,
   VectArtDesignerCanvas, VectArtDesignerCreationColors, VectArtDesignerToolPalette, VectArtDesignerNumericSlider, ColorPickerSVArea, TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
   VectArtDesignerDocument, VectArtDesignerEditorState, VectArtDesignerEditHistory,
@@ -214,6 +214,8 @@ var
   PreviewIteration: Integer;
   Exceptions: TUiExceptionRecorder;
   TransparencyLabel: TControl;
+  HostPanel: TPanel;
+  PreviousBottom, VisibleCount: Integer;
 begin
   Application.Initialize;
   // キャンバスの文字描画はDLL読込だけでなくTextRenderer側のAcquireも必要。
@@ -225,7 +227,9 @@ begin
   D := TVectArtDocument.Create; H := TVectArtEditHistory.Create;
   S := TVectArtEditorState.Create; F := TForm.CreateNew(nil);
   Creation := TVectArtShapeCreation.Create;
-  Picker := TVectArtTemplatePicker.Create(nil);
+  Picker := TVectArtTemplatePicker.Create(F);
+  Picker.Parent := F;
+  Picker.Visible := False;
   try
     Frame := TObjectPropertiesFrame.Create(F);
     Frame.Parent := F; Frame.HandleNeeded; Frame.Free;
@@ -266,7 +270,7 @@ begin
       Check(Value=2,'Stroke slider undo');
     end;
     Sections := TVectArtSettingsSections(FindControl(UI,TVectArtSettingsSections));
-    Check(Sections <> nil,'Settings icon selector missing');
+    Check(Sections <> nil,'Stacked settings page missing');
     Check(FindControl(UI,TPageControl)=nil,'PageControl is still present');
     Check(FindCaptionControl(Sections.ActiveSection,'位置・サイズ (px)')=nil,
       'Position and size caption still consumes a row');
@@ -277,17 +281,24 @@ begin
         (Abs((Top+Height div 2)-(TransparencyLabel.Top+TransparencyLabel.Height div 2))<=4),
         'Transparency label, bar and value are not on one row');
     F.ClientWidth:=150; Application.ProcessMessages;
+    PreviousBottom := -1;
+    VisibleCount := 0;
     for I:=0 to Sections.SectionCount-1 do
       if Sections.Sections[I].Available then
       begin
-        Check(Sections.IconRect(Sections.Sections[I].Category).Right<=Sections.ClientWidth,'Icon clipped at narrow width');
-        Check(Sections.IconRect(Sections.Sections[I].Category).Bottom<Sections.ActiveSection.Top,'Icons overlap panel');
+        Inc(VisibleCount);
+        Check(Sections.Sections[I].Visible,'Available settings panel is hidden');
+        HostPanel := TPanel(Sections.Sections[I].Parent);
+        Check((HostPanel.Align=alTop) and (HostPanel.BevelWidth=1),
+          'Settings section is not an alTop panel with a one-pixel bevel');
+        Check(HostPanel.Top>=PreviousBottom,'Settings sections overlap or are out of order');
+        PreviousBottom := HostPanel.Top+HostPanel.Height;
+        Check(Sections.IconRect(Sections.Sections[I].Category).IsEmpty,
+          'Legacy category icon is still visible');
       end;
+    Check(VisibleCount=5,'Shape settings were not combined into one page');
     F.ClientWidth:=290; Application.ProcessMessages;
-    Sections.Perform(WM_KEYDOWN,VK_RIGHT,0);
-    Check(Sections.ActiveSection.Category=vscLine,'Right key did not select next icon');
-    Sections.Perform(WM_KEYDOWN,VK_LEFT,0);
-    Check(Sections.ActiveSection.Category=vscInfo,'Left key did not restore information panel');
+    Sections.ActiveSection:=Sections.Sections[Ord(vscInfo)];
     ColorEdit := TEdit(FindControl(Sections.ActiveSection,TEdit));
     ColorEdit.Text := '12.5'; ColorEdit.OnExit(ColorEdit);
     Check(TVectArtRectangleLayer(D[1]).Bounds.Left = 10,'Fractional pixels accepted');
@@ -509,6 +520,8 @@ begin
     T.FontFamily := 'Yu Gothic UI'; T.FontSize := 32; T.Bounds := RectF(20,20,180,80);
     T.Opacity := 1; T.Visible := True; T.TextColor := clWhite;
     D.InsertText(2,T); D.SelectedIndex := 2; UI.RefreshFromDocument;
+    Check(FindCaptionControl(Sections,'文字色')<>nil,
+      'Stacked text color section header was not updated');
     for I := 0 to Sections.SectionCount-1 do
       if Sections.Sections[I].Caption = '文字色' then Sections.ActiveSection := Sections.Sections[I];
     Swatch := TVectArtColorSwatch(FindControl(Sections.ActiveSection,TVectArtColorSwatch));
