@@ -52,9 +52,15 @@ procedure CompositeVectArtRgba(const Source: TVectArtRenderBuffer;
 procedure RenderVectArtFillThumbnail(Document: TVectArtDocument; Index: Integer;
   Target: TVectArtRenderBuffer; Width, Height: Integer);
 
+// 任意の論理領域を描画し、影を含むPNG書出しでも同じ描画結果を使う。
+procedure RenderVectArtDocumentRegion(Document: TVectArtDocument;
+  Target: TVectArtRenderBuffer; Width, Height: Integer;
+  const LogicalBounds: TRectF; GroupId: TVectArtGroupId;
+  MinimumStrokeWidth: Single; ShowHiddenLayers: Boolean; LayerIndex: Integer = -1);
+
 implementation
 
-uses
+uses VectArtDesignerShadowPaint,
   System.Math, System.Math.Vectors, System.UITypes,
   TextRendererSkiaRuntime, Winapi.Windows,
   VectArtDesignerFillPaint, VectArtDesignerBezierGeometry, VectArtDesignerGeometry,
@@ -109,7 +115,7 @@ end;
 procedure RenderVectArtDocumentRegion(Document: TVectArtDocument;
   Target: TVectArtRenderBuffer; Width, Height: Integer;
   const LogicalBounds: TRectF; GroupId: TVectArtGroupId;
-  MinimumStrokeWidth: Single; ShowHiddenLayers: Boolean; LayerIndex: Integer = -1);
+  MinimumStrokeWidth: Single; ShowHiddenLayers: Boolean; LayerIndex: Integer);
 var
   Canvas: ISkCanvas;
   Control1: TPointF;
@@ -222,6 +228,8 @@ begin
       LayerOpacityMultiplier := 1.0
     else
       LayerOpacityMultiplier := 0.35;
+    if Layer.Shadow.Enabled then Canvas.SaveLayer(ShadowPaint(Layer.Shadow));
+    try
     if Layer is TVectArtTextLayer then
     begin
       TextLayer := TVectArtTextLayer(Layer);
@@ -476,6 +484,9 @@ begin
     finally
       Canvas.Restore;
     end;
+    finally
+      if Layer.Shadow.Enabled then Canvas.Restore;
+    end;
   end;
   Surface.Flush;
 end;
@@ -514,6 +525,7 @@ begin
       end;
     end;
   Bounds.Inflate(Padding,Padding);
+  Bounds := ShadowBounds(Bounds,Document[Index].Shadow);
   Scale := Min((Width-4)/Max(1,Bounds.Width),(Height-4)/Max(1,Bounds.Height));
   Center := Bounds.CenterPoint;
   Bounds := RectF(Center.X-Width/Scale/2,Center.Y-Height/Scale/2,
@@ -622,6 +634,7 @@ begin
     end
     else
       Continue;
+    LayerBounds := ShadowBounds(LayerBounds,Layer.Shadow);
     if not Found then
     begin
       ContentBounds := LayerBounds;

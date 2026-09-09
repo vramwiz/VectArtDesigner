@@ -1,5 +1,5 @@
 ﻿// 編集ツールなど、複数の編集UIが共有する一時状態を管理する。
-// 線装飾初期値はMIFとSVGの共通編集モデルとして保持する。
+// 作成色は起動ごとに黒・白へ戻し、Documentや設定ファイルには保存しない。
 unit VectArtDesignerEditorState;
 
 interface
@@ -24,7 +24,6 @@ type
     FTemplateIndex: Integer;
     FLineCap: TVectArtLineCap;
     FLineJoin: TVectArtLineJoin;
-    FLineStrokeColor: TColor;
     FLineStrokeStyle: TVectArtStrokeStyle;
     FLineStrokeWidth: Single;
     FOnChanged: TNotifyEvent;
@@ -35,12 +34,10 @@ type
     FPathEndMarkerSize: Single;
     FPathStartMarker: TVectArtLineMarker;
     FPathStartMarkerSize: Single;
-    FRectangleFillColor: TColor;
-    FRectangleFillStyle: TVectArtFillStyle;
-    FRectangleStrokePaint, FLineStrokePaint: TVectArtFillStyle;
+    FColor2: TColor;
     FRectangleMode: TVectArtRectangleMode;
     FRectangleOpacity: Single;
-    FRectangleStrokeColor: TColor;
+    FColor1: TColor;
     FRectangleStrokeStyle: TVectArtStrokeStyle;
     FRectangleStrokeWidth: Single;
     procedure CycleRectangleMode;
@@ -53,7 +50,6 @@ type
     procedure SetLineStartMarker(const Value: TVectArtLineMarker);
     procedure SetLineStartMarkerSize(const Value: Single);
     procedure SetLineJoin(const Value: TVectArtLineJoin);
-    procedure SetLineStrokeColor(const Value: TColor);
     procedure SetLineStrokeStyle(const Value: TVectArtStrokeStyle);
     procedure SetLineStrokeWidth(const Value: Single);
     procedure SetPathLineCap(const Value: TVectArtLineCap);
@@ -63,19 +59,14 @@ type
     procedure SetPathEndMarkerSize(const Value: Single);
     procedure SetPathStartMarker(const Value: TVectArtLineMarker);
     procedure SetPathStartMarkerSize(const Value: Single);
-    procedure SetRectangleStrokePaint(const Value: TVectArtFillStyle);
-    procedure SetLineStrokePaint(const Value: TVectArtFillStyle);
-    procedure SetRectangleFillColor(const Value: TColor);
+    procedure SetColor2(const Value: TColor);
     procedure SetRectangleOpacity(const Value: Single);
-    procedure SetRectangleStrokeColor(const Value: TColor);
+    procedure SetColor1(const Value: TColor);
     procedure SetRectangleStrokeStyle(const Value: TVectArtStrokeStyle);
     procedure SetRectangleStrokeWidth(const Value: Single);
   public
     constructor Create;
-    procedure SetRectangleFill(Color: TColor; const Fill: TVectArtFillStyle);
-    property RectangleStrokePaint: TVectArtFillStyle read FRectangleStrokePaint write SetRectangleStrokePaint;
-    property LineStrokePaint: TVectArtFillStyle read FLineStrokePaint write SetLineStrokePaint;
-    property RectangleFillStyle: TVectArtFillStyle read FRectangleFillStyle;
+    procedure SwapColors;
     procedure SelectClosedBezierToolGroup;
     procedure SelectClosedPathToolGroup;
     procedure SelectFreehandToolGroup;
@@ -96,8 +87,6 @@ type
     property LineStartMarkerSize: Single read FLineStartMarkerSize
       write SetLineStartMarkerSize;
     property LineJoin: TVectArtLineJoin read FLineJoin write SetLineJoin;
-    property LineStrokeColor: TColor read FLineStrokeColor
-      write SetLineStrokeColor;
     property LineStrokeStyle: TVectArtStrokeStyle read FLineStrokeStyle
       write SetLineStrokeStyle;
     property LineStrokeWidth: Single read FLineStrokeWidth
@@ -115,14 +104,14 @@ type
       write SetPathStartMarker;
     property PathStartMarkerSize: Single read FPathStartMarkerSize
       write SetPathStartMarkerSize;
-    property RectangleFillColor: TColor read FRectangleFillColor
-      write SetRectangleFillColor;
+    property Color2: TColor read FColor2
+      write SetColor2;
     property TemplateIndex: Integer read FTemplateIndex write FTemplateIndex;
     property RectangleMode: TVectArtRectangleMode read FRectangleMode write SetRectangleMode;
     property RectangleOpacity: Single read FRectangleOpacity
       write SetRectangleOpacity;
-    property RectangleStrokeColor: TColor read FRectangleStrokeColor
-      write SetRectangleStrokeColor;
+    property Color1: TColor read FColor1
+      write SetColor1;
     property RectangleStrokeStyle: TVectArtStrokeStyle
       read FRectangleStrokeStyle write SetRectangleStrokeStyle;
     property RectangleStrokeWidth: Single read FRectangleStrokeWidth
@@ -154,9 +143,6 @@ begin
   Result := Mode in [vrmOutline, vrmFillAndOutline];
 end;
 
-const
-  DEFAULT_RECTANGLE_COLOR = TColor($00E2904A);
-
 constructor TVectArtEditorState.Create;
 begin
   inherited Create;
@@ -168,7 +154,6 @@ begin
   FLineStartMarkerSize := 4.0;
   FLineCap := vlcButt;
   FLineJoin := vljMiter;
-  FLineStrokeColor := clBlack;
   FLineStrokeStyle := vssSolid;
   FLineStrokeWidth := 1.0;
   FPathLineCap := vlcButt;
@@ -178,10 +163,10 @@ begin
   FPathEndMarkerSize := 4.0;
   FPathStartMarker := vlmNone;
   FPathStartMarkerSize := 4.0;
-  FRectangleFillColor := DEFAULT_RECTANGLE_COLOR;
+  FColor2 := clWhite;
   FRectangleMode := vrmFillAndOutline;
   FRectangleOpacity := 1.0;
-  FRectangleStrokeColor := clBlack;
+  FColor1 := clBlack;
   FRectangleStrokeStyle := vssSolid;
   FRectangleStrokeWidth := 1.0;
 end;
@@ -403,15 +388,6 @@ begin
     FOnChanged(Self);
 end;
 
-procedure TVectArtEditorState.SetLineStrokeColor(const Value: TColor);
-begin
-  if FLineStrokeColor = Value then
-    Exit;
-  FLineStrokeColor := Value;
-  if Assigned(FOnChanged) then
-    FOnChanged(Self);
-end;
-
 procedure TVectArtEditorState.SetLineStrokeStyle(
   const Value: TVectArtStrokeStyle);
 begin
@@ -434,11 +410,19 @@ begin
     FOnChanged(Self);
 end;
 
-procedure TVectArtEditorState.SetRectangleStrokeColor(const Value: TColor);
+procedure TVectArtEditorState.SwapColors;
+var Previous: TColor;
 begin
-  if FRectangleStrokeColor = Value then
+  // 2色を揃えてから一度だけ通知し、途中の同色状態を他のUIへ見せない。
+  Previous := FColor1; FColor1 := FColor2; FColor2 := Previous;
+  if Assigned(FOnChanged) then FOnChanged(Self);
+end;
+
+procedure TVectArtEditorState.SetColor1(const Value: TColor);
+begin
+  if FColor1 = Value then
     Exit;
-  FRectangleStrokeColor := Value;
+  FColor1 := Value;
   if Assigned(FOnChanged) then
     FOnChanged(Self);
 end;
@@ -474,21 +458,11 @@ begin
     FOnChanged(Self);
 end;
 
-procedure TVectArtEditorState.SetRectangleFill(Color: TColor; const Fill: TVectArtFillStyle);
+procedure TVectArtEditorState.SetColor2(const Value: TColor);
 begin
-  FRectangleFillColor := Color;
-  FRectangleFillStyle := Fill;
-  if Assigned(FOnChanged) then FOnChanged(Self);
-end;
-procedure TVectArtEditorState.SetRectangleStrokePaint(const Value: TVectArtFillStyle);
-begin FRectangleStrokePaint := Value; if Assigned(FOnChanged) then FOnChanged(Self); end;
-procedure TVectArtEditorState.SetLineStrokePaint(const Value: TVectArtFillStyle);
-begin FLineStrokePaint := Value; if Assigned(FOnChanged) then FOnChanged(Self); end;
-procedure TVectArtEditorState.SetRectangleFillColor(const Value: TColor);
-begin
-  if FRectangleFillColor = Value then
+  if FColor2 = Value then
     Exit;
-  FRectangleFillColor := Value;
+  FColor2 := Value;
   if Assigned(FOnChanged) then
     FOnChanged(Self);
 end;

@@ -659,7 +659,7 @@ begin
       Inc(Row);
     end;
   end;
-  if ((Layer is TVectArtTextLayer) and (TVectArtTextLayer(Layer).FillStyle.Kind <> vfkSolid)) or
+  if Layer.Shadow.Enabled or ((Layer is TVectArtTextLayer) and (TVectArtTextLayer(Layer).FillStyle.Kind <> vfkSolid)) or
     (Layer.StrokePaint.Kind <> vfkSolid) or
     ((Layer is TVectArtRectangleLayer) and (TVectArtRectangleLayer(Layer).FillStyle.Kind <> vfkSolid)) or
     ((Layer is TVectArtPathLayer) and (TVectArtPathLayer(Layer).FillStyle.Kind <> vfkSolid)) then
@@ -667,7 +667,10 @@ begin
   else if Layer is TVectArtRectangleLayer then
   begin
     RectangleLayer := TVectArtRectangleLayer(Layer);
-    RectangleRect := FitThumbnailRect(ThumbnailRect,
+    // 図形の枠がサムネイル外周と重ならないよう余白を確保する。
+    RectangleRect := ThumbnailRect;
+    InflateRect(RectangleRect, -4, -4);
+    RectangleRect := FitThumbnailRect(RectangleRect,
       Max(Round(RectangleLayer.Bounds.Width), 1),
       Max(Round(RectangleLayer.Bounds.Height), 1));
     if RectangleLayer.Filled then
@@ -698,15 +701,14 @@ begin
         ACanvas.Pen.Style := psSolid;
     end
     else
-      ACanvas.Pen.Color := TColor($00707070);
+      ACanvas.Pen.Style := psClear;
+    // FrameRectはBrushを使うため、線色・線幅・線種を持つPenで輪郭を描く。
+    ACanvas.Brush.Style := bsClear;
     if RectangleLayer.Shape = vpsEllipse then
-    begin
-      ACanvas.Brush.Style := bsClear;
-      ACanvas.Ellipse(RectangleRect);
-      ACanvas.Brush.Style := bsSolid;
-    end
+      ACanvas.Ellipse(RectangleRect)
     else
-      ACanvas.FrameRect(RectangleRect);
+      ACanvas.Rectangle(RectangleRect);
+    ACanvas.Brush.Style := bsSolid;
     ACanvas.Pen.Style := psSolid;
     ACanvas.Pen.Width := 1;
   end;
@@ -955,7 +957,7 @@ begin
       Inc(Row);
     end;
   end;
-  if ((Layer is TVectArtTextLayer) and (TVectArtTextLayer(Layer).FillStyle.Kind <> vfkSolid)) or
+  if Layer.Shadow.Enabled or ((Layer is TVectArtTextLayer) and (TVectArtTextLayer(Layer).FillStyle.Kind <> vfkSolid)) or
     (Layer.StrokePaint.Kind <> vfkSolid) or
     ((Layer is TVectArtRectangleLayer) and (TVectArtRectangleLayer(Layer).FillStyle.Kind <> vfkSolid)) or
     ((Layer is TVectArtPathLayer) and (TVectArtPathLayer(Layer).FillStyle.Kind <> vfkSolid)) then
@@ -963,7 +965,10 @@ begin
   else if Layer is TVectArtRectangleLayer then
   begin
     RectangleLayer := TVectArtRectangleLayer(Layer);
-    RectangleRect := FitThumbnailRect(ThumbnailRect,
+    // 図形の枠がサムネイル外周と重ならないよう余白を確保する。
+    RectangleRect := ThumbnailRect;
+    InflateRect(RectangleRect, -4, -4);
+    RectangleRect := FitThumbnailRect(RectangleRect,
       Max(Round(RectangleLayer.Bounds.Width), 1),
       Max(Round(RectangleLayer.Bounds.Height), 1));
     if RectangleLayer.Filled then
@@ -998,15 +1003,14 @@ begin
         ACanvas.Pen.Style := psSolid;
     end
     else
-      ACanvas.Pen.Color := TColor($00707070);
+      ACanvas.Pen.Style := psClear;
+    // FrameRectはBrushを使うため、線色・線幅・線種を持つPenで輪郭を描く。
+    ACanvas.Brush.Style := bsClear;
     if RectangleLayer.Shape = vpsEllipse then
-    begin
-      ACanvas.Brush.Style := bsClear;
-      ACanvas.Ellipse(RectangleRect);
-      ACanvas.Brush.Style := bsSolid;
-    end
+      ACanvas.Ellipse(RectangleRect)
     else
-      ACanvas.FrameRect(RectangleRect);
+      ACanvas.Rectangle(RectangleRect);
+    ACanvas.Brush.Style := bsSolid;
     ACanvas.Pen.Style := psSolid;
     ACanvas.Pen.Width := 1;
   end;

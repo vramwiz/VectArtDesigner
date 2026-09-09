@@ -68,6 +68,8 @@ begin
     Require(EditorState.RectangleMode = vrmFillAndOutline,'Default shape must have visible fill');
     EditorState.RectangleMode := vrmOutline;
     EditorState.RectangleStrokeWidth := 2.0;
+    // ツールの初期設定を検証するため、前回作成の選択属性を使わない。
+    Document.SetSelectedLayers([]);
     EditorState.SelectRoundedRectangleToolGroup;
     Creation.Configure(Document, History, EditorState,
       Rect(0, 0, 1000, 1000), 1.0);
@@ -108,6 +110,8 @@ begin
       SameValue(Path.Points[14].Y, 200.0),
       'Rounded rectangle bounds resize undo failed');
 
+    // ツールの初期設定を検証するため、前回作成の選択属性を使わない。
+    Document.SetSelectedLayers([]);
     EditorState.SelectRoundedRectangleToolGroup;
     Require(EditorState.RectangleMode = vrmFill,
       'Rounded rectangle did not switch to fill-only mode');
@@ -117,6 +121,8 @@ begin
       SameValue(Path.StrokeWidth, 0.0),
       'Fill-only rounded rectangle differs');
 
+    // ツールの初期設定を検証するため、前回作成の選択属性を使わない。
+    Document.SetSelectedLayers([]);
     EditorState.SelectRoundedRectangleToolGroup;
     Require(EditorState.RectangleMode = vrmFillAndOutline,
       'Rounded rectangle did not switch to fill-and-outline mode');

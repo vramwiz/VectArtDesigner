@@ -113,6 +113,7 @@ const
 implementation
 
 uses
+  VectArtDesignerObjectAttributes,
   System.Generics.Collections, System.Math, System.Skia, System.UITypes,
   Winapi.D2D1,
   Winapi.ShellAPI, Winapi.Windows, Vcl.Dialogs, Vcl.Forms,
@@ -576,10 +577,11 @@ begin
   Data.Opacity := 1.0;
   Data.Text := '';
   if FEditorState <> nil then
-    Data.TextColor := FEditorState.RectangleFillColor
+    Data.TextColor := FEditorState.Color1
   else
     Data.TextColor := clBlack;
   Data.Visible := True;
+  ApplyVectArtObjectAttributes(CaptureVectArtSelectedAttributes(FDocument), Data);
   FTextLayerIndex := FDocument.InsertText(FDocument.LayerCount, Data);
   FDocument.SetSelectedLayers([FTextLayerIndex]);
   FTextBuffer := '';
@@ -591,6 +593,7 @@ begin
   FTextEditor.Text := '';
   FTextEditor.Font.Name := Data.FontFamily;
   FTextEditor.Font.Size := Round(Data.FontSize);
+  FTextEditor.Font.Style := Data.FontStyle;
   FTextEditor.Font.Color := Data.TextColor;
   UpdateTextEditorBounds;
   FTextEditor.Visible := True;
@@ -1619,7 +1622,7 @@ begin
       end;
       if FShapeCreation.PreviewLine(LineStart, LineEnd) then
         DrawStyledPreviewLine(Direct2DCanvas, LineStart, LineEnd,
-          FEditorState.LineStrokeColor,
+          FEditorState.Color1,
           FEditorState.LineStrokeWidth * FZoom,
           FEditorState.LineStrokeStyle, FEditorState.LineCap,
           FEditorState.LineAntiAlias, FEditorState.LineStartMarker,
@@ -1796,7 +1799,7 @@ begin
   end;
   if FShapeCreation.PreviewLine(LineStart, LineEnd) then
     DrawStyledPreviewLine(Canvas, LineStart, LineEnd,
-      FEditorState.LineStrokeColor, FEditorState.LineStrokeWidth * FZoom,
+      FEditorState.Color1, FEditorState.LineStrokeWidth * FZoom,
       FEditorState.LineStrokeStyle, FEditorState.LineCap,
       FEditorState.LineAntiAlias, FEditorState.LineStartMarker,
       FEditorState.LineEndMarker, FEditorState.LineStartMarkerSize,

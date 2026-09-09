@@ -47,7 +47,7 @@ function TryCreateVectArtMifFromDocument(Document: TVectArtDocument;
 
 implementation
 
-uses
+uses VectArtDesignerMifShadow,
   System.Classes, System.Generics.Collections, System.Math,
   System.NetEncoding, System.Types,
   Vcl.Graphics, Vcl.Imaging.pngimage, Winapi.Windows,
@@ -240,7 +240,7 @@ begin
   AddWadaInteger(Png, 'vector enable stroke texture',
     Ord(Rectangle.StrokeWidth > 0));
   AddWadaInteger(Png, 'vector enable fill texture', Ord(Rectangle.Filled));
-  AddWadaString(Png, 'vector effect object type', 'none');
+  WriteMifShadow(Png,Rectangle.Shadow);
 end;
 
 function MifRectangleDimension(Value: Single): Integer;
@@ -337,15 +337,22 @@ var
 begin
   Width := MifRectangleDimension(Rectangle.Bounds.Width);
   Height := MifRectangleDimension(Rectangle.Bounds.Height);
-  Result := CreateRectangleRasterPng(Rectangle, Width, Height);
-  AddText(Result, 'object type', 'image');
-  AddWadaString(Result, 'object subtype', 'vector');
+
   // WebArtの四隅座標はPNGの最終ピクセルを指すため、右端と下端は包含座標へ直す。
   PlacementBounds := TRectF.Create(Rectangle.Bounds.Left,
     Rectangle.Bounds.Top, Rectangle.Bounds.Left + Width - 1,
     Rectangle.Bounds.Top + Height - 1);
   PlacementQuad := RectangleCorners(PlacementBounds,
     Rectangle.RotationDegrees);
+  if Rectangle.Shadow.Enabled then
+  begin
+    // ベクター変換は本体寸法のまま、PNGの配置だけ影の外寸に合わせる。
+    Result := CreateShadowRaster(Rectangle,PlacementBounds);
+    PlacementQuad := RectangleCorners(PlacementBounds,0);
+  end
+  else Result := CreateRectangleRasterPng(Rectangle,Width,Height);
+  AddText(Result,'object type','image');
+  AddWadaString(Result,'object subtype','vector');
   AddImagePlacementMetadata(Result, PlacementQuad,
     MifAlpha(Rectangle.Opacity), not Rectangle.Visible);
   AddRectangleVectorMetadata(Result, Rectangle, Width, Height, Source);
@@ -508,7 +515,8 @@ var
   Bounds: TRectF;
   OriginalBounds: TRectF;
 begin
-  Result := CreatePathRasterPng(PathLayer, Bounds);
+  if PathLayer.Shadow.Enabled then Result := CreateShadowRaster(PathLayer,Bounds)
+  else Result := CreatePathRasterPng(PathLayer, Bounds);
   AddText(Result, 'object type', 'image');
   AddWadaString(Result, 'object subtype', 'vector');
   AddImagePlacementMetadata(Result, Bounds,
@@ -565,7 +573,7 @@ begin
     Ord(PathLayer.StrokeWidth > 0));
   AddWadaInteger(Result, 'vector enable fill texture',
     Ord(MifPathFilled(PathLayer)));
-  AddWadaString(Result, 'vector effect object type', 'none');
+  WriteMifShadow(Result,PathLayer.Shadow);
 end;
 
 function LineMarkerToMif(Value: TVectArtLineMarker): Integer;

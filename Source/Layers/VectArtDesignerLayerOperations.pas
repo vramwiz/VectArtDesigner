@@ -35,6 +35,7 @@ type
 implementation
 
 uses
+  VectArtDesignerObjectAttributes,
   System.Math, System.SysUtils, Vcl.Graphics,
   VectArtDesignerEditCommands,
   VectArtDesignerLayerDuplication,
@@ -43,7 +44,7 @@ uses
 const
   DEFAULT_RECTANGLE_WIDTH = 320;
   DEFAULT_RECTANGLE_HEIGHT = 240;
-  DEFAULT_RECTANGLE_COLOR = TColor($00E2904A);
+  DEFAULT_RECTANGLE_COLOR = clWhite;
 
 procedure TVectArtLayerOperations.AddRectangle;
 var
@@ -58,12 +59,14 @@ begin
   CanvasLayer := FDocument.CanvasLayer;
   Left := (CanvasLayer.Width - DEFAULT_RECTANGLE_WIDTH) / 2;
   Top := (CanvasLayer.Height - DEFAULT_RECTANGLE_HEIGHT) / 2;
+  Data := Default(TVectArtRectangleData);
   Data.Bounds := TRectF.Create(Left, Top, Left + DEFAULT_RECTANGLE_WIDTH,
     Top + DEFAULT_RECTANGLE_HEIGHT);
   if FEditorState <> nil then
   begin
-    Data.FillColor := FEditorState.RectangleFillColor;
-    Data.FillStyle := FEditorState.RectangleFillStyle;
+    Data.FillColor := FEditorState.Color2;
+    Data.FillStyle := Default(TVectArtFillStyle);
+
     Data.Filled := VectArtRectangleModeHasFill(FEditorState.RectangleMode);
   end
   else
@@ -81,8 +84,9 @@ begin
   Data.Shape := vpsRectangle;
   if FEditorState <> nil then
   begin
-    Data.StrokePaint := FEditorState.RectangleStrokePaint;
-    Data.StrokeColor := FEditorState.RectangleStrokeColor;
+
+    Data.StrokeColor := FEditorState.Color1;
+    Data.StrokePaint := Default(TVectArtFillStyle);
     Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
     if VectArtRectangleModeHasStroke(FEditorState.RectangleMode) then
       Data.StrokeWidth := Max(FEditorState.RectangleStrokeWidth, 1.0)
@@ -93,10 +97,12 @@ begin
   begin
     Data.StrokeColor := clBlack;
     Data.StrokeStyle := vssSolid;
-    Data.StrokeWidth := 0.0;
+    // EditorState未接続でも起動時の枠＋塗りに一致させる。
+    Data.StrokeWidth := 1.0;
   end;
   Data.Visible := True;
   BeforeSelection := FDocument.GetSelectedLayerIndices;
+  ApplyVectArtObjectAttributes(CaptureVectArtSelectedAttributes(FDocument), Data);
   Index := FDocument.InsertRectangle(FDocument.LayerCount, Data);
   FDocument.SetSelectedLayers([Index]);
   AfterSelection := FDocument.GetSelectedLayerIndices;

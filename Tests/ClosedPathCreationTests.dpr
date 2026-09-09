@@ -61,7 +61,10 @@ begin
   History := TVectArtEditHistory.Create;
   Creation := TVectArtShapeCreation.Create;
   try
+    EditorState.RectangleMode := vrmOutline;
     EditorState.RectangleStrokeWidth := 2.0;
+    // ツールの初期設定を検証するため、前回作成の選択属性を使わない。
+    Document.SetSelectedLayers([]);
     EditorState.SelectClosedPathToolGroup;
     Creation.Configure(Document, History, EditorState,
       Rect(0, 0, 1000, 1000), 1.0);
@@ -84,6 +87,8 @@ begin
       SameValue(Path.StrokeWidth, 2.0) and (Length(Path.Points) = 3),
       'Outline-only closed path differs');
 
+    // ツールの初期設定を検証するため、前回作成の選択属性を使わない。
+    Document.SetSelectedLayers([]);
     EditorState.SelectClosedPathToolGroup;
     Require(EditorState.RectangleMode = vrmFill,
       'Closed path did not switch to fill-only mode');
@@ -95,6 +100,8 @@ begin
       SameValue(Path.StrokeWidth, 0.0),
       'Fill-only closed path differs');
 
+    // ツールの初期設定を検証するため、前回作成の選択属性を使わない。
+    Document.SetSelectedLayers([]);
     EditorState.SelectClosedPathToolGroup;
     Require(EditorState.RectangleMode = vrmFillAndOutline,
       'Closed path did not switch to fill-and-outline mode');

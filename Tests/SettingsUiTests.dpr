@@ -3,13 +3,21 @@ program SettingsUiTests;
 {$APPTYPE CONSOLE}
 uses
   Winapi.Windows, Winapi.Messages, System.Diagnostics, System.UITypes, System.Classes, System.SysUtils, System.Types, System.Math,
-  Vcl.Dialogs, Vcl.Forms, Vcl.Grids, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.Graphics,
+  Vcl.Buttons, Vcl.Dialogs, Vcl.Forms, Vcl.Grids, Vcl.Controls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.Graphics,
   Vcl.Themes, Vcl.Styles, Vcl.Imaging.pngimage,
-  VectArtDesignerNumericSlider, ColorPickerSVArea, TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
+  VectArtDesignerCanvas, VectArtDesignerCreationColors, VectArtDesignerToolPalette, VectArtDesignerNumericSlider, ColorPickerSVArea, TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
   VectArtDesignerDocument, VectArtDesignerEditorState, VectArtDesignerEditHistory,
   VectArtDesignerObjectPropertiesControl, VectArtDesignerObjectPropertiesFrame, VectArtDesignerTemplatePicker,
   VectArtDesignerTemplateGeometry, VectArtDesignerShapeCreation,
   VectArtDesignerColorSwatch, VectArtDesignerPaintPopup, VectArtDesignerAppearanceModeCommand;
+
+// VCLが描画例外をダイアログ化しても、テストを成功扱いにしない。
+type TUiExceptionRecorder = class
+  ErrorText: string;
+  procedure Handle(Sender: TObject; E: Exception);
+end;
+procedure TUiExceptionRecorder.Handle(Sender: TObject; E: Exception);
+begin ErrorText := E.ClassName+': '+E.Message; end;
 
 procedure Check(Value: Boolean; const Msg: string);
 begin if not Value then raise Exception.Create(Msg); end;
@@ -44,11 +52,21 @@ begin
 end;
 // 標準画像選択ダイアログへテスト画像を入力し、実際の読込イベントを通す。
 var TextureDialogTimer: UINT_PTR; TextureDialogTicks: Integer; TextureFile: string;
+function FindTextureDialog(Wnd: HWND; Param: LPARAM): BOOL; stdcall;
+var Name: array[0..63] of Char;
+begin
+  GetClassName(Wnd,Name,Length(Name));
+  if (string(Name)='#32770') and IsWindowVisible(Wnd) then
+  begin PNativeUInt(Param)^ := Wnd; Exit(False); end;
+  Result := True;
+end;
 procedure TextureDialogTick(Wnd: HWND; Msg: UINT; ID: UINT_PTR; Time: DWORD); stdcall;
 var Dialog: HWND; ProcessID: DWORD; ClassName: array[0..63] of Char;
 begin
   Inc(TextureDialogTicks);
-  Dialog := GetForegroundWindow;
+  Dialog := 0;
+  EnumThreadWindows(GetCurrentThreadId,@FindTextureDialog,LPARAM(@Dialog));
+  if Dialog = 0 then Exit;
   GetWindowThreadProcessId(Dialog,@ProcessID);
   GetClassName(Dialog,ClassName,Length(ClassName));
   if (ProcessID=GetCurrentProcessId) and (string(ClassName)='#32770') then
@@ -101,6 +119,59 @@ begin
   finally P.Free; B.Free; end;
 end;
 
+procedure CheckCreationColors;
+var State,Fresh: TVectArtEditorState; Form,Popup: TForm; Palette: TVectArtToolPaletteControl;
+  Colors: TVectArtCreationColors; Swatch: TVectArtColorSwatch; I: Integer;
+  Doc: TVectArtDocument; Creation: TVectArtShapeCreation; Editor: TVectArtCanvasControl;
+begin
+  State := TVectArtEditorState.Create; Form := TForm.Create(nil);
+  Doc := TVectArtDocument.Create; Creation := TVectArtShapeCreation.Create;
+  try
+    Check((State.Color1=clBlack) and (State.Color2=clWhite),'Startup colors');
+    Form.SetBounds(20,20,80,730);
+    Palette := TVectArtToolPaletteControl.Create(Form); Palette.Parent := Form;
+    Palette.Align := alClient; Palette.EditorState := State;
+    Form.Show; Application.ProcessMessages;
+    Colors := TVectArtCreationColors(FindControl(Palette,TVectArtCreationColors));
+    Check(Colors.Top+Colors.Height<=Palette.Height,'Creation colors clipped');
+    for I := 1 to 2 do
+    begin
+      Swatch := TVectArtColorSwatch(Colors.FindComponent('CreationColor'+IntToStr(I)));
+      Swatch.OnClick(Swatch); Popup := Screen.ActiveForm;
+      Check(not TComboBox(FindControl(Popup,TComboBox)).Visible,'Creation colors must be solid only');
+      if I=1 then PickPopupColor(Popup,clYellow) else PickPopupColor(Popup,clAqua);
+      CloseVectArtColorPopup(Colors);
+    end;
+    Check((State.Color1=clYellow) and (State.Color2=clAqua),'Palette edits both colors');
+    TSpeedButton(Colors.FindComponent('SwapCreationColors')).Click;
+    Check((State.Color1=clAqua) and (State.Color2=clYellow),'Swap creation colors');
+    TSpeedButton(Colors.FindComponent('SwapCreationColors')).Click;
+    State.CurrentTool := vetRectangle; Creation.Configure(Doc,nil,State,Rect(0,0,400,300),1);
+    Check(Creation.MouseDown(mbLeft,[],20,20),'Color rectangle start');
+    Creation.MouseMove([ssLeft],120,100); Creation.MouseUp(mbLeft,[],120,100);
+    Check((TVectArtRectangleLayer(Doc[1]).StrokeColor=clYellow) and
+      (TVectArtRectangleLayer(Doc[1]).FillColor=clAqua),'Rectangle uses creation colors');
+    State.CurrentTool := vetLine;
+    Creation.MouseDown(mbLeft,[],20,150); Creation.MouseMove([ssLeft],120,180);
+    Creation.MouseUp(mbLeft,[],120,180);
+    Check(TVectArtLineLayer(Doc[2]).StrokeColor=clYellow,'Line uses Color1');
+    State.Color1 := clRed;
+    Check(TVectArtRectangleLayer(Doc[1]).StrokeColor=clYellow,'Default color changed existing object');
+    Fresh := TVectArtEditorState.Create;
+    try Check((Fresh.Color1=clBlack) and (Fresh.Color2=clWhite),'New session retained color');
+    finally Fresh.Free; end;
+    Palette.RefreshState; Capture(Form,'creation-colors');
+    Palette.Hide; Form.ClientWidth := 640; Form.ClientHeight := 480;
+    Editor := TVectArtCanvasControl.Create(Form); Editor.Parent := Form; Editor.Align := alClient;
+    Editor.Document := Doc; Editor.EditorState := State; State.CurrentTool := vetText;
+    Application.ProcessMessages;
+    Editor.Perform(WM_LBUTTONDOWN,MK_LBUTTON,MakeLParam(Editor.CanvasBounds.Left+20,Editor.CanvasBounds.Top+20));
+    Check(Doc[Doc.LayerCount-1] is TVectArtTextLayer,'Text creation');
+    Check(TVectArtTextLayer(Doc[Doc.LayerCount-1]).TextColor=clRed,'Text uses Color1');
+    Check(TVectArtTextLayer(Doc[Doc.LayerCount-1]).FillStyle.Kind=vfkSolid,'Text starts solid');
+  finally Form.Free; Creation.Free; Doc.Free; State.Free; end;
+end;
+
 var
   D: TVectArtDocument;
   H: TVectArtEditHistory;
@@ -125,8 +196,13 @@ var
   ModeCombo: TComboBox;
   PreviewTimer: TStopwatch;
   PreviewIteration: Integer;
+  Exceptions: TUiExceptionRecorder;
 begin
   Application.Initialize;
+  // キャンバスの文字描画はDLL読込だけでなくTextRenderer側のAcquireも必要。
+  TTextRendererSkiaRuntime.Acquire(BundledSkiaRuntimeFileName);
+  Exceptions := TUiExceptionRecorder.Create;
+  Application.OnException := Exceptions.Handle;
   TStyleManager.LoadFromFile('C:\Users\Public\Documents\Embarcadero\Studio\37.0\Styles\WindowsModernDark.vsf');
   TStyleManager.TrySetStyle('Windows Modern Dark');
   D := TVectArtDocument.Create; H := TVectArtEditHistory.Create;
@@ -147,7 +223,7 @@ begin
     Creation.MouseMove([ssLeft],120,100); Creation.MouseUp(mbLeft,[],120,100);
     Check(D.LayerCount = 2,'Initial rectangle missing');
     Check(TVectArtRectangleLayer(D[1]).Filled,'Initial rectangle fill disabled');
-    Check(TVectArtRectangleLayer(D[1]).FillColor = S.RectangleFillColor,'Initial rectangle wrong color');
+    Check(TVectArtRectangleLayer(D[1]).FillColor = S.Color2,'Initial rectangle wrong color');
     Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkSolid,'Initial rectangle wrong fill style');
     Check(TVectArtRectangleLayer(D[1]).Opacity = 1,'Initial rectangle transparent');
     D.RemoveRectangle(1,R);
@@ -226,7 +302,7 @@ begin
     end;
     Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkCircle,'Circle UI apply');
     Check(not TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Visible,'Circle angle visible');
-    Check(S.RectangleFillStyle.Kind = vfkCircle,'Circle creation default');
+    Check(S.Color2 = clWhite,'Circle creation default');
     H.Undo;
     Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkLinearHorizontal,'Circle UI undo');
     H.Redo;
@@ -244,7 +320,7 @@ begin
     end;
     Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkSquare,'Square UI apply');
     Check(not TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Visible,'Square angle visible');
-    Check(S.RectangleFillStyle.Kind = vfkSquare,'Square creation default');
+    Check(S.Color2 = clWhite,'Square creation default');
     H.Undo;
     Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkLinearHorizontal,'Square UI undo');
     H.Redo;
@@ -262,7 +338,7 @@ begin
     end;
     Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkWave,'Wave UI apply');
     Check(not TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Visible,'Wave angle visible');
-    Check(S.RectangleFillStyle.Kind = vfkWave,'Wave creation default');
+    Check(S.Color2 = clWhite,'Wave creation default');
     H.Undo;
     Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkLinearHorizontal,'Wave UI undo');
     H.Redo;
@@ -292,7 +368,7 @@ begin
     end;
     Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkSpectrum,'Spectrum UI apply');
     Check(not TRadioButton(ColorForm.FindComponent('ColorSlot2')).Visible,'Spectrum color2 visible');
-    Check(S.RectangleFillStyle.Kind = vfkSpectrum,'Spectrum creation default');
+    Check(S.Color2 = clWhite,'Spectrum creation default');
     H.Undo;
     Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind = vfkLinearHorizontal,'Spectrum UI undo');
     H.Redo;
@@ -320,7 +396,7 @@ begin
     Check(ColorForm.ClientHeight < 220,'Texture popup retains color space');
     PickTexture(ColorForm);
     Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind=vfkTexture,'Texture file applied to fill');
-    Check(S.RectangleFillStyle.Kind=vfkTexture,'Texture creation default');
+    Check(S.Color2 = clWhite,'Texture creation default');
     H.Undo; Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind<>vfkTexture,'Texture fill undo');
     H.Redo; Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind=vfkTexture,'Texture fill redo');
     CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
@@ -346,7 +422,7 @@ begin
     Check(ModeCombo.Items.Count = 3,'Stroke popup allows texture');
     ModeCombo.ItemIndex := 2; ModeCombo.OnChange(ModeCombo); PickTexture(ColorForm);
     Check(D[1].StrokePaint.Kind=vfkTexture,'Texture file applied to stroke');
-    Check(S.LineStrokePaint.Kind=vfkTexture,'Texture line creation default');
+    Check(S.Color1=clBlack,'Object texture must not change creation color');
     H.Undo; Check(D[1].StrokePaint.Kind<>vfkTexture,'Texture stroke undo');
     H.Redo; Check(D[1].StrokePaint.Kind=vfkTexture,'Texture stroke redo');
     CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
@@ -444,13 +520,13 @@ begin
     Creation.MouseMove([ssLeft],200,200); Creation.MouseUp(mbLeft,[],200,200);
     Check(D[D.LayerCount-1] is TVectArtPathLayer,'Template did not create Path');
     Check(TVectArtPathLayer(D[D.LayerCount-1]).Closed,'Template is not closed');
-    Check(TVectArtPathLayer(D[D.LayerCount-1]).FillStyle.Kind = vfkLinearHorizontal,'New shape lost selected gradient');
-    Check(TVectArtPathLayer(D[D.LayerCount-1]).FillStyle.Angle = 45,'New shape lost angle');
-    Check(TVectArtPathLayer(D[D.LayerCount-1]).FillColor = clBlue,'New shape lost selected fill color');
+    Check(TVectArtPathLayer(D[D.LayerCount-1]).FillStyle.Kind = vfkSolid,'New shape must use solid fill');
+    Check(TVectArtPathLayer(D[D.LayerCount-1]).FillStyle.Angle = 0,'New shape must not inherit angle');
+    Check(TVectArtPathLayer(D[D.LayerCount-1]).FillColor = clWhite,'New shape must use Color2');
     I := D.LayerCount; H.Undo; Check(D.LayerCount=I-1,'Template undo');
     H.Redo; Check(D.LayerCount=I,'Template redo');
-    Check(D[D.LayerCount-1].StrokePaint.Kind = vfkLinearHorizontal,'Creation lost stroke gradient');
-    Check(D[D.LayerCount-1].StrokePaint.Angle = 45,'Creation lost stroke angle');
+    Check(D[D.LayerCount-1].StrokePaint.Kind = vfkSolid,'Creation must use solid stroke');
+    Check(D[D.LayerCount-1].StrokePaint.Angle = 0,'Creation must not inherit stroke angle');
     D.SetSelectedLayers([1,3]); UI.RefreshFromDocument;
     for I := 0 to Tabs.PageCount-1 do
       if Tabs.Pages[I].Caption = '線の色' then Tabs.ActivePage := Tabs.Pages[I];
@@ -474,6 +550,12 @@ begin
         Capture(Screen.Forms[I],'paint-popup');
       end;
     CloseVectArtColorPopup(UI);
+    CheckCreationColors;
+    Check(Exceptions.ErrorText='',Exceptions.ErrorText);
     Writeln('PASS settings UI, text/line commands, locks, appearance, 30 templates and undo/redo');
-  finally Picker.Free; Creation.Free; F.Free; S.Free; H.Free; D.Free; end;
+  finally
+    Picker.Free; Creation.Free; F.Free; S.Free; H.Free; D.Free;
+    Application.OnException := nil; Exceptions.Free;
+    TTextRendererSkiaRuntime.Release;
+  end;
 end.

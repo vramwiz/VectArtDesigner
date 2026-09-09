@@ -162,6 +162,7 @@ begin
           RectangleData.Opacity := RectangleLayer.Opacity;
           RectangleData.RotationDegrees := RectangleLayer.RotationDegrees;
           RectangleData.Shape := RectangleLayer.Shape;
+          RectangleData.Shadow := RectangleLayer.Shadow;
           RectangleData.StrokePaint := RectangleLayer.StrokePaint;
           RectangleData.StrokeColor := RectangleLayer.StrokeColor;
           RectangleData.StrokeStyle := RectangleLayer.StrokeStyle;

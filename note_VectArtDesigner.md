@@ -1396,3 +1396,60 @@ Rendering/Paint、Persistence/Mif/Rendering、Persistence/Svg/Paintを追加。C
 - Sourceは各フォルダ最大6ユニットで大量集中がなく、既存の責務別フォルダを維持。PaintReaderは既存のSVG/Paintへ置いた。本体dpr／dprojとSVGテストの明示参照を更新。構成と依存方向はSource/README.mdへ記録。
 - 新設・変更ユニットの先頭へ目的・担当範囲、処理内へ所有権・変換完了前の状態維持・実寸配置・外部パス非依存・SVGの復元制約をコメントで記載。日本語PascalソースはUTF-8 BOM付き。
 - TexturePaintTests、SettingsUiTests、SvgDocumentRoundTrip、FillIntegrationTests、StrokePaintTests、TextPaintTests、MainFormLifecycleTestsの7件PASS。Debug／Releaseは警告・エラー0、通常EXEをDebugで更新済み。参照先存在チェックとgit diff --checkも通過。検証出力はTestOutput配下。
+
+## 作成時の2色への統一（2026-09-09）
+
+- ツールアイコン下に色1・色2を配置。色1は黒を初期値として図形の線・枠・文字、色2は白を初期値として図形の塗りへ使う。共通の単色ポップアップで変更できる。値はEditorStateだけに保持し、起動ごとに黒・白へ戻す。MIF・SVG・設定ファイルへ初期色を保存しない。
+- EditorStateから個別の線色／枠色とグラデーション・テクスチャの作成初期値を撤去し、Color1／Color2へ統一。作成後のオブジェクト編集は初期色を変更しない。テンプレ図形の色欄も同じ2色の単色編集へ接続し、新規Rectangle／Ellipse／Path／Line／Textはベタで作成する。既存オブジェクトのグラデーション・テクスチャと保存形式は維持する。
+- 色欄はToolPalette/CreationColorsへ分離。小型色見本では文字を省き、外側の色1・色2ラベルとヒントで用途を示す。狭い高さではツールボタンの高さを調整する。Dock Frameの配置前にネイティブ子コントロールを生成しないよう、色欄はパレットのCreateWndで生成する。
+- SettingsUiTestsで色変更、ベタ専用UI、図形・線・文字への採用、既存図形への非干渉、新規EditorStateでの黒・白復元、オブジェクト装飾編集後のベタ作成を確認。テスト中の親ウィンドウ未配置エラーを修正。追加した文字作成検証にはTextRendererのAcquire／Releaseが必要だったため補い、VCL例外を記録して失敗判定するようにした。
+- SettingsUiTests、MainFormLifecycleTests（起動・リサイズ・終了3回）、RoundedRectangleCreationTests、LineInteractionTests、ClosedPathCreationTests、ClosedBezierCreationTests、TextEditingTests、TexturePaintTests、FillIntegrationTests、StrokePaintTests、TextPaintTestsがPASS。閉図形テストは検証開始時の枠のみモードを明示。Debug／Releaseは警告・エラー0。
+
+## 新規図形の意図しないグループ化修正・作成色表示（2026-09-09）
+
+- ShapeCreationのRectangle／Line／Path用recordに全体初期化がなく、数値のGroupIdへスタック上の値が残る可能性があった。各作成処理の入口でDefault(record)を設定し、グループ未所属と他の未指定値を確実に初期化する。既存グループの複製やUndoデータの所属は変更しない。
+- 作成色の「色1」「色2」ラベルを撤去し、2つの丸と交換矢印へ変更。左上の丸は線・枠・文字、右下の丸は塗り。丸から単色ポップアップを開き、矢印はEditorStateの2色を一度の通知で交換する。交換時は開いているピッカーを閉じ、古い値の再適用を防ぐ。
+- ShapeCreationGroupTestsで9ツール×12回の新規作成、既存グループ選択中の独立した選択、Undo／Redo後の未所属を確認。SettingsUiTestsで色変更・交換を確認し画面PNGも確認。MainFormLifecycleTestsとLayerGroupOperationsTestsもPASS。Debug／Releaseは警告・エラー0、通常EXE更新済み。
+
+## 四角の枠＋塗り初期値の統一（2026-09-09）
+
+- 四角LayerのコンストラクタとEditorState未接続のレイヤー追加経路に残っていた線幅0を1へ変更。起動時の黒枠・白塗りと一致させた。指定済みの保存データと、明示的に選んだ塗りのみの線幅0は維持する。
+- InitialRectangleTestsでコンストラクタ、編集状態なしの追加、初期EditorState付き追加、塗りのみ指定、本体画面でのドラッグ配置を確認。本体ドラッグは修正前もFilled=True／StrokeWidth=1だったため、確認できた差分は既定値と未接続追加経路。
+- InitialRectangleTests、RectangleStrokeTests、SettingsUiTests、ShapeCreationGroupTests、VectArtRendererTests、FillIntegrationTests、MifDocumentRoundTripがPASS。Debug／Releaseは警告・エラー0、通常EXE更新済み。
+
+## 四角サムネイルの枠描画修正（2026-09-09）
+
+- 初期色の四角が白いサムネイルに埋もれる原因は、GDI／Direct2Dの両経路で枠をFrameRect（Brush使用）で描いていたこと。前回の初期線幅統一では解消していなかった。
+- 塗りと輪郭を分け、輪郭は透明BrushとPenによるRectangleへ変更。線なしではPenも無効化する。サムネイル外周と図形の枠が重ならないよう4pxの余白を確保。
+- RectangleThumbnailTestsで修正前の枠画素0を再現し、修正後は両描画経路の枠＋塗り／枠のみ／塗りのみを画素検証。Direct2D出力の目視確認、InitialRectangleTests、RectangleStrokeTests、GroupThumbnailRendererTestsも通過。
+- Debug／Releaseビルドは警告・エラー0。通常EXE更新済み。
+
+## 同分類の選択属性を新規作成へ引継ぐ（2026-09-09）
+
+- 作成開始時に1オブジェクトを選択している場合、線→線、図形→図形、文字→文字のみ見た目を引継ぐ。直線と開いたPathを線、四角／楕円と閉じたPath（角丸・テンプレ含む）を図形に分類。異分類・未選択・複数選択は現在の初期色とツール設定を使う。
+- 線色・線幅・線種・線端・接合・品質・マーカー、図形の枠／塗り有無とペイント、不透明度、文字のフォント・サイズ・書式・字間・行間・縦書きを、モデルが対応する範囲で転記。グラデーション・画像テクスチャも対象。四角が持たない線端や品質は転記しない。UI先行の未適用効果は対象外。
+- 位置・大きさ・形状・回転・反転・文字内容・名前・グループ所属・ロック・表示状態を転記しない。EditorStateの初期値自体は変更しない。同分類の場合、枠のみ／塗りのみの状態も選択元が優先する。
+- Core/Appearance/ObjectAttributesにUI非依存の取得／適用処理を分離。選択条件は取得窓口、対象分類の照合は適用窓口へ集約し、将来の属性コピーでも再利用できる。テクスチャのバイト所有権は取得元と各対象で分離。既存オブジェクトへの貼付けUIは後続作業。
+- 図形作成は最初のクリックで取得するため、連続線の途中で選択が変わっても開始時の属性を維持する。文字入力とレイヤー操作バーの四角追加にも適用。既存の挿入コマンドへ属性込みのデータを渡しUndo／Redoで保持する。
+- ObjectAttributeCreationTestsは11ツール×7選択状態の77ケース、テキストデータへの適用、モード優先、テクスチャ独立性、Undo／Redoを検証。TextAttributeCreationTestsは文字入力UIで同分類・未選択・別分類・複数選択と確定／Undo／Redoを検証。従来のモードテストは未選択の初期値を検証するよう前回作成の選択を解除する。
+- 検証結果：追加2件と既存7件（作成グループ、初期四角、設定UI、閉じたPath、閉じたBezier、角丸四角、文字編集）通過。Debug／Releaseとも警告・エラー0、通常EXE更新済み。
+
+## 図形の影（2026-09-09）
+
+- 提供された `mif/四角_影_赤_hex.txt` と同名MIFのネイティブ属性を確認。`vector effect object type=shadow`、`level=1`、`color=255`（BGRの赤）、`offset x=1`、`offset y=1`、`direction=0`。
+- Rectangle／Ellipse／閉じたPathの影をモデル化。影の有無・単色・ぼかし強度・横／縦位置を影タブで編集し、変更をUndo／Redo可能とした。単一選択の図形を対象とし、ロック・未選択・複数選択では無効。文字効果は従来の未適用UIのまま。
+- 本体の塗りと枠を一度合成してからSkiaのDropShadowを適用。レイヤー不透明度を影にも反映し、影を含む領域をサムネイル・グループ・MIF画像で確保する。図形の選択枠とサイズは本体のまま。
+- MIFは提供例と同じvector effect属性を使用し、アプリ独自キーは追加しない。影を含むPNG配置と本体のvector original position／matrixを分離し、読込で本体が拡大しないよう修正。提供例の本体は(115,115)から195×95、影付きPNGは203×103。
+- JSON往復と標準SVG feDropShadowの出力／対応範囲の読込へ接続。SVGは回転前の図形要素を影付きgroupで包み、影の向きはキャンバス座標にそろえる。複合フィルター・独立した影不透明度等は本実装の対象外で既存の非対応通知に従う。
+- Core/Appearance/ObjectAttributesへ影を追加し、同分類図形の新規作成へ引継ぐ。削除／Undo用データと四角複製にも含める。Model、ShadowPaint、MifShadow、SvgShadow、ShadowCommand、ShadowSettingsに責務を分離。
+- MIF／SVG Readerのレコード初期化漏れも修正。提供MIF読込で意図しない単独グループ表示が出たため、所属・装飾の未定義値を毎回初期化し、回帰テストへ未所属の検証を追加。
+- 確認範囲：提供例の赤・level1・offset1の読込、影の外側画素、本体寸法、負方向オフセット・ぼかし5・無効化・回転、MIF／SVG／JSON往復、Path引継ぎ、UI・ロック・Undo／Redo、サムネイルを検証。
+- 表示精度の制約：MIF levelをSkiaガウスぼかしのsigmaとして対応付けている。元アプリの境界アンチエイリアス／ぼかし画素との完全一致は未達。別level・directionの元アプリサンプルによる厳密な係数検証は未実施。境界の差を持ったまま、属性の編集・保存・再読込は対応する。
+- 最終検証：影の統合テスト、既存の属性作成・グループ作成・サムネイル・線枠・テクスチャ・設定UI・MIF／SVG往復・元MIF5種の読込が通過。Debug／Releaseは警告・エラー0、通常EXE更新済み。
+
+## 影ページの表示欠け対策（2026-09-09）
+
+- 既存の情報／線ページ対策に合わせ、ShadowSettingsのParentDoubleBuffered／DoubleBuffered／ParentBackgroundを無効化し、背景と文字色を明示した。
+- ラベルをTLabelからTStaticTextへ変更し、親背景に上描きされない独立HWNDで表示する。入力欄・色見本・チェック欄も親フォントを継承し、VCLスタイルのフォント上書きを除外する。
+- 既存LayoutSettingsのRDW_ALLCHILDREN再描画をそのまま使用。MainFormLifecycleTestsへ影タブの実画面取得を追加し、Windows Modern Darkでタブ3巡・リサイズ・生成破棄3回と表示画像を確認。ShapeShadowTestsも通過。
+- Debug／Releaseとも警告・エラー0、通常EXEは起動中で上書き不可。修正版はTestOutput/AppDebugへ出力済み。

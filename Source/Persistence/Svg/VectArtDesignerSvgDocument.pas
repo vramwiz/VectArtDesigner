@@ -51,7 +51,7 @@ function TrySaveVectArtDocumentToSvgFile(Document: TVectArtDocument;
 
 implementation
 
-uses
+uses VectArtDesignerSvgShadow,
   VectArtDesignerSvgWriter, VectArtDesignerSvgPrimitives, VectArtDesignerSvgPaintReader,
   System.Classes, System.Generics.Collections, System.IOUtils, System.Math,
   System.NetEncoding, System.SysUtils, System.Types,
@@ -398,6 +398,7 @@ var
   X: Single;
   Y: Single;
 begin
+  Data := Default(TVectArtImageData);
   Result := False;
   if not TryGetAttribute(Node, 'href', Href) then
     if not TryGetAttribute(Node, 'xlink:href', Href) then
@@ -481,6 +482,7 @@ var
   X: Single;
   Y: Single;
 begin
+  Data := Default(TVectArtTextData);
   Result := False;
   if not TryGetAttribute(Node, 'x', ValueText) then
     ValueText := '0';
@@ -650,6 +652,7 @@ var
   X: Single;
   Y: Single;
 begin
+  Data := Default(TVectArtRectangleData);
   Result := False;
   if SameText(LocalNodeName(Node), 'ellipse') then
   begin
@@ -689,6 +692,7 @@ begin
     (not Data.Filled or
      (ColorToRGB(TColor(FillInteger)) = ColorToRGB(Data.FillColor))) then
     Data.FillColor := TColor(FillInteger);
+  Data.Shadow := ReadSvgShadow(Node);
   Data.StrokeColor := clBlack;
   Data.StrokeStyle := vssSolid;
   Data.StrokeWidth := 0.0;
@@ -771,6 +775,7 @@ var
   ValueText: string;
   VisibilityValue: string;
 begin
+  Data := Default(TVectArtLineData);
   Result := TryGetAttribute(Node, 'x1', ValueText) and
     TryParseSvgNumber(ValueText, Data.StartPoint.X) and
     TryGetAttribute(Node, 'y1', ValueText) and
@@ -1238,6 +1243,7 @@ var
   ValueText: string;
   VisibilityValue: string;
 begin
+  Data := Default(TVectArtPathData);
   Result := False;
   Data.Bezier := False;
   Data.BoundsEditing := False;
@@ -1281,6 +1287,7 @@ begin
     ValueText := 'none';
   TryGetPresentationValueOrInherited(Node, InheritedStyles, 'fill',
     ValueText);
+  Data.Shadow := ReadSvgShadow(Node);
   Data.Filled := Closed and not SameText(Trim(ValueText), 'none');
   Data.FillColor := clWhite;
   if Data.Filled and not TryParseFill(Node,ValueText,Data.FillColor,Data.FillStyle) then
@@ -1597,6 +1604,7 @@ function PathDataFromTransformedRectangle(
 var
   I: Integer;
 begin
+  Result := Default(TVectArtPathData);
   Result.Bezier := False;
   Result.BoundsEditing := False;
   Result.Closed := True;
@@ -1613,6 +1621,7 @@ begin
   Result.Points[I] := Corners[I];
   Result.StartMarker := vlmNone;
   Result.StartMarkerSize := 4.0;
+  Result.Shadow := RectangleData.Shadow;
   Result.StrokePaint := RectangleData.StrokePaint;
   Result.StrokeColor := RectangleData.StrokeColor;
   Result.StrokeStyle := RectangleData.StrokeStyle;
@@ -1629,7 +1638,8 @@ var
   ValueText: string;
 begin
   if TryGetPresentationValue(Node, 'filter', ValueText) and
-    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') then
+    (Trim(ValueText) <> '') and not SameText(Trim(ValueText), 'none') and
+    not ReadSvgShadow(Node).Enabled then
     Report.AddIssue(siikIgnored, ElementName, ElementId,
       'SVGフィルターは対応していないため無視しました。');
   if TryGetPresentationValue(Node, 'clip-path', ValueText) and

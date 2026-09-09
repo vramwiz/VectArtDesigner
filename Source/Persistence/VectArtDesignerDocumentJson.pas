@@ -100,6 +100,26 @@ begin
   Result := TJSONString(Value).Value;
 end;
 
+procedure WriteShadow(Json: TJSONObject; const Value: TVectArtShadow);
+begin
+  if not Value.Enabled then Exit;
+  Json.AddPair('shadowEnabled',TJSONBool.Create(True));
+  Json.AddPair('shadowColor',TJSONNumber.Create(Integer(Value.Color)));
+  Json.AddPair('shadowBlur',TJSONNumber.Create(Value.Blur));
+  Json.AddPair('shadowX',TJSONNumber.Create(Value.OffsetX));
+  Json.AddPair('shadowY',TJSONNumber.Create(Value.OffsetY));
+end;
+function ReadShadow(Json: TJSONObject): TVectArtShadow;
+begin
+  Result:=Default(TVectArtShadow);
+  Result.Enabled:=ReadOptionalBoolean(Json,'shadowEnabled',False);
+  if not Result.Enabled then Exit;
+  Result.Color:=TColor(ReadInteger(Json,'shadowColor'));
+  Result.Blur:=EnsureRange(ReadInteger(Json,'shadowBlur'),0,100);
+  Result.OffsetX:=EnsureRange(ReadInteger(Json,'shadowX'),-10000,10000);
+  Result.OffsetY:=EnsureRange(ReadInteger(Json,'shadowY'),-10000,10000);
+end;
+
 procedure WriteFill(Json: TJSONObject; const Fill: TVectArtFillStyle; const Prefix: string = '');
 begin
   Json.AddPair(Prefix+'fillKind',TJSONNumber.Create(Ord(Fill.Kind)));
@@ -275,6 +295,7 @@ begin
         PathJson.AddPair('fillColor',
           TJSONNumber.Create(Integer(Path.FillColor)));
         WriteFill(PathJson,Path.FillStyle);
+        WriteShadow(PathJson,Path.Shadow);
         WriteFill(PathJson,Path.StrokePaint,'stroke');
         PathJson.AddPair('opacity', TJSONNumber.Create(Path.Opacity));
         PathJson.AddPair('strokeColor',
@@ -328,6 +349,7 @@ begin
       RectangleJson.AddPair('fillColor',
         TJSONNumber.Create(Integer(Rectangle.FillColor)));
       WriteFill(RectangleJson,Rectangle.FillStyle);
+      WriteShadow(RectangleJson,Rectangle.Shadow);
       WriteFill(RectangleJson,Rectangle.StrokePaint,'stroke');
       RectangleJson.AddPair('filled', TJSONBool.Create(Rectangle.Filled));
       RectangleJson.AddPair('opacity', TJSONNumber.Create(Rectangle.Opacity));
@@ -584,6 +606,7 @@ begin
           PathValue.Filled := ReadBoolean(LayerJson, 'filled');
           PathValue.FillColor := TColor(ReadInteger(LayerJson, 'fillColor'));
           PathValue.FillStyle := ReadFill(LayerJson);
+          PathValue.Shadow := ReadShadow(LayerJson);
           PathValue.StrokePaint := ReadFill(LayerJson,'stroke');
           PathValue.Opacity := ReadSingle(LayerJson, 'opacity');
           PathValue.StrokeColor := TColor(ReadInteger(LayerJson,
@@ -673,6 +696,7 @@ begin
           ReadSingle(LayerJson, 'bottom'));
         Data.FillColor := TColor(ReadInteger(LayerJson, 'fillColor'));
         Data.FillStyle := ReadFill(LayerJson);
+        Data.Shadow := ReadShadow(LayerJson);
         Data.StrokePaint := ReadFill(LayerJson,'stroke');
         Data.Filled := True;
         if LayerJson.GetValue('filled') is TJSONBool then

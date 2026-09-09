@@ -169,7 +169,8 @@ begin
   LabelAt('クリックして線色・塗りを編集', 92);
 
   PageBody := Page('影', FShadowPage);
-  Draft := TVectArtSettingsDraft.CreateKind(Self, PageBody, 0); Draft.Parent := PageBody; Draft.Align := alClient;
+  FShadowSettings := TVectArtShadowSettings.Create(Self);
+  FShadowSettings.Parent := PageBody; FShadowSettings.Align := alClient;
   PageBody := Page('縁取り', FOutlinePage);
   Draft := TVectArtSettingsDraft.CreateKind(Self, PageBody, 1); Draft.Parent := PageBody; Draft.Align := alClient;
   PageBody := Page('効果', FEffectsPage);
@@ -206,6 +207,7 @@ begin
     FEffectsPage.TabVisible := IsText;
     FLinePage.TabVisible := not IsText;
     FStrokePage.TabVisible := not IsText;
+    FShadowSettings.Configure(FDocument,FEditHistory);
     FShadowPage.TabVisible := not IsText;
     if (FPages.ActivePage = nil) or not FPages.ActivePage.TabVisible then FPages.ActivePage := FInfoPage;
     if IsText then FFillPage.Caption := '文字色' else FFillPage.Caption := '塗り色';
@@ -371,11 +373,6 @@ begin
   for I in FDocument.GetSelectedLayerIndices do
     Command.Add(TVectArtStrokePaintCommand.Create(FDocument,I,Color,Fill));
   Command.Execute;
-  if FEditorState <> nil then
-  begin
-    FEditorState.RectangleStrokeColor := Color; FEditorState.RectangleStrokePaint := Fill;
-    FEditorState.LineStrokeColor := Color; FEditorState.LineStrokePaint := Fill;
-  end;
   if FEditHistory <> nil then FEditHistory.AddApplied(Command) else Command.Free;
   RefreshFromDocument;
 end;
@@ -387,8 +384,6 @@ begin
   if (FDocument = nil) or (FDocument.SelectionCount <> 1) or SelectedLayersHaveLock then Exit;
   Command := TVectArtFillCommand.Create(FDocument,FDocument.SelectedIndex,Color,Fill);
   Command.Execute;
-  if (FEditorState <> nil) and not (FDocument[FDocument.SelectedIndex] is TVectArtTextLayer) then
-    FEditorState.SetRectangleFill(Color,Fill);
   if FEditHistory <> nil then FEditHistory.AddApplied(Command) else Command.Free;
   RefreshFromDocument;
 end;

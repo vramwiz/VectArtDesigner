@@ -10,6 +10,8 @@ type
   TVectArtColorSwatch = class(TCustomControl)
   private
     FValue: TColor;
+    FCompact: Boolean;
+    FCircular: Boolean;
     FEmpty: Boolean;
     FFillStyle: TVectArtFillStyle;
     FSwatchBitmap: Vcl.Graphics.TBitmap;
@@ -25,6 +27,9 @@ type
     property FillStyle: TVectArtFillStyle read FFillStyle write SetFillStyle;
     property Value: TColor read FValue write SetValue;
     property Empty: Boolean read FEmpty write FEmpty;
+    // 狭い作成色欄では単色面だけを表示し、役割は外側のラベルで示す。
+    property Circular: Boolean read FCircular write FCircular;
+    property Compact: Boolean read FCompact write FCompact;
     property OnClick;
   end;
 
@@ -90,9 +95,20 @@ end;
 procedure TVectArtColorSwatch.Paint;
 var Surface: ISkSurface; Paint: ISkPaint; H: Integer; Caption: string;
 begin
-  Canvas.Brush.Color := TColor($00353535);
+  if FCircular then Canvas.Brush.Color := TColor($00252525)
+  else Canvas.Brush.Color := TColor($00353535);
   Canvas.FillRect(ClientRect);
   Canvas.Brush.Color := FValue;
+  if FCompact then
+  begin
+    if FCircular then
+    begin
+      Canvas.Pen.Color := clSilver; Canvas.Pen.Width := 1;
+      Canvas.Ellipse(2,2,Width-2,Height-2);
+    end
+    else Canvas.FillRect(Rect(4,4,Width-4,Height-4));
+    Exit;
+  end;
   Canvas.FillRect(Rect(6, 6, 44, Height - 6));
   if not FEmpty and (FFillStyle.Kind <> vfkSolid) then
   begin

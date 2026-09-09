@@ -1,4 +1,4 @@
-﻿# ソース構成
+# ソース構成
 
 グラデーションと画像テクスチャは図形の塗り・線・文字の3対象でいったん完成（2026-09-09、ユーザー動作確認済み）。今後の追加は以下の責務へ配置し、公開窓口へ描画や属性変換を集積しない。
 
@@ -22,3 +22,19 @@ MIFの依存方向は公開変換APIからReader／Raster／Paint／Placementへ
 ユニットの追加・移動時は本体のdpr／dprojとテスト内の明示パスを更新する。検証出力はTestOutput配下へ限定する。
 
 Source内の各フォルダは最大6ユニット（今回の追加後も同じ）。大量のユニットが集中したフォルダはなく、現在の責務別分類を維持する。
+
+作成色はEditorStateのColor1／Color2だけで保持し、ToolPalette/CreationColorsが単色編集を担当する。オブジェクト設定から作成色を更新しない。Dockの親ウィンドウ確定後に色欄を生成する。
+
+
+Core/Appearance/ObjectAttributesは線・図形・文字の見た目のスナップショットとデータへの適用を担当する。
+作成は開始時の単一選択を取得し、同分類のみ適用する。線＝直線／開いたPath、図形＝Rectangle／閉じたPath、文字＝Text。
+形状・位置・サイズ・回転・反転・名前・グループ・ロック・表示状態・文字内容は対象外。不透明度は見た目として含める。
+四角に存在しない線端・品質などは貼付け先の初期値を維持する。画像バイトは取得時と適用時に複製する。
+将来の既存オブジェクトへの属性コピーはCaptureVectArtObjectAttributesとApplyVectArtObjectAttributesを再利用し、
+対象データの変更通知・Undoを呼出側で処理する。現段階では貼付け操作のUIは追加していない。
+
+
+図形の影はDocumentのShadowレコードを正本とする。Rendering/Paint/ShadowPaintが合成・外形、
+Persistence/Mif/Rendering/MifShadowがネイティブ属性・影付きPNG配置、Persistence/Svg/Paint/SvgShadowが標準SVGの対応を担当する。
+ObjectProperties/ShadowSettingsは編集UI、Core/Commands/Appearance/ShadowCommandは履歴、ObjectAttributesは図形間の引継ぎを担当する。
+影付きPNGの領域と、編集対象の本体領域は分離する。文字の影／装飾はこの図形向け機能へ暗黙に含めない。

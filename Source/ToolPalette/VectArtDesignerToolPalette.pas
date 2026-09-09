@@ -5,11 +5,12 @@ unit VectArtDesignerToolPalette;
 interface
 
 uses
-  System.Classes, System.Types, Vcl.Controls, VectArtDesignerEditorState;
+  System.Classes, System.Types, Vcl.Controls, VectArtDesignerCreationColors, VectArtDesignerEditorState;
 
 type
   TVectArtToolPaletteControl = class(TCustomControl)
   private
+    FColors: TVectArtCreationColors;
     FEditorState: TVectArtEditorState;
     FOnTemplates: TNotifyEvent;
     procedure ActivateButton(Index: Integer);
@@ -18,9 +19,11 @@ type
     procedure DrawButton(Index: Integer);
     procedure SetEditorState(const Value: TVectArtEditorState);
   protected
+    procedure CreateWnd; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer); override;
     procedure Paint; override;
+    procedure Resize; override;
   public
     constructor Create(AOwner: TComponent); override;
     procedure RefreshState;
@@ -32,7 +35,7 @@ type
 implementation
 
 uses
-  Winapi.Windows, Vcl.Graphics;
+  System.Math, Winapi.Windows, Vcl.Graphics;
 
 const
   BUTTON_SIZE = 46;
@@ -44,9 +47,11 @@ const
   COLOR_ICON_FILL = TColor($00808080);
 
 function TVectArtToolPaletteControl.ButtonRect(Index: Integer): TRect;
+var H: Integer;
 begin
-  Result := Rect(6, 6 + Index * (BUTTON_SIZE + 6),
-    ClientWidth - 6, 6 + Index * (BUTTON_SIZE + 6) + BUTTON_SIZE);
+  // 狭い高さではアイコン間隔を詰め、下部の作成色を操作できる領域を確保する。
+  H := EnsureRange((ClientHeight-134) div BUTTON_COUNT,28,BUTTON_SIZE);
+  Result := Rect(6,6+Index*(H+6),ClientWidth-6,6+Index*(H+6)+H);
 end;
 
 procedure TVectArtToolPaletteControl.ActivateButton(Index: Integer);
@@ -298,8 +303,28 @@ begin
     DrawButton(I);
 end;
 
+procedure TVectArtToolPaletteControl.CreateWnd;
+begin
+  inherited;
+  // Dock用Frameの親が確定してから子のネイティブコントロールを作る。
+  // Context接続は配置前にも呼ばれるので、SetEditorStateでは生成しない。
+  if FColors = nil then
+  begin
+    FColors := TVectArtCreationColors.Create(Self); FColors.Parent := Self;
+    FColors.EditorState := FEditorState;
+    Resize;
+  end;
+end;
+
+procedure TVectArtToolPaletteControl.Resize;
+begin
+  inherited;
+  if FColors <> nil then FColors.SetBounds(6,ButtonRect(BUTTON_COUNT-1).Bottom+6,ClientWidth-12,62);
+end;
+
 procedure TVectArtToolPaletteControl.RefreshState;
 begin
+  if FColors <> nil then FColors.RefreshColors;
   Invalidate;
 end;
 
@@ -307,6 +332,7 @@ procedure TVectArtToolPaletteControl.SetEditorState(
   const Value: TVectArtEditorState);
 begin
   FEditorState := Value;
+  if FColors <> nil then FColors.EditorState := Value;
   RefreshState;
 end;
 

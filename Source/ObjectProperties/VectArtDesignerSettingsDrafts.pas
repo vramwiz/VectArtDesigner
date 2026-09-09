@@ -1,4 +1,4 @@
-﻿// 未対応の影・文字装飾は設定UIを先行提供し、Documentへ適用しないことを明示する。
+﻿// 未対応の文字装飾は設定UIを先行提供し、Documentへ適用しないことを明示する。
 unit VectArtDesignerSettingsDrafts;
 
 interface

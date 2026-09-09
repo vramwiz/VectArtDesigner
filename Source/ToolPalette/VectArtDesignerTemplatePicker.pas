@@ -22,7 +22,7 @@ type
     procedure Choose(Sender: TObject; ACol, ARow: Longint; var CanSelect: Boolean);
     procedure ModeChanged(Sender: TObject);
     procedure OpenColor(Sender: TObject);
-    procedure FillChanged(Sender: TObject; Color: TColor; const Fill: TVectArtFillStyle);
+    procedure FillChanged(Sender: TObject; Color: TColor);
   public
     constructor Create(AOwner: TComponent); override;
     procedure Open(State: TVectArtEditorState);
@@ -31,7 +31,7 @@ type
 
 implementation
 
-uses System.Math, System.Skia, VectArtDesignerFillPaint, VectArtDesignerTemplateGeometry;
+uses System.Math, VectArtDesignerTemplateGeometry;
 
 constructor TVectArtTemplatePicker.Create(AOwner: TComponent);
 var L: TLabel;
@@ -57,8 +57,8 @@ begin
   FGrid.SetBounds(12,50,444,324);
   FGrid.OnDrawCell := DrawCell;
   FGrid.OnSelectCell := Choose;
-  L := TLabel.Create(Self); L.Parent := Self; L.Caption := '枠色'; L.SetBounds(12,386,200,20);
-  L := TLabel.Create(Self); L.Parent := Self; L.Caption := '塗り色'; L.SetBounds(240,386,200,20);
+  L := TLabel.Create(Self); L.Parent := Self; L.Caption := '色1（線・文字）'; L.SetBounds(12,386,200,20);
+  L := TLabel.Create(Self); L.Parent := Self; L.Caption := '色2（塗り）'; L.SetBounds(240,386,200,20);
   FStroke := TVectArtColorSwatch.Create(Self); FStroke.Parent := Self;
   FStroke.SetBounds(12,410,216,36); FStroke.OnClick := OpenColor;
   FFill := TVectArtColorSwatch.Create(Self); FFill.Parent := Self;
@@ -78,10 +78,8 @@ begin FState := State; Filter(nil); Refresh; Show; end;
 procedure TVectArtTemplatePicker.Refresh;
 begin
   if FState = nil then Exit;
-  FFill.Value := FState.RectangleFillColor;
-  FFill.FillStyle := FState.RectangleFillStyle;
-  FStroke.Value := FState.RectangleStrokeColor;
-  FStroke.FillStyle := FState.RectangleStrokePaint;
+  FFill.Value := FState.Color2;
+  FStroke.Value := FState.Color1;
   FMode.ItemIndex := Ord(FState.RectangleMode);
   FGrid.Invalidate;
 end;
@@ -100,7 +98,6 @@ end;
 procedure TVectArtTemplatePicker.DrawCell(Sender: TObject; ACol, ARow: Longint;
   Rect: TRect; State: TGridDrawState);
 var I,J: Integer; P: TArray<TPointF>; ScreenPoints: TArray<TPoint>; Bounds: TRectF;
-  Bitmap: TBitmap; Surface: ISkSurface; Paint: ISkPaint; Builder: ISkPathBuilder; Path: ISkPath;
 begin
   FGrid.Canvas.Brush.Color := TColor($00333333); FGrid.Canvas.FillRect(Rect);
   I := ARow*3+ACol;
@@ -108,46 +105,11 @@ begin
   Bounds := RectF(Rect.Left+26,Rect.Top+8,Rect.Right-26,Rect.Bottom-30);
   P := VectArtTemplatePoints(FItems[I],Bounds); SetLength(ScreenPoints,Length(P));
   for J := 0 to High(P) do ScreenPoints[J] := Point(Round(P[J].X),Round(P[J].Y));
-  FGrid.Canvas.Brush.Color := FState.RectangleFillColor;
+  FGrid.Canvas.Brush.Color := FState.Color2;
   if not VectArtRectangleModeHasFill(FState.RectangleMode) then FGrid.Canvas.Brush.Style := bsClear;
-  FGrid.Canvas.Pen.Color := FState.RectangleStrokeColor;
+  FGrid.Canvas.Pen.Color := FState.Color1;
   FGrid.Canvas.Pen.Width := EnsureRange(Round(FState.RectangleStrokeWidth),1,5);
   if not VectArtRectangleModeHasStroke(FState.RectangleMode) then FGrid.Canvas.Pen.Style := psClear;
-  if (VectArtRectangleModeHasFill(FState.RectangleMode) and
-    (FState.RectangleFillStyle.Kind <> vfkSolid)) or
-    (VectArtRectangleModeHasStroke(FState.RectangleMode) and
-    (FState.RectangleStrokePaint.Kind <> vfkSolid)) then
-  begin
-    Bitmap := TBitmap.Create;
-    try
-      Bitmap.PixelFormat := pf32bit; Bitmap.SetSize(Rect.Width,Rect.Height);
-      Surface := TSkSurface.MakeRasterDirect(
-        TSkImageInfo.Create(Bitmap.Width,Bitmap.Height,TSkColorType.BGRA8888,TSkAlphaType.Premul),
-        Bitmap.ScanLine[Bitmap.Height-1],Bitmap.Width*4);
-      Surface.Canvas.Clear($FF333333);
-      Surface.Canvas.Translate(0,Bitmap.Height); Surface.Canvas.Scale(1,-1);
-      Surface.Canvas.Translate(-Rect.Left,-Rect.Top);
-      Builder := TSkPathBuilder.Create; Builder.MoveTo(P[0]);
-      for J := 1 to High(P) do Builder.LineTo(P[J]);
-      Builder.Close; Path := Builder.Detach;
-      Paint := TSkPaint.Create; Paint.AntiAlias := True;
-      if VectArtRectangleModeHasFill(FState.RectangleMode) then
-      begin
-        SetFillPaint(Paint,FState.RectangleFillColor,FState.RectangleFillStyle,Bounds,1);
-        Surface.Canvas.DrawPath(Path,Paint);
-      end;
-      if VectArtRectangleModeHasStroke(FState.RectangleMode) then
-      begin
-        Paint.Style := TSkPaintStyle.Stroke;
-        Paint.StrokeWidth := EnsureRange(FState.RectangleStrokeWidth,1,5);
-        SetStrokePaint(Paint,FState.RectangleStrokeColor,FState.RectangleStrokePaint,Bounds,Paint.StrokeWidth,1);
-        Surface.Canvas.DrawPath(Path,Paint);
-      end;
-      Surface := nil;
-      FGrid.Canvas.Draw(Rect.Left,Rect.Top,Bitmap);
-    finally Bitmap.Free; end;
-    FGrid.Canvas.Brush.Style := bsClear; FGrid.Canvas.Pen.Style := psClear;
-  end;
   FGrid.Canvas.Polygon(ScreenPoints);
   FGrid.Canvas.Pen.Style := psSolid; FGrid.Canvas.Pen.Width := 1;
   FGrid.Canvas.Brush.Style := bsClear; FGrid.Canvas.Font.Color := clWhite;
@@ -175,23 +137,15 @@ begin
   FStrokeEditing := Sender = FStroke;
   if FState = nil then Exit;
   if FStrokeEditing then
-    ShowVectArtFillPopup(Self,FStroke.Value,FState.RectangleStrokePaint,nil,FillChanged)
-  else ShowVectArtFillPopup(Self,FFill.Value,FState.RectangleFillStyle,nil,FillChanged);
+    ShowVectArtColorPopup(Self,'色1（線・文字）',FState.Color1,nil,FillChanged)
+  else ShowVectArtColorPopup(Self,'色2（塗り）',FState.Color2,nil,FillChanged);
 end;
 
-procedure TVectArtTemplatePicker.FillChanged(Sender: TObject; Color: TColor;
-  const Fill: TVectArtFillStyle);
+procedure TVectArtTemplatePicker.FillChanged(Sender: TObject; Color: TColor);
 begin
   if FState = nil then Exit;
-  if FStrokeEditing then
-  begin
-    FState.RectangleStrokeColor := Color; FState.RectangleStrokePaint := Fill;
-    Refresh; Exit;
-  end;
-  FState.SetRectangleFill(Color,Fill);
-  if FState.RectangleMode = vrmOutline then FState.RectangleMode := vrmFillAndOutline;
+  if FStrokeEditing then FState.Color1 := Color else FState.Color2 := Color;
   Refresh;
 end;
-
 
 end.

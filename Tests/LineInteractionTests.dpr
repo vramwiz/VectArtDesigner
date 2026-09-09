@@ -61,7 +61,7 @@ begin
   Creation := TVectArtShapeCreation.Create;
   try
     EditorState.CurrentTool := vetLine;
-    EditorState.LineStrokeColor := clRed;
+    EditorState.Color1 := clRed;
     EditorState.LineCap := vlcRound;
     EditorState.LineAntiAlias := False;
     EditorState.LineEndMarker := vlmArrow;

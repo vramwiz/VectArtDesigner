@@ -87,3 +87,10 @@ textのfillへ6種類のグラデーション参照を出力し、読込時にTe
 図形のfill、線のstroke、文字のfillに埋め込みPNGのpatternを使用する。patternUnits=userSpaceOnUse、x／yは図形の左上、width／heightと子imageは元画像の寸法とし、実寸で繰り返す。画像はbase64で埋め込み、再読込時にTexturePngへ戻す。水平・垂直LineもobjectBoundingBoxへ依存しない。
 
 以前のアプリが書いた画像引き伸ばしpatternも画像は読み込むが、現在のMIF編集モデルでは実寸配置になる。任意の外部SVGのpatternTransformや配置パラメータ全般の再現は対応範囲外。
+
+
+### 図形の影（2026-09-09）
+
+単一図形の影は標準feDropShadowを1要素だけ持つfilterへ書き出し、filter付きgroupから再読込する。
+整数dx／dy、整数stdDeviation、単色flood-color、影の独立不透明度1を対応範囲とする。
+複合フィルター、非整数値、独立した影不透明度は無視の通知対象。SkiaとSVG実装間のぼかし境界の画素一致は保証しない。

@@ -12,7 +12,7 @@ function TryReadPngSize(const Png: TBytes; out Width,
 function TryImportWebArtDocument(Container: TVectArtMifContainer;
   Document: TVectArtDocument; out ErrorMessage: string): Boolean;
 implementation
-uses Winapi.Windows, VectArtDesignerMifPlacement, System.Classes, System.Generics.Collections, System.Math,
+uses VectArtDesignerMifShadow, Winapi.Windows, VectArtDesignerMifPlacement, System.Classes, System.Generics.Collections, System.Math,
   Vcl.Graphics, Vcl.Imaging.pngimage,
   VectArtDesignerMifPngMetadata, VectArtDesignerMifPaint,
   VectArtDesignerGeometry, VectArtDesignerRoundedRectangleGeometry;
@@ -226,6 +226,11 @@ begin
   try
     for I := 2 to Container.ChunkCount - 2 do
     begin
+      // ファイルにない所属・装飾が前のレコードやスタック値から混入しないようにする。
+      Data := Default(TVectArtRectangleData);
+      PathData := Default(TVectArtPathData);
+      LineData := Default(TVectArtLineData);
+      ImageData := Default(TVectArtImageData);
       if (Container[I].Tag <> 'IPNG') or
         not TryReadPngString(Container[I].Data, 'tEXt', 'object type',
           ObjectType) then
@@ -472,6 +477,7 @@ begin
             PathData.StrokeWidth := 0.0;
           PathData.Visible := Hidden = 0;
           PathData.Locked := False;
+          PathData.Shadow := ReadMifShadow(Container[I].Data);
           Paths.Add(PathData);
           LayerOrder.Add(-(1000000 + Paths.Count));
           Continue;
@@ -581,6 +587,8 @@ begin
         Data.StrokeWidth := 0.0;
       Data.Visible := Hidden = 0;
       Data.Locked := False;
+      Data.Shadow := ReadMifShadow(Container[I].Data);
+      ReadShadowRectangleGeometry(Container[I].Data,Data);
       Rectangles.Add(Data);
       LayerOrder.Add(Rectangles.Count);
     end;

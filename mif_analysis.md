@@ -737,3 +737,13 @@ Rectangle、type 2をEllipseへ対応付け、4個のIPNGを一組として読�
 オブジェクトPNGは順に180×100、170×95、175×85。縮小せず元画像の左上を実寸で使用する。四角内部と文字不透明部は対応する元画像RGBと完全一致。再生成オブジェクトとの色比較は輪郭境界を除きRGB各成分差1以内で通過した。
 
 アプリは元寸法PNGとimage属性を保存し、外部依存を作らないためpathname=@とする。小画像の反復は実装したが、提供サンプルは全て画像より小さいため元アプリのタイル境界は未検証。angle／levelの非ゼロ値と、書出しファイルのWebArt本体での再編集も未検証。
+
+
+## 図形の影：四角_影_赤（2026-09-09）
+
+画像のwaDAに `vector effect object type=shadow`、`vector effect level=1`、
+`vector effect color=255`（BGR赤）、`vector effect offset x=1`、`vector effect offset y=1`、
+`vector effect direction=0` を確認。PNGは203×103、image positionは(111,111)〜(313,213)の包含座標。
+本体のoriginal positionは(115,115)〜(309,209)、matrixは単位行列。画像外寸を本体寸法へ使用してはいけない。
+本実装は影の有効時に同属性を書き、無効時はeffect object type=noneを使用する。levelはSkiaのsigmaへ対応させるが、
+ぼかし／境界画素の元アプリとの完全一致と、別level・directionの解釈は未検証。

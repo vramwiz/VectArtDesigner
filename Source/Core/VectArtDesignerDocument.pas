@@ -19,6 +19,13 @@ type
     WaveCount: Integer;
     TexturePng: TBytes;
   end;
+  // MIF vector effectの影。位置とぼかしはドキュメント座標単位で保持する。
+  TVectArtShadow = record
+    Enabled: Boolean;
+    Color: TColor;
+    Blur: Integer;
+    OffsetX, OffsetY: Integer;
+  end;
   TVectArtLayerId = UInt64;
   TVectArtGroupId = UInt64;
 
@@ -43,6 +50,7 @@ type
 
   TVectArtLayer = class
   private
+    FShadow: TVectArtShadow;
     FStrokePaint: TVectArtFillStyle;
     FGroupId: TVectArtGroupId;
     FLayerId: TVectArtLayerId;
@@ -55,6 +63,7 @@ type
   protected
     constructor Create(AKind: TVectArtLayerKind; const AName: string);
   public
+    property Shadow: TVectArtShadow read FShadow write FShadow;
     property StrokePaint: TVectArtFillStyle read FStrokePaint write FStrokePaint;
     property GroupId: TVectArtGroupId read FGroupId;
     property Kind: TVectArtLayerKind read FKind;
@@ -109,6 +118,7 @@ type
   end;
 
   TVectArtRectangleData = record
+    Shadow: TVectArtShadow;
     Bounds: TRectF;                         // 回転前の基本矩形。
     FillStyle: TVectArtFillStyle;
     FillColor: TColor;                      // 内部の塗り色。
@@ -225,6 +235,7 @@ type
   end;
 
   TVectArtPathData = record
+    Shadow: TVectArtShadow;
     Bezier: Boolean;                       // 頂点間を滑らかな3次ベジェで結ぶ。
     BoundsEditing: Boolean;                 // 頂点ではなく外接枠で変形する。
     Closed: Boolean;                        // 終点と始点を閉じる状態。
@@ -536,7 +547,8 @@ begin
   FShape := vpsRectangle;
   FStrokeColor := clBlack;
   FStrokeStyle := vssSolid;
-  FStrokeWidth := 0.0;
+  // 作成状態を経由しない四角も、既定では枠＋塗りとする。
+  FStrokeWidth := 1.0;
 end;
 
 { TVectArtLineLayer }
@@ -856,6 +868,7 @@ begin
     RectangleLayer.Shape := vpsEllipse
   else
     RectangleLayer.Shape := vpsRectangle;
+  RectangleLayer.Shadow := Data.Shadow;
   RectangleLayer.StrokePaint := Data.StrokePaint;
   RectangleLayer.StrokeColor := Data.StrokeColor;
   RectangleLayer.StrokeStyle := Data.StrokeStyle;
@@ -932,6 +945,7 @@ begin
   PathLayer.Opacity := EnsureRange(Data.Opacity, 0.0, 1.0);
   PathLayer.StartMarker := Data.StartMarker;
   PathLayer.StartMarkerSize := Max(Data.StartMarkerSize, 1.0);
+  PathLayer.Shadow := Data.Shadow;
   PathLayer.StrokePaint := Data.StrokePaint;
   PathLayer.StrokeColor := Data.StrokeColor;
   PathLayer.StrokeStyle := Data.StrokeStyle;
@@ -1054,6 +1068,7 @@ begin
   Data.Opacity := RectangleLayer.Opacity;
   Data.RotationDegrees := RectangleLayer.RotationDegrees;
   Data.Shape := RectangleLayer.Shape;
+  Data.Shadow := RectangleLayer.Shadow;
   Data.StrokePaint := RectangleLayer.StrokePaint;
   Data.StrokeColor := RectangleLayer.StrokeColor;
   Data.StrokeStyle := RectangleLayer.StrokeStyle;
@@ -1153,6 +1168,7 @@ begin
   Data.Points := Copy(PathLayer.Points);
   Data.StartMarker := PathLayer.StartMarker;
   Data.StartMarkerSize := PathLayer.StartMarkerSize;
+  Data.Shadow := PathLayer.Shadow;
   Data.StrokePaint := PathLayer.StrokePaint;
   Data.StrokeColor := PathLayer.StrokeColor;
   Data.StrokeStyle := PathLayer.StrokeStyle;

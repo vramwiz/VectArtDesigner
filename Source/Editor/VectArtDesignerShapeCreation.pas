@@ -6,12 +6,13 @@ interface
 
 uses
   System.Classes, System.Types, Vcl.Controls, VectArtDesignerDocument,
-  VectArtDesignerEditorState, VectArtDesignerEditHistory, VectArtDesignerSnapGeometry;
+  VectArtDesignerObjectAttributes, VectArtDesignerEditorState, VectArtDesignerEditHistory, VectArtDesignerSnapGeometry;
 
 type
   TVectArtShapeCreation = class
   private
     FActive: Boolean;
+    FAttributes: TVectArtObjectAttributes;
     FCanvasBounds: TRect;
     FCreationTool: TVectArtEditorTool;
     FCurrentPoint: TPoint;
@@ -155,6 +156,9 @@ var
   Data: TVectArtLineData;
   Index: Integer;
 begin
+  // 新規作成ではグループ所属を含む全フィールドを未設定へ戻す。
+  // 管理型を含むrecordでも、数値フィールドは自動ではゼロ初期化されない。
+  Data := Default(TVectArtLineData);
   if Hypot(FCurrentPoint.X - FStartPoint.X,
     FCurrentPoint.Y - FStartPoint.Y) < MIN_DRAG_SIZE then
     Exit;
@@ -174,11 +178,13 @@ begin
   Data.LineJoin := FEditorState.LineJoin;
   Data.Name := NextLineName;
   Data.Opacity := FEditorState.RectangleOpacity;
-  Data.StrokePaint := FEditorState.LineStrokePaint;
-  Data.StrokeColor := FEditorState.LineStrokeColor;
+
+  Data.StrokeColor := FEditorState.Color1;
+  Data.StrokePaint := Default(TVectArtFillStyle);
   Data.StrokeStyle := FEditorState.LineStrokeStyle;
   Data.StrokeWidth := FEditorState.LineStrokeWidth;
   Data.Visible := True;
+  ApplyVectArtObjectAttributes(FAttributes, Data);
   BeforeSelection := FDocument.GetSelectedLayerIndices;
   Index := FDocument.InsertLine(FDocument.LayerCount, Data);
   FDocument.SetSelectedLayers([Index]);
@@ -196,6 +202,9 @@ var
   I: Integer;
   Index: Integer;
 begin
+  // 新規作成ではグループ所属を含む全フィールドを未設定へ戻す。
+  // 管理型を含むrecordでも、数値フィールドは自動ではゼロ初期化されない。
+  Data := Default(TVectArtPathData);
   if Length(FPathPoints) < 2 then
     Exit;
   if FCreationTool in [vetTemplate, vetRoundedRectangle, vetClosedPath,
@@ -218,8 +227,9 @@ begin
     Data.Filled := VectArtRectangleModeHasFill(FEditorState.RectangleMode)
   else
     Data.Filled := Closed;
-  Data.FillColor := FEditorState.RectangleFillColor;
-    Data.FillStyle := FEditorState.RectangleFillStyle;
+  Data.FillColor := FEditorState.Color2;
+  Data.FillStyle := Default(TVectArtFillStyle);
+
   Data.LineCap := FEditorState.PathLineCap;
   Data.LineJoin := FEditorState.PathLineJoin;
   Data.AntiAlias := FEditorState.PathAntiAlias;
@@ -230,8 +240,9 @@ begin
   Data.Opacity := FEditorState.RectangleOpacity;
   Data.StartMarker := FEditorState.PathStartMarker;
   Data.StartMarkerSize := FEditorState.PathStartMarkerSize;
-  Data.StrokePaint := FEditorState.RectangleStrokePaint;
-  Data.StrokeColor := FEditorState.RectangleStrokeColor;
+
+  Data.StrokeColor := FEditorState.Color1;
+  Data.StrokePaint := Default(TVectArtFillStyle);
   Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
   if not (FCreationTool in [vetTemplate, vetRoundedRectangle, vetClosedPath,
     vetClosedBezier]) or
@@ -240,6 +251,7 @@ begin
   else
     Data.StrokeWidth := 0.0;
   Data.Visible := True;
+  ApplyVectArtObjectAttributes(FAttributes, Data);
   BeforeSelection := FDocument.GetSelectedLayerIndices;
   Index := FDocument.InsertPath(FDocument.LayerCount, Data);
   FDocument.SetSelectedLayers([Index]);
@@ -309,6 +321,9 @@ var
   LogicalTop: Single;
   ScreenBounds: TRect;
 begin
+  // 新規作成ではグループ所属を含む全フィールドを未設定へ戻す。
+  // 管理型を含むrecordでも、数値フィールドは自動ではゼロ初期化されない。
+  Data := Default(TVectArtRectangleData);
   ScreenBounds := PreviewRect;
   if (ScreenBounds.Width < MIN_DRAG_SIZE) or
     (ScreenBounds.Height < MIN_DRAG_SIZE) then
@@ -319,8 +334,9 @@ begin
   LogicalBottom := (ScreenBounds.Bottom - FCanvasBounds.Top) / FZoom;
   Data.Bounds := TRectF.Create(LogicalLeft, LogicalTop, LogicalRight,
     LogicalBottom);
-  Data.FillColor := FEditorState.RectangleFillColor;
-    Data.FillStyle := FEditorState.RectangleFillStyle;
+  Data.FillColor := FEditorState.Color2;
+  Data.FillStyle := Default(TVectArtFillStyle);
+
   Data.Filled := VectArtRectangleModeHasFill(FEditorState.RectangleMode);
   Data.Locked := False;
   if FCreationTool = vetEllipse then
@@ -330,14 +346,16 @@ begin
   Data.Name := NextRectangleName;
   Data.Opacity := FEditorState.RectangleOpacity;
   Data.RotationDegrees := 0.0;
-  Data.StrokePaint := FEditorState.RectangleStrokePaint;
-  Data.StrokeColor := FEditorState.RectangleStrokeColor;
+
+  Data.StrokeColor := FEditorState.Color1;
+  Data.StrokePaint := Default(TVectArtFillStyle);
   Data.StrokeStyle := FEditorState.RectangleStrokeStyle;
   if VectArtRectangleModeHasStroke(FEditorState.RectangleMode) then
     Data.StrokeWidth := Max(FEditorState.RectangleStrokeWidth, 1.0)
   else
     Data.StrokeWidth := 0.0;
   Data.Visible := True;
+  ApplyVectArtObjectAttributes(FAttributes, Data);
   BeforeSelection := FDocument.GetSelectedLayerIndices;
   Index := FDocument.InsertRectangle(FDocument.LayerCount, Data);
   FDocument.SetSelectedLayers([Index]);
@@ -361,6 +379,9 @@ begin
     PtInRect(FCanvasBounds, Point(X, Y));
   if not Result then
     Exit;
+  // 連続線の入力中も、最初に選択していたオブジェクトの見た目を維持する。
+  if not FActive then
+    FAttributes := CaptureVectArtSelectedAttributes(FDocument);
   PointValue := AdjustPoint(Point(X, Y), Shift);
   if FEditorState.CurrentTool in [vetFreehandLine, vetFreehandBezier] then
   begin

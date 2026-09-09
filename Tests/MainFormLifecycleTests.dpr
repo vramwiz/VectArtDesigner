@@ -26,7 +26,7 @@ var
   B: TBitmap;
   P: TPngImage;
   DC: HDC;
-  I: Integer;
+  I, FormIndex: Integer;
   LayoutPath: string;
   SavedLayout: TBytes;
   HadLayout: Boolean;
@@ -55,6 +55,13 @@ begin
         F.Width := 1000; Application.ProcessMessages;
         F.Width := 1100; Application.ProcessMessages;
         Tabs := FindTabs(F);
+        // 保存済みレイアウトで設定欄がフローティングしていても同じ操作を検証する。
+        if Tabs = nil then
+          for FormIndex := 0 to Screen.FormCount-1 do
+          begin
+            Tabs := FindTabs(Screen.Forms[FormIndex]);
+            if Tabs <> nil then Break;
+          end;
         if Tabs = nil then raise Exception.Create('Settings tabs missing');
         for Cycle := 1 to 3 do
           for J := 0 to Tabs.PageCount-1 do
@@ -64,6 +71,23 @@ begin
               Tabs.OnChange(Tabs);
               Application.ProcessMessages;
             end;
+        // 通常ページと同じ巡回後に、入れ子の影設定も実画面から取得する。
+        for J := 0 to Tabs.PageCount-1 do
+          if Tabs.Pages[J].Caption = '影' then Tabs.ActivePage := Tabs.Pages[J];
+        Tabs.OnChange(Tabs); Application.ProcessMessages;
+        if I = 1 then
+        begin
+          B := TBitmap.Create; P := TPngImage.Create;
+          try
+            B.SetSize(Tabs.ClientWidth,Tabs.ClientHeight);
+            Tabs.Repaint; Application.ProcessMessages;
+            DC := GetDC(Tabs.Handle);
+            try BitBlt(B.Canvas.Handle,0,0,B.Width,B.Height,DC,0,0,SRCCOPY);
+            finally ReleaseDC(Tabs.Handle,DC); end;
+            P.Assign(B);
+            P.SaveToFile(ExtractFilePath(ParamStr(0))+'main-form-shadow-live.png');
+          finally P.Free; B.Free; end;
+        end;
         for J := 0 to Tabs.PageCount-1 do
           if Tabs.Pages[J].Caption = '線' then Tabs.ActivePage := Tabs.Pages[J];
         Tabs.OnChange(Tabs);

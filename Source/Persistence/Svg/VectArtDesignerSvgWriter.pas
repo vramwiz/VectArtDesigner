@@ -11,7 +11,7 @@ function TryWriteVectArtSvg(Document: TVectArtDocument; out SvgText,
 
 implementation
 
-uses VectArtDesignerFillPaint, System.SysUtils, System.Classes,
+uses VectArtDesignerSvgShadow, VectArtDesignerFillPaint, System.SysUtils, System.Classes,
   System.Types, System.Math, System.NetEncoding,
   Vcl.Graphics, Winapi.Windows, VectArtDesignerSvgPrimitives, VectArtDesignerSvgPaintWriter,
   VectArtDesignerBezierGeometry, VectArtDesignerGeometry;
@@ -249,10 +249,14 @@ begin
           Builder.AppendLine(FillDefinition(TextLayer.TextColor,TextLayer.FillStyle,-I,
             TextLayer.Bounds,0,True));
         end;
+      for I := 1 to Document.LayerCount-1 do
+        if Document[I].Shadow.Enabled then
+          Builder.AppendLine(SvgShadowDefinition(I,Document[I]));
       Builder.AppendLine('  </defs>');
       for I := 1 to Document.LayerCount - 1 do
       begin
         Layer := Document[I];
+        if Layer.Shadow.Enabled then Builder.AppendLine(Format('<g filter="url(#shadow%d)">',[I]));
         if Layer is TVectArtTextLayer then
         begin
           TextLayer := TVectArtTextLayer(Layer);
@@ -453,6 +457,7 @@ begin
           else
             Builder.Append('><title>').Append(XmlEscape(Path.Name))
               .AppendLine('</title></polyline>');
+          if Layer.Shadow.Enabled then Builder.AppendLine('</g>');
           Continue;
         end;
         if not (Layer is TVectArtRectangleLayer) then
@@ -502,6 +507,7 @@ begin
           Builder.AppendLine('</title></ellipse>')
         else
           Builder.AppendLine('</title></rect>');
+        if Layer.Shadow.Enabled then Builder.AppendLine('</g>');
       end;
       Builder.AppendLine('</svg>');
       SvgText := Builder.ToString;

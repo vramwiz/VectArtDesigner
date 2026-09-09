@@ -1,6 +1,7 @@
 ﻿program VectArtDesigner;
 
 uses
+  VectArtDesignerCreationColors in 'Source\ToolPalette\VectArtDesignerCreationColors.pas',
   VectArtDesignerSvgPaintReader in 'Source\Persistence\Svg\Paint\VectArtDesignerSvgPaintReader.pas',
   VectArtDesignerTextureImage in 'Source\Persistence\VectArtDesignerTextureImage.pas',
   VectArtDesignerMifReader in 'Source\Persistence\Mif\VectArtDesignerMifReader.pas',
@@ -38,6 +39,12 @@ uses
   VectArtDesignerLineToolbar in 'Source\Shell\VectArtDesignerLineToolbar.pas',
   VectArtDesignerLineStyleControls in 'Source\Shell\VectArtDesignerLineStyleControls.pas',
   VectArtDesignerCanvasSettingsDialog in 'Source\Shell\VectArtDesignerCanvasSettingsDialog.pas',
+  VectArtDesignerObjectAttributes in 'Source\Core\Appearance\VectArtDesignerObjectAttributes.pas',
+  VectArtDesignerShadowPaint in 'Source\Rendering\Paint\VectArtDesignerShadowPaint.pas',
+  VectArtDesignerMifShadow in 'Source\Persistence\Mif\Rendering\VectArtDesignerMifShadow.pas',
+  VectArtDesignerShadowCommand in 'Source\Core\Commands\Appearance\VectArtDesignerShadowCommand.pas',
+  VectArtDesignerShadowSettings in 'Source\ObjectProperties\VectArtDesignerShadowSettings.pas',
+  VectArtDesignerSvgShadow in 'Source\Persistence\Svg\Paint\VectArtDesignerSvgShadow.pas',
   VectArtDesignerDocument in 'Source\Core\VectArtDesignerDocument.pas',
   VectArtDesignerGeometry in 'Source\Core\VectArtDesignerGeometry.pas',
   VectArtDesignerTextGeometry in 'Source\Core\VectArtDesignerTextGeometry.pas',
