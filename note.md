@@ -337,3 +337,5 @@
 - 2026-09-10：色履歴をドキュメント単位の最大16色としてCore/Appearanceへ分離。新規作成時は空、MIF／SVG読込時は透明背景と画像／テクスチャ画素を除く背景・塗り・線・文字・影・グラデーション色を重複なしで収集する。ピッカー操作中は履歴を更新せず、非アクティブ化、終了、対象／色スロット切替時に最終色だけを先頭へ確定。基本16色は常設。ColorHistoryTests、SettingsUiTests、PaintPopupLifetimeTests、MainFormLifecycleTestsとDebug／Release Win64本体ビルドが通過。
 
 - 2026-09-10：キャンバス編集を伴うデバッグで画面確認に阻まれないよう、Debugビルドは終了・新規・読込前の未保存確認を表示しない。Releaseビルドでは通常の保存確認を維持する。
+
+- 2026-09-10パターン準備：`D:\DelphiProg\test\SYNC_ScreenLayout\ScreenDesignMaker.dpr`の完成済みパターン実装を確認し、斜線、ドット、格子、市松、波線、ハニカムの形状生成を`Rendering/Paint/Pattern/VectArtDesignerPatternTiles`へ移した。VectArtDesignerでは選択時に固定寸法のPNGへ確定して既存の画像テクスチャとして扱う方針のため、参照側の設定保持モデル、JSON、スライダーUI、Undoジェスチャー、倍率別キャッシュはコピーしていない。現時点ではUIとDocumentへ未接続の準備ユニットとし、次回は生成PNGを`vfkTexture`へ渡すだけでMIFの埋込画像経路を利用できる。PatternTileTestsによる6種類のPNG生成・再復号と、Debug／Release Win64本体ビルドが通過。

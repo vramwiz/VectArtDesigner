@@ -5,6 +5,7 @@
 | フォルダ | 担当 |
 |---|---|
 | Rendering/Paint | ペイント適用、グラデーション座標、角形・波状シェーダー |
+| Rendering/Paint/Pattern | 内蔵パターンの固定PNGタイル生成 |
 | Persistence/Mif | コンテナー、公開変換APIと互換性判定、ネイティブ読込、PNGメタデータ |
 | Persistence/Mif/Rendering | 埋込PNG描画、画像配置と数値属性、ペイント属性の入出力 |
 | Persistence/Svg/Paint | ペイント定義の読込と書出し、標準表現のない方式の表示PNG |

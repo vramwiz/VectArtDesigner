@@ -12,6 +12,7 @@ uses
   VectArtDesignerMifPaint in 'Source\Persistence\Mif\Rendering\VectArtDesignerMifPaint.pas',
   VectArtDesignerSvgPaintWriter in 'Source\Persistence\Svg\Paint\VectArtDesignerSvgPaintWriter.pas',
   VectArtDesignerGradientShaders in 'Source\Rendering\Paint\VectArtDesignerGradientShaders.pas',
+  VectArtDesignerPatternTiles in 'Source\Rendering\Paint\Pattern\VectArtDesignerPatternTiles.pas',
   VectArtDesignerPaintPreview in 'Source\ObjectProperties\Color\VectArtDesignerPaintPreview.pas',
   VectArtDesignerGradientGeometry in 'Source\Rendering\Paint\VectArtDesignerGradientGeometry.pas',
   VectArtDesignerSettingsFont in 'Source\UI\VectArtDesignerSettingsFont.pas',
