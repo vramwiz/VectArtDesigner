@@ -6,7 +6,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, Vcl.Controls, Vcl.ExtCtrls, Vcl.Forms,
-  Vcl.Menus, Vcl.StdCtrls, Winapi.Windows,
+  Vcl.Graphics, Vcl.Menus, Vcl.StdCtrls, Winapi.Windows,
   ShortcutAction, VectArtDesignerContext,
   VectArtDesignerDockManager,
   VectArtDesignerDocumentSession,
@@ -85,6 +85,8 @@ type
     procedure EditorStateChanged(Sender: TObject);
     procedure FileOpenRequest(Sender: TObject; const FileName: string);
     procedure FileOpenShortcut(Sender: TObject);
+    procedure FileOutputClipboardRequest(Sender: TObject);
+    procedure FileOutputRequest(Sender: TObject; const FileName: string);
     procedure FileSaveRequest(Sender: TObject; const FileName: string);
     procedure FileSaveShortcut(Sender: TObject);
     procedure InitializeSkiaRuntime;
@@ -100,7 +102,8 @@ type
     procedure LoadLayoutSettings;
     procedure NewCanvasRequest(Sender: TObject);
     procedure NewCanvasWizardRequest(Sender: TObject);
-    procedure ResetToNewDocument(AWidth, AHeight: Integer);
+    procedure ResetToNewDocument(AWidth, AHeight: Integer;
+      ABackgroundColor: TColor; ATransparent: Boolean);
     procedure SaveLayoutSettings;
     procedure SelectAllLayers;
     procedure SetLayoutEditing(const Value: Boolean);
@@ -133,7 +136,8 @@ uses
   TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
   VectArtDesignerCanvasSettingsDialog,
   VectArtDesignerClipboardOperations, VectArtDesignerKeyboardMovement,
-  VectArtDesignerLayerGroupOperations, VectArtDesignerMifDocument;
+  VectArtDesignerLayerGroupOperations, VectArtDesignerMifDocument,
+  VectArtDesignerPngOutput;
 
 {$R *.dfm}
 
@@ -224,6 +228,8 @@ begin
   FFileActionsUI.OnNewFile := NewCanvasRequest;
   FFileActionsUI.OnNewWizard := NewCanvasWizardRequest;
   FFileActionsUI.OnOpenFile := FileOpenRequest;
+  FFileActionsUI.OnOutputClipboard := FileOutputClipboardRequest;
+  FFileActionsUI.OnOutputFile := FileOutputRequest;
   FFileActionsUI.OnSaveFile := FileSaveRequest;
   FFileActionsUI.CanSave := True;
   FEditActionsUI.History := FEditHistory;
@@ -292,15 +298,20 @@ end;
 
 procedure TMainForm.CanvasSettingsRequest(Sender: TObject);
 var
+  BackgroundColor: TColor;
   CanvasHeight: Integer;
+  CanvasTransparent: Boolean;
   CanvasWidth: Integer;
 begin
   if (FDocument = nil) or (FDocument.CanvasLayer = nil) then
     Exit;
   if ExecuteCanvasSettingsDialog(Self, FDocument.CanvasLayer.Width,
-    FDocument.CanvasLayer.Height, CanvasWidth, CanvasHeight) then
+    FDocument.CanvasLayer.Height, FDocument.CanvasLayer.BackgroundColor,
+    FDocument.CanvasLayer.Transparent, CanvasWidth, CanvasHeight,
+    BackgroundColor, CanvasTransparent) then
   begin
-    FDocument.SetCanvasSize(CanvasWidth, CanvasHeight);
+    FDocument.SetCanvasSettings(CanvasWidth, CanvasHeight, BackgroundColor,
+      CanvasTransparent);
     EditorStateChanged(FEditorState);
   end;
 end;
@@ -315,28 +326,36 @@ procedure TMainForm.NewCanvasRequest(Sender: TObject);
 begin
   if not ConfirmSaveChanges then
     Exit;
-  ResetToNewDocument(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT);
+  ResetToNewDocument(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT, clWhite,
+    False);
 end;
 
 procedure TMainForm.NewCanvasWizardRequest(Sender: TObject);
 var
+  BackgroundColor: TColor;
   CanvasHeight: Integer;
+  CanvasTransparent: Boolean;
   CanvasWidth: Integer;
 begin
   if not ConfirmSaveChanges then
     Exit;
   if ExecuteCanvasSettingsDialog(Self, DEFAULT_CANVAS_WIDTH,
-    DEFAULT_CANVAS_HEIGHT, CanvasWidth, CanvasHeight) then
-    ResetToNewDocument(CanvasWidth, CanvasHeight);
+    DEFAULT_CANVAS_HEIGHT, clWhite, False, CanvasWidth, CanvasHeight,
+    BackgroundColor, CanvasTransparent) then
+    ResetToNewDocument(CanvasWidth, CanvasHeight, BackgroundColor,
+      CanvasTransparent);
 end;
 
-procedure TMainForm.ResetToNewDocument(AWidth, AHeight: Integer);
+procedure TMainForm.ResetToNewDocument(AWidth, AHeight: Integer;
+  ABackgroundColor: TColor; ATransparent: Boolean);
 begin
   if FDocument = nil then
     Exit;
   if (FEditorFrame <> nil) and (FEditorFrame.CanvasControl <> nil) then
     FEditorFrame.CanvasControl.CancelCutoutSelection;
   FDocument.Reset(AWidth, AHeight);
+  FDocument.SetCanvasSettings(AWidth, AHeight, ABackgroundColor,
+    ATransparent);
   if FEditHistory <> nil then
     FEditHistory.Clear;
   if FDocumentFileController <> nil then
@@ -376,6 +395,30 @@ procedure TMainForm.FileOpenShortcut(Sender: TObject);
 begin
   if FFileActionsUI <> nil then
     FFileActionsUI.ExecuteOpen;
+end;
+
+procedure TMainForm.FileOutputClipboardRequest(Sender: TObject);
+var
+  ErrorMessage: string;
+begin
+  if TryCopyVectArtPngToClipboard(FDocument, vposAllObjects,
+    ErrorMessage) then
+    lblStatus.Caption := Format('PNGをクリップボードへ出力: %d x %d',
+      [FDocument.CanvasLayer.Width, FDocument.CanvasLayer.Height])
+  else
+    lblStatus.Caption := ErrorMessage;
+end;
+
+procedure TMainForm.FileOutputRequest(Sender: TObject;
+  const FileName: string);
+var
+  ErrorMessage: string;
+begin
+  if TrySaveVectArtImage(FDocument, vposAllObjects, FileName,
+    ErrorMessage) then
+    lblStatus.Caption := '画像を出力: ' + FileName
+  else
+    lblStatus.Caption := ErrorMessage;
 end;
 
 procedure TMainForm.FileSaveRequest(Sender: TObject; const FileName: string);

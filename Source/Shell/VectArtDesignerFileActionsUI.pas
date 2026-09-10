@@ -1,5 +1,5 @@
-﻿// 新規作成、SVG／MIFファイルの入出力、最近使ったファイルのメニューを提供する。
-// 実際のDocument操作と読込・保存処理は持たず、要求をホストへ通知する。
+﻿// 新規作成、保存、画像出力、最近使ったファイルのメニューとダイアログを提供する。
+// Documentや形式変換は持たず、選択された操作とファイル名をホストへ通知する。
 unit VectArtDesignerFileActionsUI;
 
 interface
@@ -21,8 +21,12 @@ type
     FOnNewFile: TNotifyEvent;
     FOnNewWizard: TNotifyEvent;
     FOnOpenFile: TVectArtFileNameEvent;
+    FOnOutputClipboard: TNotifyEvent;
+    FOnOutputFile: TVectArtFileNameEvent;
     FOnSaveFile: TVectArtFileNameEvent;
     FOpenDialog: TOpenDialog;
+    FOutputDialog: TSaveDialog;
+    FOutputMenu: TMenuItem;
     FRecentFiles: TVectArtRecentFiles;
     FSaveDialog: TSaveDialog;
     FSaveAsItem: TMenuItem;
@@ -33,6 +37,9 @@ type
     function NewMenuItem(const Caption: string; AShortCut: TShortCut;
       ClickHandler: TNotifyEvent): TMenuItem;
     procedure OpenClick(Sender: TObject);
+    procedure OutputClipboardClick(Sender: TObject);
+    procedure OutputFileClick(Sender: TObject);
+    procedure OutputTypeChange(Sender: TObject);
     procedure RecentFileClick(Sender: TObject);
     procedure RefreshHistoryMenu;
     procedure SaveAsClick(Sender: TObject);
@@ -46,6 +53,8 @@ type
     procedure ExecuteNew;
     procedure ExecuteNewWizard;
     procedure ExecuteOpen;
+    procedure ExecuteOutputClipboard;
+    procedure ExecuteOutputFile;
     procedure ExecuteSave;
     procedure ExecuteSaveAs;
     procedure LoadHistory(Ini: TCustomIniFile);
@@ -61,6 +70,12 @@ type
     property OnNewWizard: TNotifyEvent read FOnNewWizard write FOnNewWizard;
     property OnOpenFile: TVectArtFileNameEvent read FOnOpenFile
       write FOnOpenFile;
+    property OnOutputClipboard: TNotifyEvent read FOnOutputClipboard
+      write FOnOutputClipboard;
+    property OnOutputFile: TVectArtFileNameEvent read FOnOutputFile
+      write FOnOutputFile;
+    property OutputDialog: TSaveDialog read FOutputDialog;
+    property OutputMenu: TMenuItem read FOutputMenu;
     property OnSaveFile: TVectArtFileNameEvent read FOnSaveFile
       write FOnSaveFile;
   end;
@@ -72,6 +87,8 @@ uses
 
 constructor TVectArtFileActionsUI.CreateForMenu(AOwner: TComponent;
   ARootItem: TMenuItem);
+var
+  OutputItem: TMenuItem;
 begin
   inherited Create(AOwner);
   FMenu := ARootItem;
@@ -86,9 +103,18 @@ begin
     SaveClick);
   FSaveAsItem := NewMenuItem('名前を付けて保存...',
     ShortCut(Ord('S'), [ssCtrl, ssShift]), SaveAsClick);
-  NewMenuItem('-', 0, nil);
   FHistoryMenu := NewMenuItem('履歴', 0, nil);
   RefreshHistoryMenu;
+  NewMenuItem('-', 0, nil);
+  FOutputMenu := NewMenuItem('出力(&E)', 0, nil);
+  OutputItem := TMenuItem.Create(Self);
+  OutputItem.Caption := 'ファイル...(&F)';
+  OutputItem.OnClick := OutputFileClick;
+  FOutputMenu.Add(OutputItem);
+  OutputItem := TMenuItem.Create(Self);
+  OutputItem.Caption := 'クリップボード(&C)';
+  OutputItem.OnClick := OutputClipboardClick;
+  FOutputMenu.Add(OutputItem);
 
   FOpenDialog := TOpenDialog.Create(Self);
   FOpenDialog.DefaultExt := '';
@@ -107,6 +133,15 @@ begin
     [ofOverwritePrompt, ofPathMustExist];
   FSaveDialog.Title := 'デザインファイルを保存';
   FSaveDialog.OnTypeChange := SaveTypeChange;
+
+  FOutputDialog := TSaveDialog.Create(Self);
+  FOutputDialog.DefaultExt := 'png';
+  FOutputDialog.Filter := 'PNG画像 (*.png)|*.png|' +
+    'GIF画像 (*.gif)|*.gif|JPEG画像 (*.jpg;*.jpeg)|*.jpg;*.jpeg';
+  FOutputDialog.Options := FOutputDialog.Options +
+    [ofOverwritePrompt, ofPathMustExist];
+  FOutputDialog.Title := '画像として出力';
+  FOutputDialog.OnTypeChange := OutputTypeChange;
   SetCanSave(False);
   FSaveAsItem.Enabled := True;
 end;
@@ -145,6 +180,24 @@ procedure TVectArtFileActionsUI.ExecuteOpen;
 begin
   if FOpenDialog.Execute and Assigned(FOnOpenFile) then
     FOnOpenFile(Self, FOpenDialog.FileName);
+end;
+
+procedure TVectArtFileActionsUI.ExecuteOutputClipboard;
+begin
+  if Assigned(FOnOutputClipboard) then
+    FOnOutputClipboard(Self);
+end;
+
+procedure TVectArtFileActionsUI.ExecuteOutputFile;
+begin
+  FOutputDialog.FilterIndex := 1;
+  if FCurrentFileName <> '' then
+    FOutputDialog.FileName := ChangeFileExt(FCurrentFileName, '.png')
+  else
+    FOutputDialog.FileName := '';
+  OutputTypeChange(FOutputDialog);
+  if FOutputDialog.Execute and Assigned(FOnOutputFile) then
+    FOnOutputFile(Self, FOutputDialog.FileName);
 end;
 
 procedure TVectArtFileActionsUI.ExecuteSave;
@@ -198,6 +251,32 @@ end;
 procedure TVectArtFileActionsUI.OpenClick(Sender: TObject);
 begin
   ExecuteOpen;
+end;
+
+procedure TVectArtFileActionsUI.OutputClipboardClick(Sender: TObject);
+begin
+  ExecuteOutputClipboard;
+end;
+
+procedure TVectArtFileActionsUI.OutputFileClick(Sender: TObject);
+begin
+  ExecuteOutputFile;
+end;
+
+procedure TVectArtFileActionsUI.OutputTypeChange(Sender: TObject);
+var
+  Extension: string;
+begin
+  case FOutputDialog.FilterIndex of
+    2: Extension := '.gif';
+    3: Extension := '.jpg';
+  else
+    Extension := '.png';
+  end;
+  FOutputDialog.DefaultExt := Copy(Extension, 2, MaxInt);
+  if FOutputDialog.FileName <> '' then
+    FOutputDialog.FileName := ChangeFileExt(FOutputDialog.FileName,
+      Extension);
 end;
 
 procedure TVectArtFileActionsUI.RecentFileClick(Sender: TObject);

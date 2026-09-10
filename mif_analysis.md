@@ -581,6 +581,16 @@ waDAtexture pathname
 画像本体とは別の背景/テクスチャ系データとみられる。
 詳細は未解析。
 
+## 11.1 背景キャンバス（2026-09-10追記）
+
+- WebArt Designer製の空MIFは、先頭にキャンバス寸法の合成PNG、その直後に64×64の背景texture PNGを持つ。
+- `空のファイル.mif`では合成PNGと背景textureの全画素が不透明な`#123456`で、texture側の
+  `waDAtexture color1`も同色、`waDAimage alpha`は255、`waDAimage hidden`は0だった。
+- 背景色は配置オブジェクトではなく、2番目のIPNGにある`texture color1`を正本として読み込む。
+- 透明背景は既存の`image alpha`を0として書き、先頭の合成PNGも透明RGBAにする。読込では背景textureの
+  `image alpha=0`を透明、それ以外または属性なしを不透明として扱う。アプリ固有キーは追加しない。
+- WebArt Designer自身は背景色・透明のUIを公開していないため、透明MIFを元アプリで開いた場合の表示は未確認。
+
 # 12. 現時点のオブジェクト分類
 ```text
 logo    = 文字

@@ -107,8 +107,8 @@ begin
   try
     Bounds := Rect(0, 0, 320, 480);
     Renderer.Document := Document;
-    Require(Renderer.ThumbnailBackground = vltbWhite,
-      'Layer thumbnail background is not white by default');
+    Require(Renderer.ThumbnailBackground = vltbCheckerboard,
+      'Layer thumbnail background is not checkerboard by default');
     Require(Renderer.LayerItemRect(Bounds, 0).IsEmpty,
       'Canvas layer still has a visible row');
     Require(Renderer.LayerIndexAt(Bounds, Bounds.Bottom - 10) = -1,
@@ -157,16 +157,14 @@ begin
       LineItemRect.Top + (LineItemRect.Height - 54) div 2,
       LineItemRect.Left + 30 + 96,
       LineItemRect.Top + (LineItemRect.Height + 54) div 2);
-    Require(ColorToRGB(Bitmap.Canvas.Pixels[LineThumbnailRect.Left + 1,
-      LineThumbnailRect.Top + 1]) = ColorToRGB(clWhite),
-      'Default thumbnail background was not rendered white');
-    Renderer.ThumbnailBackground := vltbCheckerboard;
-    Renderer.DrawLayers(Bitmap.Canvas, Bounds);
     Require(ColorToRGB(Bitmap.Canvas.Pixels[LineThumbnailRect.Left + 7,
       LineThumbnailRect.Top + 1]) = ColorToRGB(TColor($00B8B8B8)),
-      'Checkerboard thumbnail background cannot be restored');
+      'Default checkerboard thumbnail background was not rendered');
     Renderer.ThumbnailBackground := vltbWhite;
     Renderer.DrawLayers(Bitmap.Canvas, Bounds);
+    Require(ColorToRGB(Bitmap.Canvas.Pixels[LineThumbnailRect.Left + 7,
+      LineThumbnailRect.Top + 1]) = ColorToRGB(clWhite),
+      'White thumbnail background cannot be restored');
     RedInside := 0;
     RedOutside := 0;
     for Y := LineItemRect.Top to LineItemRect.Bottom - 1 do

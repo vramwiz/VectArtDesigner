@@ -4,7 +4,7 @@ unit VectArtDesignerMifPaint;
 interface
 
 uses System.SysUtils, Vcl.Graphics, VectArtDesignerDocument;
-function CreateTexturePng(Color: TColor): TBytes;
+function CreateTexturePng(Color: TColor; Alpha: Integer = 255): TBytes;
 function CreateFillTexturePng(Color: TColor; const Fill: TVectArtFillStyle; Stroke: Boolean = False): TBytes;
 function ReadFillTexture(const Png: TBytes): TVectArtFillStyle;
 
@@ -13,13 +13,13 @@ implementation
 uses System.Classes, System.Types, System.Skia, VectArtDesignerRenderer, VectArtDesignerFillPaint,
   VectArtDesignerMifPngMetadata, VectArtDesignerMifPlacement, VectArtDesignerMifRaster;
 
-function CreateTexturePng(Color: TColor): TBytes;
+function CreateTexturePng(Color: TColor; Alpha: Integer): TBytes;
 var
   BgrColor: Int32;
 begin
   Result := CreateSolidPng(64, 64, Color);
   AddText(Result, 'object type', 'texture');
-  AddImagePlacementMetadata(Result, TRectF.Create(0, 0, 63, 63), 255,
+  AddImagePlacementMetadata(Result, TRectF.Create(0, 0, 63, 63), Alpha,
     False);
   AddWadaString(Result, 'texture object type', 'color');
   BgrColor := ColorToRGB(Color);

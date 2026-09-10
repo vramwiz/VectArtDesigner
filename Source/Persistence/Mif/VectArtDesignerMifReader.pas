@@ -135,6 +135,7 @@ var
   Alpha: Int32;
   ApplicationName: string;
   BackgroundColor: Int32;
+  BackgroundAlpha: Int32;
   Bottom: Int32;
   CrossProduct: Int64;
   CanvasHeight: Integer;
@@ -215,8 +216,12 @@ begin
   end;
 
   BackgroundColor := ColorToRGB(clWhite);
+  BackgroundAlpha := 255;
   if (Container[2].Tag = 'IPNG') then
+  begin
     TryReadPngInteger(Container[2].Data, 'texture color1', BackgroundColor);
+    TryReadPngInteger(Container[2].Data, 'image alpha', BackgroundAlpha);
+  end;
   Rectangles := TList<TVectArtRectangleData>.Create;
   Lines := TList<TVectArtLineData>.Create;
   Paths := TList<TVectArtPathData>.Create;
@@ -609,7 +614,7 @@ begin
     Document.CanvasLayer.Width := CanvasWidth;
     Document.CanvasLayer.Height := CanvasHeight;
     Document.CanvasLayer.BackgroundColor := TColor(BackgroundColor);
-    Document.CanvasLayer.Transparent := False;
+    Document.CanvasLayer.Transparent := BackgroundAlpha = 0;
     for I in LayerOrder do
       if I > 0 then
         Document.InsertRectangle(Document.LayerCount, Rectangles[I - 1])

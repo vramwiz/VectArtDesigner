@@ -1,3 +1,5 @@
+﻿// 独自クリップボードの単一オブジェクトから、選択対象へ指定属性だけを適用する。
+// 対応可否の判定と一括Undoを担当し、クリップボード形式の読出しは共通操作へ委譲する。
 unit VectArtDesignerAttributePasteOperations;
 
 interface

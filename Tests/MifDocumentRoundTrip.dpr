@@ -197,6 +197,20 @@ begin
   UnsupportedDocument := TVectArtDocument.Create;
   Memory := TMemoryStream.Create;
   try
+    Reader := CreateVectArtMifContainerReader;
+    Require(Reader.TryReadFile('mif' + PathDelim +
+      #$7A7A#$306E#$30D5#$30A1#$30A4#$30EB + '.mif',
+      ReferenceContainer, ErrorMessage), ErrorMessage);
+    Require(TryLoadVectArtDocumentFromMif(ReferenceContainer,
+      TargetDocument, ErrorMessage), ErrorMessage);
+    Require((TargetDocument.CanvasLayer.Width = 640) and
+      (TargetDocument.CanvasLayer.Height = 480) and
+      not TargetDocument.CanvasLayer.Transparent and
+      (ColorToRGB(TargetDocument.CanvasLayer.BackgroundColor) =
+       ColorToRGB(TColor($00563412))),
+      'WebArt empty document background differs');
+    FreeAndNil(ReferenceContainer);
+
     Data := Default(TVectArtRectangleData);
     Data.Name := 'Rectangle 1';
     Data.Bounds := TRectF.Create(40, 50, 220, 180);
@@ -297,8 +311,7 @@ begin
       SameValue(TargetLine.StartMarkerSize, PathData.StartMarkerSize),
       'Two-point Path markers changed during Line conversion');
 
-    SourceDocument.SetCanvasSize(640, 360);
-    SourceDocument.CanvasLayer.BackgroundColor := TColor($00302010);
+    SourceDocument.SetCanvasSettings(640, 360, TColor($00302010), True);
     Data.Name := 'MIF layer';
     Data.Bounds := TRectF.Create(40, 50, 220, 180);
     Data.FillColor := TColor($00A06020);
@@ -367,6 +380,10 @@ begin
       ErrorMessage), ErrorMessage);
     Require(TryCreateVectArtMifFromDocument(SourceDocument, nil, Container,
       ExportReport, ErrorMessage), ErrorMessage);
+    Require(ReadWadaInteger(Container[2].Data, 'texture color1') =
+      ColorToRGB(TColor($00302010)), 'MIF background color differs');
+    Require(ReadWadaInteger(Container[2].Data, 'image alpha') = 0,
+      'Transparent MIF background alpha differs');
     Require((AnalysisReport.Compatibility = ExportReport.Compatibility) and
       (Length(AnalysisReport.Issues) = Length(ExportReport.Issues)),
       'Edit-time and save-time MIF reports differ');
@@ -423,6 +440,10 @@ begin
       ErrorMessage), ErrorMessage);
     Require((TargetDocument.CanvasLayer.Width = 640) and
       (TargetDocument.CanvasLayer.Height = 360), 'Canvas size differs');
+    Require(TargetDocument.CanvasLayer.Transparent,
+      'Canvas transparency differs');
+    Require(ColorToRGB(TargetDocument.CanvasLayer.BackgroundColor) =
+      ColorToRGB(TColor($00302010)), 'Canvas background color differs');
     Require(TargetDocument.LayerCount = 5, 'Layer count differs');
     TargetRectangle := TVectArtRectangleLayer(TargetDocument[1]);
     Require(TargetRectangle.Name = 'Rectangle 1', 'Imported layer name differs');

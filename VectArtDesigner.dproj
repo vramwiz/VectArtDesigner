@@ -105,6 +105,9 @@
         <VerInfo_Locale>1041</VerInfo_Locale>
         <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
         <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
+        <Icon_MainIcon>Icon\icon.ico</Icon_MainIcon>
+        <UWP_DelphiLogo44>Icon\icon.png</UWP_DelphiLogo44>
+        <UWP_DelphiLogo150>Icon\icon.png</UWP_DelphiLogo150>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1_WinARM64EC)'!=''">
         <BT_BuildType>Debug</BT_BuildType>
@@ -133,6 +136,12 @@
         <DCCReference Include="Source\ToolPalette\VectArtDesignerCreationColors.pas"/>
         <DCCReference Include="Source\Persistence\Svg\Paint\VectArtDesignerSvgPaintReader.pas"/>
         <DCCReference Include="Source\Persistence\VectArtDesignerTextureImage.pas"/>
+        <DCCReference Include="Source\Persistence\Mif\VectArtDesignerMifReader.pas"/>
+        <DCCReference Include="Source\Persistence\Mif\Rendering\VectArtDesignerMifPlacement.pas"/>
+        <DCCReference Include="Source\Persistence\Mif\Rendering\VectArtDesignerMifRaster.pas"/>
+        <DCCReference Include="Source\Persistence\Mif\Rendering\VectArtDesignerMifPaint.pas"/>
+        <DCCReference Include="Source\Persistence\Svg\Paint\VectArtDesignerSvgPaintWriter.pas"/>
+        <DCCReference Include="Source\Rendering\Paint\VectArtDesignerGradientShaders.pas"/>
         <DCCReference Include="Source\ObjectProperties\Color\VectArtDesignerPaintPreview.pas"/>
         <DCCReference Include="Source\Rendering\Paint\VectArtDesignerGradientGeometry.pas"/>
         <DCCReference Include="Source\UI\VectArtDesignerSettingsFont.pas"/>
@@ -141,11 +150,6 @@
         <DCCReference Include="Lib\ColorPicker\ColorPickerHueBar.pas"/>
         <DCCReference Include="Lib\ColorPicker\ColorPickerSVArea.pas"/>
         <DCCReference Include="Source\Rendering\Paint\VectArtDesignerFillPaint.pas"/>
-        <DCCReference Include="Source\Persistence\Mif\Rendering\VectArtDesignerMifPlacement.pas"/>
-        <DCCReference Include="Source\Persistence\Mif\Rendering\VectArtDesignerMifRaster.pas"/>
-        <DCCReference Include="Source\Persistence\Mif\Rendering\VectArtDesignerMifPaint.pas"/>
-        <DCCReference Include="Source\Persistence\Svg\Paint\VectArtDesignerSvgPaintWriter.pas"/>
-        <DCCReference Include="Source\Rendering\Paint\VectArtDesignerGradientShaders.pas"/>
         <DCCReference Include="Source\Persistence\Mif\VectArtDesignerMifPngMetadata.pas"/>
         <DCCReference Include="Source\ObjectProperties\Color\VectArtDesignerColorSwatch.pas"/>
         <DCCReference Include="Source\Persistence\Svg\VectArtDesignerSvgWriter.pas"/>
@@ -166,6 +170,8 @@
         <DCCReference Include="Source\Shell\VectArtDesignerFileActionsUI.pas"/>
         <DCCReference Include="Source\Shell\File\VectArtDesignerDocumentFileController.pas"/>
         <DCCReference Include="Source\Shell\File\VectArtDesignerRecentFiles.pas"/>
+        <DCCReference Include="Source\Shell\File\VectArtDesignerPngOutput.pas"/>
+        <DCCReference Include="Source\Shell\File\VectArtDesignerImageFileEncoder.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerEditActionsUI.pas"/>
         <DCCReference Include="Source\ObjectProperties\VectArtDesignerStrokeStyleCombo.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerLineToolbar.pas"/>
@@ -181,6 +187,7 @@
         <DCCReference Include="Source\Core\VectArtDesignerDocument.pas"/>
         <DCCReference Include="Source\Core\Transfer\VectArtDesignerLayerDataTransfer.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerGeometry.pas"/>
+        <DCCReference Include="Source\Core\VectArtDesignerTextGeometry.pas"/>
         <DCCReference Include="Source\Rendering\VectArtDesignerRenderer.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerContext.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerEditorState.pas"/>
@@ -191,9 +198,9 @@
         <DCCReference Include="Source\Core\Commands\Transform\VectArtDesignerLayerFlipOperations.pas"/>
         <DCCReference Include="Source\Core\Commands\Transform\VectArtDesignerLayerRotationOperations.pas"/>
         <DCCReference Include="Source\Core\Commands\Structure\VectArtDesignerLayerVisibilityOperations.pas"/>
+        <DCCReference Include="Source\Core\Commands\Structure\VectArtDesignerLayerGroupOperations.pas"/>
         <DCCReference Include="Source\Core\VectArtDesignerEditHistory.pas"/>
         <DCCReference Include="Source\Persistence\Mif\VectArtDesignerMifContainer.pas"/>
-        <DCCReference Include="Source\Persistence\Mif\VectArtDesignerMifReader.pas"/>
         <DCCReference Include="Source\Persistence\Mif\VectArtDesignerMifDocument.pas"/>
         <DCCReference Include="Source\Persistence\Mif\VectArtDesignerMifDebugLog.pas"/>
         <DCCReference Include="Source\Persistence\Svg\VectArtDesignerSvgDocument.pas"/>
@@ -203,6 +210,10 @@
         <DCCReference Include="Source\Editor\Clipboard\VectArtDesignerCutoutSelection.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerCanvas.pas"/>
         <DCCReference Include="Source\Editor\Menus\VectArtDesignerObjectContextMenu.pas"/>
+        <DCCReference Include="Source\Editor\Import\VectArtDesignerImageFileImport.pas"/>
+        <DCCReference Include="Source\Editor\Input\VectArtDesignerTextEditing.pas"/>
+        <DCCReference Include="Source\Editor\Input\WindowsImeController.pas"/>
+        <DCCReference Include="Source\Editor\Geometry\VectArtDesignerSnapGeometry.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerCanvasInteraction.pas"/>
         <DCCReference Include="Source\Editor\Geometry\VectArtDesignerBezierGeometry.pas"/>
         <DCCReference Include="Source\Editor\Geometry\VectArtDesignerFreehandGeometry.pas"/>
@@ -212,6 +223,7 @@
         <DCCReference Include="Source\Editor\VectArtDesignerEditorWorkspaceFrame.pas"/>
         <DCCReference Include="Source\Editor\Geometry\VectArtDesignerSelectionGeometry.pas"/>
         <DCCReference Include="Source\Editor\Rendering\VectArtDesignerSelectionOverlay.pas"/>
+        <DCCReference Include="Source\Editor\Rendering\VectArtDesignerLinePreview.pas"/>
         <DCCReference Include="Source\Layers\VectArtDesignerLayerList.pas"/>
         <DCCReference Include="Source\Layers\Interaction\VectArtDesignerLayerDragDrop.pas"/>
         <DCCReference Include="Source\Layers\VectArtDesignerLayerRenderer.pas"/>
@@ -221,23 +233,17 @@
         <DCCReference Include="Source\Layers\VectArtDesignerLayerPanelFrame.pas"/>
         <DCCReference Include="Source\Layout\VectArtDesignerDockManager.pas"/>
         <DCCReference Include="Source\Layout\VectArtDesignerToolFrames.pas"/>
-        <DCCReference Include="Source\ObjectProperties\VectArtDesignerObjectPropertiesControl.pas"/>
-        <DCCReference Include="Source\ObjectProperties\VectArtDesignerObjectPropertiesFrame.pas"/>
-        <DCCReference Include="Source\ToolPalette\VectArtDesignerToolPaletteFrame.pas"/>
-        <DCCReference Include="Source\ToolPalette\VectArtDesignerTemplatePanelFrame.pas"/>
-        <DCCReference Include="Source\ToolPalette\VectArtDesignerToolPalette.pas"/>
-        <DCCReference Include="Source\Core\VectArtDesignerTextGeometry.pas"/>
-        <DCCReference Include="Source\Core\Commands\Structure\VectArtDesignerLayerGroupOperations.pas"/>
-        <DCCReference Include="Source\Editor\Import\VectArtDesignerImageFileImport.pas"/>
-        <DCCReference Include="Source\Editor\Input\VectArtDesignerTextEditing.pas"/>
-        <DCCReference Include="Source\Editor\Input\WindowsImeController.pas"/>
-        <DCCReference Include="Source\Editor\Geometry\VectArtDesignerSnapGeometry.pas"/>
         <DCCReference Include="Source\Core\Commands\Appearance\VectArtDesignerFillCommand.pas"/>
         <DCCReference Include="Source\Core\Commands\Appearance\VectArtDesignerAppearanceModeCommand.pas"/>
         <DCCReference Include="Source\ObjectProperties\Color\VectArtDesignerPaintPopup.pas"/>
         <DCCReference Include="Source\ObjectProperties\Pages\VectArtDesignerSettingsDrafts.pas"/>
+        <DCCReference Include="Source\ObjectProperties\VectArtDesignerObjectPropertiesControl.pas"/>
+        <DCCReference Include="Source\ObjectProperties\VectArtDesignerObjectPropertiesFrame.pas"/>
+        <DCCReference Include="Source\ToolPalette\VectArtDesignerToolPaletteFrame.pas"/>
+        <DCCReference Include="Source\ToolPalette\VectArtDesignerTemplatePanelFrame.pas"/>
         <DCCReference Include="Source\Editor\Geometry\VectArtDesignerTemplateGeometry.pas"/>
         <DCCReference Include="Source\ToolPalette\VectArtDesignerTemplatePicker.pas"/>
+        <DCCReference Include="Source\ToolPalette\VectArtDesignerToolPalette.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -269,6 +275,13 @@
                 <Platform value="WinARM64EC">True</Platform>
             </Platforms>
             <Deployment Version="5">
+                <DeployFile LocalName="Icon\icon.png" Configuration="Debug" Class="UWP_DelphiLogo44">
+                    <Platform Name="Win64">
+                        <RemoteDir>Assets\</RemoteDir>
+                        <RemoteName>Logo44x44.png</RemoteName>
+                        <Overwrite>true</Overwrite>
+                    </Platform>
+                </DeployFile>
                 <DeployFile LocalName="VectArtDesigner.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win64">
                         <RemoteName>VectArtDesigner.exe</RemoteName>

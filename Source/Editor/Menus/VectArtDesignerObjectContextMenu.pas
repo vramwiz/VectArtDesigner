@@ -1,11 +1,11 @@
-﻿// Shared object context menu used by the canvas and layer list.
-// 選択と履歴は保持せず、呼出元が渡す現在Contextへ同じ操作定義を適用する。
+﻿// キャンバスとレイヤー一覧で共有するオブジェクト操作メニューを構築する。
+// 選択と履歴は所有せず、呼出元が渡す現在Contextへ編集・画像出力を適用する。
 unit VectArtDesignerObjectContextMenu;
 
 interface
 
 uses
-  System.Classes, Vcl.Menus, VectArtDesignerDocument,
+  System.Classes, Vcl.Dialogs, Vcl.Menus, VectArtDesignerDocument,
   VectArtDesignerEditHistory;
 
 type
@@ -31,6 +31,8 @@ type
     FMoveToBackItem: TMenuItem;
     FMoveToFrontItem: TMenuItem;
     FOnExecuted: TNotifyEvent;
+    FOutputDialog: TSaveDialog;
+    FOutputMenu: TMenuItem;
     FPasteItem: TMenuItem;
     FRotate180Item: TMenuItem;
     FRotateLeftItem: TMenuItem;
@@ -47,6 +49,9 @@ type
     procedure GroupClick(Sender: TObject);
     procedure HideClick(Sender: TObject);
     procedure MenuPopup(Sender: TObject);
+    procedure OutputClipboardClick(Sender: TObject);
+    procedure OutputFileClick(Sender: TObject);
+    procedure OutputTypeChange(Sender: TObject);
     procedure PasteClick(Sender: TObject);
     procedure RotateClick(Sender: TObject);
     procedure StackClick(Sender: TObject);
@@ -64,14 +69,16 @@ type
 implementation
 
 uses
-  Winapi.Windows, VectArtDesignerClipboardOperations,
+  System.SysUtils, System.UITypes, Winapi.Windows,
+  VectArtDesignerClipboardOperations,
   VectArtDesignerAttributePasteOperations,
   VectArtDesignerLayerAlignmentOperations,
   VectArtDesignerLayerFlipOperations,
   VectArtDesignerLayerGroupOperations,
   VectArtDesignerLayerOperations,
   VectArtDesignerLayerRotationOperations,
-  VectArtDesignerLayerVisibilityOperations;
+  VectArtDesignerLayerVisibilityOperations,
+  VectArtDesignerPngOutput;
 
 constructor TVectArtObjectContextMenu.Create(AOwner: TComponent);
 const
@@ -84,6 +91,7 @@ var
   AttributeIndex: Integer;
   FlipMenu: TMenuItem;
   I: Integer;
+  OutputItem: TMenuItem;
   RotationMenu: TMenuItem;
   StackMenu: TMenuItem;
 begin
@@ -132,6 +140,26 @@ begin
   FDuplicateItem.ShortCut := ShortCut(Ord('D'), [ssCtrl]);
   FDuplicateItem.OnClick := DuplicateClick;
   Items.Add(FDuplicateItem);
+
+  FOutputMenu := TMenuItem.Create(Self);
+  FOutputMenu.Caption := '出力(&E)';
+  OutputItem := TMenuItem.Create(Self);
+  OutputItem.Caption := 'ファイル...(&F)';
+  OutputItem.OnClick := OutputFileClick;
+  FOutputMenu.Add(OutputItem);
+  OutputItem := TMenuItem.Create(Self);
+  OutputItem.Caption := 'クリップボード(&C)';
+  OutputItem.OnClick := OutputClipboardClick;
+  FOutputMenu.Add(OutputItem);
+
+  FOutputDialog := TSaveDialog.Create(Self);
+  FOutputDialog.DefaultExt := 'png';
+  FOutputDialog.Filter := 'PNG画像 (*.png)|*.png|' +
+    'GIF画像 (*.gif)|*.gif|JPEG画像 (*.jpg;*.jpeg)|*.jpg;*.jpeg';
+  FOutputDialog.Options := FOutputDialog.Options +
+    [ofOverwritePrompt, ofPathMustExist];
+  FOutputDialog.Title := '選択オブジェクトを画像として出力';
+  FOutputDialog.OnTypeChange := OutputTypeChange;
   Items.Add(NewLine);
 
   FHideItem := TMenuItem.Create(Self);
@@ -219,6 +247,8 @@ begin
     FAlignItems[I].OnClick := AlignClick;
     FAlignMenu.Add(FAlignItems[I]);
   end;
+  Items.Add(NewLine);
+  Items.Add(FOutputMenu);
 end;
 
 procedure TVectArtObjectContextMenu.AttributePasteClick(Sender: TObject);
@@ -345,6 +375,46 @@ begin
   finally
     Operations.Free;
   end;
+  FOutputMenu.Enabled := CanOutputVectArtPng(FDocument,
+    vposSelectedObjects);
+end;
+
+procedure TVectArtObjectContextMenu.OutputClipboardClick(Sender: TObject);
+var
+  ErrorMessage: string;
+begin
+  if not TryCopyVectArtPngToClipboard(FDocument, vposSelectedObjects,
+    ErrorMessage) then
+    MessageDlg(ErrorMessage, mtError, [mbOK], 0);
+end;
+
+procedure TVectArtObjectContextMenu.OutputFileClick(Sender: TObject);
+var
+  ErrorMessage: string;
+begin
+  FOutputDialog.FilterIndex := 1;
+  FOutputDialog.FileName := '';
+  OutputTypeChange(FOutputDialog);
+  if FOutputDialog.Execute and
+    not TrySaveVectArtImage(FDocument, vposSelectedObjects,
+      FOutputDialog.FileName, ErrorMessage) then
+    MessageDlg(ErrorMessage, mtError, [mbOK], 0);
+end;
+
+procedure TVectArtObjectContextMenu.OutputTypeChange(Sender: TObject);
+var
+  Extension: string;
+begin
+  case FOutputDialog.FilterIndex of
+    2: Extension := '.gif';
+    3: Extension := '.jpg';
+  else
+    Extension := '.png';
+  end;
+  FOutputDialog.DefaultExt := Copy(Extension, 2, MaxInt);
+  if FOutputDialog.FileName <> '' then
+    FOutputDialog.FileName := ChangeFileExt(FOutputDialog.FileName,
+      Extension);
 end;
 
 procedure TVectArtObjectContextMenu.PasteClick(Sender: TObject);

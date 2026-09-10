@@ -12,9 +12,11 @@ type
   public
     NewCount: Integer;
     OpenedFileName: string;
+    OutputClipboardCount: Integer;
     WizardCount: Integer;
     procedure NewRequest(Sender: TObject);
     procedure OpenRequest(Sender: TObject; const FileName: string);
+    procedure OutputClipboardRequest(Sender: TObject);
     procedure WizardRequest(Sender: TObject);
   end;
 
@@ -27,6 +29,11 @@ procedure TRequestRecorder.OpenRequest(Sender: TObject;
   const FileName: string);
 begin
   OpenedFileName := FileName;
+end;
+
+procedure TRequestRecorder.OutputClipboardRequest(Sender: TObject);
+begin
+  Inc(OutputClipboardCount);
 end;
 
 procedure TRequestRecorder.WizardRequest(Sender: TObject);
@@ -70,11 +77,28 @@ begin
     FileActions.OnNewFile := Recorder.NewRequest;
     FileActions.OnNewWizard := Recorder.WizardRequest;
     FileActions.OnOpenFile := Recorder.OpenRequest;
+    FileActions.OnOutputClipboard := Recorder.OutputClipboardRequest;
 
-    Require((Root.Count = 8) and (Root.Items[0].Caption = '新規キャンバス') and
+    Require((Root.Count = 9) and (Root.Items[0].Caption = '新規キャンバス') and
       (Root.Items[1].Caption = 'ウィザードで新規作成...') and
       (Root.Items[4].Caption = '上書き保存') and
-      (Root.Items[7] = FileActions.HistoryMenu), 'File menu structure');
+      (Root.Items[6] = FileActions.HistoryMenu) and
+      (Root.Items[7].Caption = '-') and
+      (Root.Items[8] = FileActions.OutputMenu) and
+      (Root.Items[8].Caption = '出力(&E)') and
+      (Root.Items[8].Count = 2) and
+      (Root.Items[8].Items[0].Caption = 'ファイル...(&F)') and
+      (Root.Items[8].Items[1].Caption = 'クリップボード(&C)'),
+      'File menu structure');
+    Require((FileActions.OutputDialog.DefaultExt = 'png') and
+      (Pos('PNG画像 (*.png)', FileActions.OutputDialog.Filter) > 0) and
+      (Pos('GIF画像 (*.gif)', FileActions.OutputDialog.Filter) > 0) and
+      (Pos('JPEG画像 (*.jpg;*.jpeg)',
+        FileActions.OutputDialog.Filter) > 0),
+      'Output file type choices');
+    FileActions.OutputMenu.Items[1].Click;
+    Require(Recorder.OutputClipboardCount = 1,
+      'Clipboard output request');
     FileActions.ExecuteNew;
     FileActions.ExecuteNewWizard;
     Require((Recorder.NewCount = 1) and (Recorder.WizardCount = 1),

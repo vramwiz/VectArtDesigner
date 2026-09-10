@@ -2298,7 +2298,7 @@ object MainForm: TMainForm
     Left = 0
     Top = 0
     Width = 1180
-    Height = 42
+    Height = 36
     Align = alTop
     BevelOuter = bvNone
     Color = 2631720
@@ -2308,8 +2308,8 @@ object MainForm: TMainForm
     object lblShortcutItems: TLabel
       Left = 0
       Top = 0
-      Width = 1180
-      Height = 42
+      Width = 228
+      Height = 15
       Align = alClient
       Caption = 'Shortcuts:  New   Open   Save   Undo   Redo'
       Font.Charset = DEFAULT_CHARSET
@@ -2319,8 +2319,6 @@ object MainForm: TMainForm
       Font.Style = []
       ParentFont = False
       Layout = tlCenter
-      ExplicitWidth = 228
-      ExplicitHeight = 15
     end
   end
   object pnlStatusBar: TPanel
@@ -2338,8 +2336,8 @@ object MainForm: TMainForm
     object lblStatus: TLabel
       Left = 0
       Top = 0
-      Width = 1180
-      Height = 24
+      Width = 144
+      Height = 15
       Align = alClient
       Caption = 'Ready   Canvas: 1920 x 1080'
       Font.Charset = DEFAULT_CHARSET
@@ -2349,20 +2347,19 @@ object MainForm: TMainForm
       Font.Style = []
       ParentFont = False
       Layout = tlCenter
-      ExplicitWidth = 144
-      ExplicitHeight = 15
     end
   end
   object pnlWorkspace: TPanel
     Left = 0
-    Top = 42
+    Top = 36
     Width = 1180
-    Height = 654
+    Height = 660
     Align = alClient
     BevelOuter = bvNone
     Color = 1710618
     ParentBackground = False
     TabOrder = 2
+    ExplicitTop = 42
     ExplicitWidth = 1178
     ExplicitHeight = 646
     object splLeftRegion: TSplitter

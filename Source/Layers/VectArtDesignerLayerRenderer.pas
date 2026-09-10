@@ -151,7 +151,7 @@ begin
   FGroupThumbnailBuffer := TVectArtRenderBuffer.Create;
   FGroupThumbnails := TObjectDictionary<TVectArtGroupId,
     TVectArtGroupThumbnailCacheEntry>.Create([doOwnsValues]);
-  FThumbnailBackground := vltbWhite;
+  FThumbnailBackground := vltbCheckerboard;
   FImageThumbnails := TObjectDictionary<TVectArtLayerId,
     TVectArtImageThumbnailCacheEntry>.Create([doOwnsValues]);
   FEntriesRelationRevision := -1;

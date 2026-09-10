@@ -400,6 +400,8 @@ type
     function InsertText(Index: Integer; const Data: TVectArtTextData): Integer;
     function IsLayerSelected(Index: Integer): Boolean;
     procedure Reset(AWidth, AHeight: Integer);
+    procedure SetCanvasSettings(AWidth, AHeight: Integer;
+      ABackgroundColor: TColor; ATransparent: Boolean);
     procedure SetCanvasSize(AWidth, AHeight: Integer);
     procedure SetRectangleBounds(Index: Integer; const Value: TRectF);
     procedure SetRectangleFillColor(Index: Integer; Value: TColor);
@@ -1349,12 +1351,29 @@ begin
   Canvas := GetCanvasLayer;
   if Canvas = nil then
     Exit;
+  SetCanvasSettings(AWidth, AHeight, Canvas.BackgroundColor,
+    Canvas.Transparent);
+end;
+
+procedure TVectArtDocument.SetCanvasSettings(AWidth, AHeight: Integer;
+  ABackgroundColor: TColor; ATransparent: Boolean);
+var
+  Canvas: TVectArtCanvasLayer;
+begin
+  Canvas := GetCanvasLayer;
+  if Canvas = nil then
+    Exit;
   AWidth := Max(AWidth, 1);
   AHeight := Max(AHeight, 1);
-  if (Canvas.Width = AWidth) and (Canvas.Height = AHeight) then
+  ABackgroundColor := ColorToRGB(ABackgroundColor);
+  if (Canvas.Width = AWidth) and (Canvas.Height = AHeight) and
+    (ColorToRGB(Canvas.BackgroundColor) = ABackgroundColor) and
+    (Canvas.Transparent = ATransparent) then
     Exit;
   Canvas.Width := AWidth;
   Canvas.Height := AHeight;
+  Canvas.BackgroundColor := ABackgroundColor;
+  Canvas.Transparent := ATransparent;
   ChangedLayer(0);
 end;
 

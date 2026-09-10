@@ -122,12 +122,14 @@ procedure TVectArtEditShortcutControl.DrawButton(Index: Integer;
   const Caption: string);
 var
   Bounds: TRect;
+  IconTop: Integer;
 begin
   Bounds := ButtonRect(Index);
   Canvas.Brush.Color := COLOR_BUTTON;
   Canvas.FillRect(Bounds);
-  DrawIcon(Index, Rect(Bounds.Left + 7, Bounds.Top + 10,
-    Bounds.Left + 27, Bounds.Top + 30));
+  IconTop := Bounds.Top + (Bounds.Height - 20) div 2;
+  DrawIcon(Index, Rect(Bounds.Left + 7, IconTop,
+    Bounds.Left + 27, IconTop + 20));
   Canvas.Brush.Style := bsClear;
   Canvas.Font.Name := 'Segoe UI';
   Canvas.Font.Height := -12;

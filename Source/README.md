@@ -11,7 +11,7 @@
 | Persistence | Document JSON、選択画像の埋込PNG変換（TextureImage） |
 | Shell | メイン画面でのUI接続と状態表示 |
 | Shell/Document | Revisionに基づく未保存状態、表示名、破棄前の保存確認 |
-| Shell/File | ファイルメニュー、SVG／MIF入出力、最近使ったファイルの永続化 |
+| Shell/File | ファイルメニュー、SVG／MIF入出力、キャンバス実寸PNG／GIF／JPEG出力、最近使ったファイルの永続化 |
 | ObjectProperties/Color | 色選択UI、色見本、ペイントプレビュー |
 | Core/Commands/Appearance | 塗り・線・文字のペイントと枠／塗りの有効状態 |
 | Core/Commands/Transform | 選択全体の整列・反転・回転 |
@@ -19,6 +19,7 @@
 | Core/Commands | 共通編集コマンドと一括挿入 |
 | Core/Transfer | レイヤー状態から挿入・削除用データへの共通転送 |
 | Editor/Clipboard | 選択オブジェクト＋透明PNGのコピー、内部形式優先の貼り付け |
+| Editor/Rendering | 選択補助表示、作図中の線種・端点マーカープレビュー |
 | Layers/Interaction | レイヤー一覧D&Dの挿入境界、順序計算、Undo／Redo |
 
 MIFの依存方向は公開変換APIからReader／Raster／Paint／Placementへ向ける。ReaderとPNG描画は公開変換APIへ依存しない。SVGの図形読込はPaintReaderへペイント解析を、書出しはPaintWriterへ定義生成を委譲する。XML属性・数値表記の共通処理はSvgPrimitivesへ置く。色ポップアップはTextureImageへ画像変換を委ね、ダイアログと適用通知を担当する。描画用シェーダーはUIや永続化へ依存しない。
@@ -32,6 +33,10 @@ Source内の各フォルダは最大6ユニット（今回の追加後も同じ�
 新規キャンバスは既存のDocument参照を交換せず、Document.ResetでCanvas以外のレイヤー、選択、識別子を初期化する。Shell/FileActionsUIはメニューとダイアログ、Shell/File/RecentFilesは最大10件の履歴と設定ファイル、Shell/File/DocumentFileControllerはSVG／MIF入出力とMIFコンテナーの所有権を担当する。MainFormは各処理の接続とステータス表示だけを行う。
 
 Shell/Document/DocumentSessionはDocument.Revisionの変化を未保存変更として追跡し、選択変更だけでは未保存扱いにしない。終了、新規キャンバス、ウィザード新規作成、別ファイル読込の前に保存確認を行い、保存が失敗またはキャンセルされた場合は後続操作を中止する。保存処理はコールバックとし、ファイル形式へ依存させない。
+
+Shell/File/PngOutputはキャンバス実寸の画像生成とファイル／クリップボードへの出力を担当する。ファイルはPNGを既定としてGIF／JPEGも選択でき、透過非対応の形式は白へ合成する。ファイルメニューは全オブジェクト、共通オブジェクトメニューは選択中だけを指定し、背景合成とキャンバス外クリッピングは同じ処理を使用する。既存のEditor/Clipboardはキャンバス外も含む選択範囲と編集用JSONのコピーを担当する。
+
+Shell/File/ImageFileEncoderは生成済みPNGからGIF／JPEGへの変換とディスク書込みだけを担当し、Documentや描画対象を参照しない。Editor/Rendering/LinePreviewは作図中の線種・cap・端点マーカーをGDI／Direct2Dへ描画し、Canvas本体には入力、キャッシュ、最終合成を残す。
 
 作成色はEditorStateのColor1／Color2だけで保持し、ToolPalette/CreationColorsが単色編集を担当する。オブジェクト設定から作成色を更新しない。Dockの親ウィンドウ確定後に色欄を生成する。
 

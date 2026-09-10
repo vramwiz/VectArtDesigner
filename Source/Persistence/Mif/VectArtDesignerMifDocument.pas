@@ -928,9 +928,6 @@ begin
     Canvas := Document.CanvasLayer;
     if Canvas = nil then
       raise EInvalidOp.Create('Document canvas is missing');
-    if Canvas.Transparent then
-      Report.AddIssue(meikConversion, 0, Canvas.Name,
-        '透明キャンバスはMIF再読込時に不透明になります。');
     SetLength(PreparedImagePngs, Document.LayerCount);
     ImageIndex := 0;
     LineIndex := 0;
@@ -1033,6 +1030,7 @@ function TryCreateVectArtMifFromDocument(Document: TVectArtDocument;
   out Report: TMifExportReport; out ErrorMessage: string): Boolean;
 var
   Candidate: TVectArtMifContainer;
+  BackgroundAlpha: Integer;
   Canvas: TVectArtCanvasLayer;
   ConvertedLine: TVectArtLineLayer;
   Header: TBytes;
@@ -1087,7 +1085,12 @@ begin
       WriteUInt32BE(Header, 0, 2 + ContentChunkCount);
       Candidate.AddChunk('MHDR', Header);
       Candidate.AddChunk('IPNG', CreateCompositePng(Document));
-      Candidate.AddChunk('IPNG', CreateTexturePng(Canvas.BackgroundColor));
+      if Canvas.Transparent then
+        BackgroundAlpha := 0
+      else
+        BackgroundAlpha := 255;
+      Candidate.AddChunk('IPNG', CreateTexturePng(Canvas.BackgroundColor,
+        BackgroundAlpha));
       RectangleIndex := 0;
       for I := 1 to Document.LayerCount - 1 do
       begin
