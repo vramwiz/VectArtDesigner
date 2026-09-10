@@ -333,3 +333,7 @@
 - 2026-09-10：［出力］サブメニューをファイルメニューと右クリックメニューの最下段へ移動し、直前に区切り線を配置した。
 
 - 2026-09-10完成整理：Canvasに同居していた作図中の線種・cap・端点マーカーのGDI／Direct2Dプレビュー263行を`Editor/Rendering/LinePreview`へ分離し、Canvasを1998行から1766行へ縮小。画像出力はキャンバス描画・背景合成・クリップボードを`Shell/File/PngOutput`、PNG／GIF／JPEG変換とディスク書込みを`Shell/File/ImageFileEncoder`へ分離した。Sourceのフォルダ別ユニット数は最大6で、大量同居するフォルダはないため追加の移動は行わない。全Sourceユニットの先頭に目的・担当範囲コメントがあることを確認し、AttributePasteOperationsの不足を補完。関連3テストとDebug／Release Win64本体ビルドが通過。
+
+- 2026-09-10：色履歴をドキュメント単位の最大16色としてCore/Appearanceへ分離。新規作成時は空、MIF／SVG読込時は透明背景と画像／テクスチャ画素を除く背景・塗り・線・文字・影・グラデーション色を重複なしで収集する。ピッカー操作中は履歴を更新せず、非アクティブ化、終了、対象／色スロット切替時に最終色だけを先頭へ確定。基本16色は常設。ColorHistoryTests、SettingsUiTests、PaintPopupLifetimeTests、MainFormLifecycleTestsとDebug／Release Win64本体ビルドが通過。
+
+- 2026-09-10：キャンバス編集を伴うデバッグで画面確認に阻まれないよう、Debugビルドは終了・新規・読込前の未保存確認を表示しない。Releaseビルドでは通常の保存確認を維持する。

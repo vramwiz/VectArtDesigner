@@ -54,10 +54,12 @@ begin
   begin
     FPropertiesControl.EditorState := nil;
     FPropertiesControl.EditHistory := nil;
+    FPropertiesControl.ColorHistory := nil;
     FPropertiesControl.Document := nil;
   end
   else
   begin
+    FPropertiesControl.ColorHistory := FContext.ColorHistory;
     FPropertiesControl.Document := FContext.Document;
     FPropertiesControl.EditHistory := FContext.EditHistory;
     FPropertiesControl.EditorState := FContext.EditorState;

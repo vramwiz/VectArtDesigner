@@ -243,7 +243,7 @@ begin
     FEffectsPanel.Available := IsText;
     FLinePanel.Available := not IsText;
     FStrokePanel.Available := not IsText;
-    FShadowSettings.Configure(FDocument,FEditHistory);
+    FShadowSettings.Configure(FDocument,FEditHistory,FColorHistory);
     FShadowPanel.Available := not IsText;
     if (FSections.ActiveSection = nil) or not FSections.ActiveSection.Available then FSections.ActiveSection := FInfoPanel;
     if IsText then FFillPanel.Caption := '文字色' else FFillPanel.Caption := '塗り色';
@@ -354,22 +354,11 @@ begin
 end;
 
 procedure TVectArtObjectPropertiesControl.OpenColor(Sender: TObject);
-var Colors: TArray<TColor>; I: Integer; Layer: TVectArtLayer; Value: TColor; Fill: TVectArtFillStyle;
+var I: Integer; Layer: TVectArtLayer; Value: TColor; Fill: TVectArtFillStyle;
 begin
   if (FDocument = nil) or SelectedLayersHaveLock then Exit;
   FPopupStroke := Sender = FStrokeSwatch;
   if FPopupStroke then Value := FStrokeSwatch.Value else Value := FFillSwatch.Value;
-  Colors := nil;
-  for I := 1 to FDocument.LayerCount - 1 do
-  begin
-    Layer := FDocument[I];
-    if Layer is TVectArtRectangleLayer then
-      Colors := Colors + [TVectArtRectangleLayer(Layer).FillColor, TVectArtRectangleLayer(Layer).StrokeColor]
-    else if Layer is TVectArtTextLayer then Colors := Colors + [TVectArtTextLayer(Layer).TextColor]
-    else if Layer is TVectArtLineLayer then Colors := Colors + [TVectArtLineLayer(Layer).StrokeColor]
-    else if Layer is TVectArtPathLayer then
-      Colors := Colors + [TVectArtPathLayer(Layer).FillColor, TVectArtPathLayer(Layer).StrokeColor];
-  end;
   FPopupSelection := FDocument.GetSelectedLayerIndices;
   if FPopupStroke and (Length(FPopupSelection) > 0) then
   begin
@@ -381,7 +370,8 @@ begin
     if Layer is TVectArtRectangleLayer then Value := TVectArtRectangleLayer(Layer).StrokeColor
     else if Layer is TVectArtLineLayer then Value := TVectArtLineLayer(Layer).StrokeColor
     else Value := TVectArtPathLayer(Layer).StrokeColor;
-    ShowVectArtFillPopup(Self,Value,Fill,Colors,PopupStrokePaintChanged);
+    ShowVectArtFillPopup(Self,Value,Fill,nil,PopupStrokePaintChanged,True,
+      FColorHistory);
     Exit;
   end;
   if not FPopupStroke and (FDocument.SelectionCount = 1) then
@@ -392,10 +382,17 @@ begin
       Fill := TVectArtPathLayer(Layer).FillStyle
     else if Layer is TVectArtTextLayer then Fill := TVectArtTextLayer(Layer).FillStyle
     else
-    begin ShowVectArtColorPopup(Self,'色を編集',Value,Colors,PopupColorChanged); Exit; end;
-    ShowVectArtFillPopup(Self,Value,Fill,Colors,PopupFillChanged);
+    begin
+      ShowVectArtColorPopup(Self,'色を編集',Value,nil,PopupColorChanged,
+        FColorHistory);
+      Exit;
+    end;
+    ShowVectArtFillPopup(Self,Value,Fill,nil,PopupFillChanged,True,
+      FColorHistory);
   end
-  else ShowVectArtColorPopup(Self,'色を編集',Value,Colors,PopupColorChanged);
+  else
+    ShowVectArtColorPopup(Self,'色を編集',Value,nil,PopupColorChanged,
+      FColorHistory);
 end;
 
 procedure TVectArtObjectPropertiesControl.PopupStrokePaintChanged(Sender: TObject; Color: TColor;

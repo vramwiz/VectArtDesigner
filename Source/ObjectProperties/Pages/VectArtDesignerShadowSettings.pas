@@ -2,11 +2,13 @@
 unit VectArtDesignerShadowSettings;
 interface
 uses VectArtDesignerNumericSlider, System.Classes, Vcl.Controls, Vcl.Forms, Vcl.StdCtrls, Vcl.Graphics,
-  VectArtDesignerDocument, VectArtDesignerEditHistory, VectArtDesignerColorSwatch;
+  VectArtDesignerDocument, VectArtDesignerColorHistory,
+  VectArtDesignerEditHistory, VectArtDesignerColorSwatch;
 type TVectArtShadowSettings = class(TScrollBox)
 private
   FDocument: TVectArtDocument;
   FHistory: TVectArtEditHistory;
+  FColorHistory: TVectArtColorHistory;
   FUpdating: Boolean;
   FIndex, FPopupIndex: Integer;
   FEnabled: TCheckBox;
@@ -19,7 +21,8 @@ private
 public
   constructor CreateForParent(AOwner: TComponent; AParent: TWinControl);
   destructor Destroy; override;
-  procedure Configure(Document: TVectArtDocument; History: TVectArtEditHistory);
+  procedure Configure(Document: TVectArtDocument; History: TVectArtEditHistory;
+    ColorHistory: TVectArtColorHistory);
 end;
 implementation
 uses VectArtDesignerSettingsFont, System.SysUtils, System.Math, VectArtDesignerPaintPopup, VectArtDesignerShadowCommand;
@@ -66,7 +69,8 @@ begin
 end;
 destructor TVectArtShadowSettings.Destroy;
 begin CloseVectArtColorPopup(Self); inherited; end;
-procedure TVectArtShadowSettings.Configure(Document: TVectArtDocument; History: TVectArtEditHistory);
+procedure TVectArtShadowSettings.Configure(Document: TVectArtDocument;
+  History: TVectArtEditHistory; ColorHistory: TVectArtColorHistory);
 var V: TVectArtShadow; NewIndex: Integer; L: TVectArtLayer;
 begin
   NewIndex:=-1;
@@ -77,7 +81,8 @@ begin
       ((L is TVectArtPathLayer) and TVectArtPathLayer(L).Closed)) then NewIndex:=Document.SelectedIndex;
   end;
   if (FDocument<>Document) or (FIndex<>NewIndex) then CloseVectArtColorPopup(Self);
-  FDocument:=Document; FHistory:=History; FIndex:=NewIndex;
+  FDocument:=Document; FHistory:=History; FColorHistory:=ColorHistory;
+  FIndex:=NewIndex;
   FUpdating:=True;
   try
     Enabled:=FIndex>=0; V:=Default(TVectArtShadow);
@@ -106,13 +111,14 @@ begin
   V.Blur:=Round(FBlur.Value); V.OffsetX:=Round(FX.Value); V.OffsetY:=Round(FY.Value);
   if (Sender=FEnabled) and V.Enabled and (V.Blur=0) and (V.OffsetX=0) and (V.OffsetY=0) then
   begin V.Blur:=1; V.OffsetX:=1; V.OffsetY:=1; end;
-  Apply(V); Configure(FDocument,FHistory);
+  Apply(V); Configure(FDocument,FHistory,FColorHistory);
 end;
 procedure TVectArtShadowSettings.OpenColor(Sender: TObject);
 begin
   if FIndex<0 then Exit;
   FPopupIndex:=FIndex;
-  ShowVectArtColorPopup(Self,'影の色',FColor.Value,[clBlack,clWhite,clRed],ColorChanged);
+  ShowVectArtColorPopup(Self,'影の色',FColor.Value,nil,ColorChanged,
+    FColorHistory);
 end;
 procedure TVectArtShadowSettings.ColorChanged(Sender: TObject; Color: TColor);
 var V: TVectArtShadow;

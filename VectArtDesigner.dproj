@@ -178,6 +178,7 @@
         <DCCReference Include="Source\Shell\VectArtDesignerLineStyleControls.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerCanvasSettingsDialog.pas"/>
         <DCCReference Include="Source\Core\Appearance\VectArtDesignerObjectAttributes.pas"/>
+        <DCCReference Include="Source\Core\Appearance\VectArtDesignerColorHistory.pas"/>
         <DCCReference Include="Source\Rendering\Paint\VectArtDesignerShadowPaint.pas"/>
         <DCCReference Include="Source\Persistence\Mif\Rendering\VectArtDesignerMifShadow.pas"/>
         <DCCReference Include="Source\Core\Commands\Appearance\VectArtDesignerShadowCommand.pas"/>

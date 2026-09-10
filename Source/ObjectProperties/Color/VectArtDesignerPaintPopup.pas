@@ -6,17 +6,20 @@ interface
 
 uses
   System.Classes, System.Types, Vcl.Controls, Vcl.Forms, Vcl.StdCtrls,
-  Vcl.ExtCtrls, Vcl.Graphics, Vcl.Grids, VectArtDesignerDocument;
+  Vcl.ExtCtrls, Vcl.Graphics, Vcl.Grids, VectArtDesignerColorHistory,
+  VectArtDesignerDocument;
 
 type
   TVectArtFillChanged = procedure(Sender: TObject; Color: TColor; const Fill: TVectArtFillStyle) of object;
   TVectArtColorChanged = procedure(Sender: TObject; Color: TColor) of object;
 procedure ShowVectArtColorPopup(Target: TComponent; const Title: string;
   Color: TColor; const UsedColors: TArray<TColor>;
-  OnChanged: TVectArtColorChanged);
+  OnChanged: TVectArtColorChanged;
+  ColorHistory: TVectArtColorHistory = nil);
 procedure ShowVectArtFillPopup(Target: TComponent; Color: TColor;
   const Fill: TVectArtFillStyle; const UsedColors: TArray<TColor>;
-  OnChanged: TVectArtFillChanged; AllowTexture: Boolean = True);
+  OnChanged: TVectArtFillChanged; AllowTexture: Boolean = True;
+  ColorHistory: TVectArtColorHistory = nil);
 procedure CloseVectArtColorPopup(Target: TComponent);
 
 implementation
@@ -50,7 +53,11 @@ type
     FTextureButton: TButton;
     FTexture: TPicture;
     FColors: TArray<TColor>;
+    FColorHistory: TVectArtColorHistory;
     FColor1, FColor2: TColor;
+    FHistoryPending: Boolean;
+    FHistoryPendingColor: TColor;
+    FHistoryPendingSlot: Integer;
     FUpdating, FPicking: Boolean;
     procedure PickerChanged(Sender: TObject);
     procedure CommitFill;
@@ -63,6 +70,9 @@ type
     procedure PickColor(Sender: TObject; ACol, ARow: Longint; var CanSelect: Boolean);
     procedure LoadTexture(Sender: TObject);
     procedure ApplyColor(Color: TColor);
+    procedure BuildPaletteColors(const AdditionalColors: TArray<TColor>);
+    procedure CommitPendingColor;
+    procedure PopupDeactivate(Sender: TObject);
     procedure Sync;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
@@ -74,12 +84,18 @@ type
 var
   Popup: TVectArtPaintPopup;
 
+const
+  BASIC_COLORS: array[0..15] of TColor = (clBlack, clWhite, clRed, clYellow,
+    clLime, clAqua, clBlue, clFuchsia, clGray, clSilver, clMaroon, clOlive,
+    clGreen, clTeal, clNavy, clPurple);
+
 constructor TVectArtPaintPopup.Create(AOwner: TComponent);
 begin
   inherited CreateNew(AOwner);
   BorderStyle := bsToolWindow;
   DoubleBuffered := True;
   Position := poScreenCenter;
+  OnDeactivate := PopupDeactivate;
   ClientWidth := 370;
   ClientHeight := 466;
   Font.Name := VECTART_SETTINGS_FONT_NAME;
@@ -146,7 +162,7 @@ begin
   FSlot2.OnClick := Changed;
   FPaletteLabel := TLabel.Create(Self);
   FPaletteLabel.Parent := Self;
-  FPaletteLabel.Caption := '使用された色';
+  FPaletteLabel.Caption := '最近使用した色／基本色';
   FPalette := TDrawGrid.Create(Self);
   FPalette.Parent := Self;
   FPalette.SetBounds(16, 342, 338, 108);
@@ -175,6 +191,7 @@ begin
   if Popup = Self then Popup := nil;
   FChanged := nil;
   FFillChanged := nil;
+  FColorHistory := nil;
   if FTarget <> nil then FTarget.RemoveFreeNotification(Self);
   FTarget := nil;
   FPreviewBitmap.Free;
@@ -187,6 +204,7 @@ begin
   inherited;
   if (Operation = opRemove) and (AComponent = FTarget) then
   begin
+    CommitPendingColor;
     FTarget := nil;
     FChanged := nil;
     FFillChanged := nil;
@@ -194,8 +212,67 @@ begin
   end;
 end;
 
+procedure TVectArtPaintPopup.BuildPaletteColors(
+  const AdditionalColors: TArray<TColor>);
+var
+  Candidate: TColor;
+  HistoryColors: TArray<TColor>;
+
+  procedure AppendUnique(Color: TColor);
+  var
+    Existing: TColor;
+    Found: Boolean;
+  begin
+    Color := ColorToRGB(Color);
+    Found := False;
+    for Existing in FColors do
+      if ColorToRGB(Existing) = Color then
+      begin
+        Found := True;
+        Break;
+      end;
+    if not Found then
+      FColors := FColors + [Color];
+  end;
+
+begin
+  FColors := nil;
+  if FColorHistory <> nil then
+  begin
+    HistoryColors := FColorHistory.Colors;
+    for Candidate in HistoryColors do
+      AppendUnique(Candidate);
+  end;
+  for Candidate in AdditionalColors do
+    AppendUnique(Candidate);
+  for Candidate in BASIC_COLORS do
+    AppendUnique(Candidate);
+  FPalette.RowCount := Max(3, (Length(FColors) + FPalette.ColCount - 1) div
+    FPalette.ColCount);
+end;
+
+procedure TVectArtPaintPopup.CommitPendingColor;
+begin
+  if not FHistoryPending then
+    Exit;
+  if FColorHistory <> nil then
+  begin
+    FColorHistory.Add(FHistoryPendingColor);
+    BuildPaletteColors(nil);
+    FPalette.Invalidate;
+  end;
+  FHistoryPending := False;
+  FHistoryPendingSlot := 0;
+end;
+
+procedure TVectArtPaintPopup.PopupDeactivate(Sender: TObject);
+begin
+  // HSV操作中の中間色は捨て、操作を終えた時点の色だけを履歴へ確定する。
+  CommitPendingColor;
+end;
+
 procedure TVectArtPaintPopup.Sync;
-var Y,I: Integer; C: TColor;
+var Y,I,PaletteHeight: Integer; C: TColor;
 begin
   FUpdating := True;
   try
@@ -237,10 +314,12 @@ begin
     if FTextureButton.Visible then
     begin FTextureButton.SetBounds(16,Y,338,28); Inc(Y,38); end;
     FPaletteLabel.SetBounds(16,Y,338,20); Inc(Y,24);
-    FPalette.SetBounds(16,Y,338,108);
+    PaletteHeight := FPalette.RowCount * FPalette.DefaultRowHeight + 4;
+    FPalette.SetBounds(16,Y,338,PaletteHeight);
     FPalette.Enabled := FMode.ItemIndex <> 2;
     FPalette.Visible := FPalette.Enabled; FPaletteLabel.Visible := FPalette.Enabled;
-    FSV.SetBounds(16,Y+120,302,160); FHue.SetBounds(330,Y+120,24,160);
+    FSV.SetBounds(16,Y+PaletteHeight+12,302,160);
+    FHue.SetBounds(330,Y+PaletteHeight+12,24,160);
     FSV.Visible := FPalette.Enabled; FHue.Visible := FPalette.Enabled;
     C := FColor1;
     if (FMode.ItemIndex = 1) and FSlot2.Checked then C := FColor2;
@@ -255,7 +334,7 @@ begin
     if not FPicking then
     begin FHue.Color := C; FSV.BaseColor := C; FSV.Color := C; end;
     if FMode.ItemIndex = 2 then ClientHeight := FTextureButton.Top+FTextureButton.Height+16
-    else ClientHeight := Y+108+12+160+16;
+    else ClientHeight := Y+PaletteHeight+12+160+16;
     FPreviewDirty := True;
     FPreview.Invalidate; FPalette.Invalidate;
   finally FUpdating := False; end;
@@ -263,6 +342,9 @@ end;
 procedure TVectArtPaintPopup.Changed(Sender: TObject);
 begin
   if FUpdating then Exit;
+  if (Sender = FSlot1) or (Sender = FSlot2) or (Sender = FMode) or
+    (Sender = FGradient) then
+    CommitPendingColor;
   if (Sender = FMode) or (Sender = FGradient) then CommitFill;
   Sync;
 end;
@@ -291,9 +373,17 @@ begin
   Sync;
 end;
 procedure TVectArtPaintPopup.ApplyColor(Color: TColor);
+var
+  Slot: Integer;
 begin
-  if (FMode.ItemIndex = 1) and FSlot2.Checked then FColor2 := Color
-  else FColor1 := Color;
+  Color := ColorToRGB(Color);
+  if (FMode.ItemIndex = 1) and FSlot2.Checked then Slot := 2 else Slot := 1;
+  if FHistoryPending and (FHistoryPendingSlot <> Slot) then
+    CommitPendingColor;
+  FHistoryPending := True;
+  FHistoryPendingColor := Color;
+  FHistoryPendingSlot := Slot;
+  if Slot = 2 then FColor2 := Color else FColor1 := Color;
   if Assigned(FFillChanged) then CommitFill;
   if (FMode.ItemIndex = 0) and Assigned(FChanged) then FChanged(Self,Color);
   Sync;
@@ -339,6 +429,7 @@ begin
       FPalette.Canvas.Pen.Color := clBlack;
       FPalette.Canvas.Rectangle(Rect);
       FPalette.Canvas.Brush.Style := bsSolid;
+      FPalette.Canvas.Brush.Color := FColors[I];
     end;
   end;
 end;
@@ -369,14 +460,16 @@ end;
 
 procedure ShowVectArtColorPopup(Target: TComponent; const Title: string;
   Color: TColor; const UsedColors: TArray<TColor>;
-  OnChanged: TVectArtColorChanged);
+  OnChanged: TVectArtColorChanged; ColorHistory: TVectArtColorHistory);
 begin
   if Popup = nil then Popup := TVectArtPaintPopup.Create(Application);
+  Popup.CommitPendingColor;
   if Popup.FTarget <> nil then Popup.FTarget.RemoveFreeNotification(Popup);
   Popup.FTarget := Target;
   Target.FreeNotification(Popup);
   Popup.FFillChanged := nil;
   Popup.FChanged := OnChanged;
+  Popup.FColorHistory := ColorHistory;
   Popup.Caption := Title;
   Popup.FColor1 := Color;
   Popup.FColor2 := clWhite;
@@ -385,9 +478,9 @@ begin
   Popup.FAngleValue := 0;
   Popup.FSlot1.Checked := True;
   Popup.FAllowPaint := False;
-  Popup.FColors := UsedColors + [clBlack, clWhite, clRed, clYellow,
-    clLime, clAqua, clBlue, clFuchsia, clGray, clSilver, clMaroon, clOlive, clGreen, clTeal, clNavy, clPurple];
-  Popup.FPalette.RowCount := Max(3, (Length(Popup.FColors) + 9) div 10);
+  Popup.FHistoryPending := False;
+  Popup.FHistoryPendingSlot := 0;
+  Popup.BuildPaletteColors(UsedColors);
   Popup.Sync;
   Popup.Show;
 end;
@@ -419,10 +512,12 @@ end;
 
 procedure ShowVectArtFillPopup(Target: TComponent; Color: TColor;
   const Fill: TVectArtFillStyle; const UsedColors: TArray<TColor>;
-  OnChanged: TVectArtFillChanged; AllowTexture: Boolean = True);
+  OnChanged: TVectArtFillChanged; AllowTexture: Boolean;
+  ColorHistory: TVectArtColorHistory);
 var Stream: TBytesStream;
 begin
-  ShowVectArtColorPopup(Target,'色・塗りを編集',Color,UsedColors,nil);
+  ShowVectArtColorPopup(Target,'色・塗りを編集',Color,UsedColors,nil,
+    ColorHistory);
   Popup.FUpdating := True;
   try
     Popup.FAllowPaint := True;
@@ -462,7 +557,13 @@ end;
 procedure CloseVectArtColorPopup(Target: TComponent);
 begin
   if (Popup <> nil) and (Popup.FTarget = Target) then
-  begin Popup.FChanged := nil; Popup.FFillChanged := nil; Popup.Hide; end;
+  begin
+    Popup.CommitPendingColor;
+    Popup.FChanged := nil;
+    Popup.FFillChanged := nil;
+    Popup.FColorHistory := nil;
+    Popup.Hide;
+  end;
 end;
 
 end.

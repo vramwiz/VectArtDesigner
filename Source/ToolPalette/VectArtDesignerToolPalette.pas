@@ -5,18 +5,21 @@ unit VectArtDesignerToolPalette;
 interface
 
 uses
-  System.Classes, System.Types, Vcl.Controls, VectArtDesignerCreationColors, VectArtDesignerEditorState;
+  System.Classes, System.Types, Vcl.Controls, VectArtDesignerCreationColors,
+  VectArtDesignerColorHistory, VectArtDesignerEditorState;
 
 type
   TVectArtToolPaletteControl = class(TCustomControl)
   private
     FColors: TVectArtCreationColors;
+    FColorHistory: TVectArtColorHistory;
     FEditorState: TVectArtEditorState;
     procedure ActivateButton(Index: Integer);
     function ButtonRect(Index: Integer): TRect;
     function ButtonSelected(Index: Integer): Boolean;
     procedure DrawButton(Index: Integer);
     procedure SetEditorState(const Value: TVectArtEditorState);
+    procedure SetColorHistory(const Value: TVectArtColorHistory);
   protected
     procedure CreateWnd; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -28,6 +31,8 @@ type
     procedure RefreshState;
     property EditorState: TVectArtEditorState read FEditorState
       write SetEditorState;
+    property ColorHistory: TVectArtColorHistory read FColorHistory
+      write SetColorHistory;
   end;
 
 implementation
@@ -335,6 +340,7 @@ begin
   begin
     FColors := TVectArtCreationColors.Create(Self); FColors.Parent := Self;
     FColors.EditorState := FEditorState;
+    FColors.ColorHistory := FColorHistory;
     Resize;
   end;
 end;
@@ -349,6 +355,14 @@ procedure TVectArtToolPaletteControl.RefreshState;
 begin
   if FColors <> nil then FColors.RefreshColors;
   Invalidate;
+end;
+
+procedure TVectArtToolPaletteControl.SetColorHistory(
+  const Value: TVectArtColorHistory);
+begin
+  FColorHistory := Value;
+  if FColors <> nil then
+    FColors.ColorHistory := Value;
 end;
 
 procedure TVectArtToolPaletteControl.SetEditorState(

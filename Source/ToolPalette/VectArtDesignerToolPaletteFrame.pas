@@ -49,9 +49,15 @@ procedure TToolPaletteFrame.SetContext(const Value: IVectArtDesignerContext);
 begin
   FContext := Value;
   if FContext = nil then
-    FToolPalette.EditorState := nil
+  begin
+    FToolPalette.ColorHistory := nil;
+    FToolPalette.EditorState := nil;
+  end
   else
+  begin
+    FToolPalette.ColorHistory := FContext.ColorHistory;
     FToolPalette.EditorState := FContext.EditorState;
+  end;
 end;
 
 end.

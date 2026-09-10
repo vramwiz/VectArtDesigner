@@ -13,6 +13,7 @@
 | Shell/Document | Revisionに基づく未保存状態、表示名、破棄前の保存確認 |
 | Shell/File | ファイルメニュー、SVG／MIF入出力、キャンバス実寸PNG／GIF／JPEG出力、最近使ったファイルの永続化 |
 | ObjectProperties/Color | 色選択UI、色見本、ペイントプレビュー |
+| Core/Appearance | ドキュメント色履歴、オブジェクト外観属性の受け渡し |
 | Core/Commands/Appearance | 塗り・線・文字のペイントと枠／塗りの有効状態 |
 | Core/Commands/Transform | 選択全体の整列・反転・回転 |
 | Core/Commands/Structure | 挿入・削除・積層順・グループ所属・表示切替 |
@@ -33,12 +34,15 @@ Source内の各フォルダは最大6ユニット（今回の追加後も同じ�
 新規キャンバスは既存のDocument参照を交換せず、Document.ResetでCanvas以外のレイヤー、選択、識別子を初期化する。Shell/FileActionsUIはメニューとダイアログ、Shell/File/RecentFilesは最大10件の履歴と設定ファイル、Shell/File/DocumentFileControllerはSVG／MIF入出力とMIFコンテナーの所有権を担当する。MainFormは各処理の接続とステータス表示だけを行う。
 
 Shell/Document/DocumentSessionはDocument.Revisionの変化を未保存変更として追跡し、選択変更だけでは未保存扱いにしない。終了、新規キャンバス、ウィザード新規作成、別ファイル読込の前に保存確認を行い、保存が失敗またはキャンセルされた場合は後続操作を中止する。保存処理はコールバックとし、ファイル形式へ依存させない。
+Debugビルドでは画面確認で停止しないよう保存確認を省略し、Releaseビルドでは通常どおり確認する。
 
 Shell/File/PngOutputはキャンバス実寸の画像生成とファイル／クリップボードへの出力を担当する。ファイルはPNGを既定としてGIF／JPEGも選択でき、透過非対応の形式は白へ合成する。ファイルメニューは全オブジェクト、共通オブジェクトメニューは選択中だけを指定し、背景合成とキャンバス外クリッピングは同じ処理を使用する。既存のEditor/Clipboardはキャンバス外も含む選択範囲と編集用JSONのコピーを担当する。
 
 Shell/File/ImageFileEncoderは生成済みPNGからGIF／JPEGへの変換とディスク書込みだけを担当し、Documentや描画対象を参照しない。Editor/Rendering/LinePreviewは作図中の線種・cap・端点マーカーをGDI／Direct2Dへ描画し、Canvas本体には入力、キャッシュ、最終合成を残す。
 
 作成色はEditorStateのColor1／Color2だけで保持し、ToolPalette/CreationColorsが単色編集を担当する。オブジェクト設定から作成色を更新しない。Dockの親ウィンドウ確定後に色欄を生成する。
+
+Core/Appearance/ColorHistoryはドキュメント単位の最近使用色を最大16色で保持する。新規作成時は空にし、MIF／SVG読込時は背景、図形、線、文字、影、グラデーションに指定された色から重複なしで構築する。画像・テクスチャの画素色は対象外とする。色ポップアップは操作中の中間色を追加せず、非アクティブ化、終了、対象または色スロットの切替時に最後の色だけを確定する。基本16色は履歴とは別に常時表示する。
 
 テンプレ図形はToolPalette/TemplatePanelFrameを独立した左ドック枠とし、TemplatePickerを埋め込む。TemplatePickerは分類・枠／塗りモード・図形選択だけを担当し、専用色UIを持たない。一覧描画と配置結果はToolPalette下部と同じEditorState.Color1／Color2を参照する。
 

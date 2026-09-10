@@ -49,6 +49,7 @@ uses
   VectArtDesignerLineStyleControls in 'Source\Shell\VectArtDesignerLineStyleControls.pas',
   VectArtDesignerCanvasSettingsDialog in 'Source\Shell\VectArtDesignerCanvasSettingsDialog.pas',
   VectArtDesignerObjectAttributes in 'Source\Core\Appearance\VectArtDesignerObjectAttributes.pas',
+  VectArtDesignerColorHistory in 'Source\Core\Appearance\VectArtDesignerColorHistory.pas',
   VectArtDesignerShadowPaint in 'Source\Rendering\Paint\VectArtDesignerShadowPaint.pas',
   VectArtDesignerMifShadow in 'Source\Persistence\Mif\Rendering\VectArtDesignerMifShadow.pas',
   VectArtDesignerShadowCommand in 'Source\Core\Commands\Appearance\VectArtDesignerShadowCommand.pas',

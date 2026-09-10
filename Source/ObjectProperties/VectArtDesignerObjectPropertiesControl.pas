@@ -6,7 +6,8 @@ interface
 
 uses
   VectArtDesignerNumericSlider, VectArtDesignerSettingsSections, VectArtDesignerShadowSettings, System.Classes, System.Types, Vcl.Controls, Vcl.StdCtrls,  Vcl.Forms, Vcl.Graphics, VectArtDesignerColorSwatch, VectArtDesignerPaintPopup,
-  VectArtDesignerDocument, VectArtDesignerEditCommands,
+  VectArtDesignerDocument, VectArtDesignerColorHistory,
+  VectArtDesignerEditCommands,
   VectArtDesignerEditHistory, VectArtDesignerEditorState,
   VectArtDesignerLineStyleControls, VectArtDesignerStrokeStyleCombo;
 
@@ -29,6 +30,7 @@ type
     FPopupSelection: TArray<Integer>;
     FColorEdit: TEdit;
     FDocument: TVectArtDocument;
+    FColorHistory: TVectArtColorHistory;
     FEditHistory: TVectArtEditHistory;
     FEditorState: TVectArtEditorState;
     FHeightEdit: TEdit;
@@ -107,6 +109,8 @@ type
     constructor Create(AOwner: TComponent); override;
     procedure RefreshFromDocument;
     property Document: TVectArtDocument read FDocument write SetDocument;
+    property ColorHistory: TVectArtColorHistory read FColorHistory
+      write FColorHistory;
     property EditHistory: TVectArtEditHistory read FEditHistory
       write FEditHistory;
     property EditorState: TVectArtEditorState read FEditorState

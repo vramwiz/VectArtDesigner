@@ -44,6 +44,7 @@ type
     FDesignerContext: IVectArtDesignerContext;
     FDocument: TVectArtDocument;
     FDocumentSession: TVectArtDocumentSession;
+    FSkipSaveConfirmation: Boolean;
     FLastSaveSucceeded: Boolean;
     FEditorFrame: TEditorWorkspaceFrame;
     FEditorState: TVectArtEditorState;
@@ -141,6 +142,15 @@ uses
 
 {$R *.dfm}
 
+function DebugSaveConfirmationDisabled: Boolean;
+begin
+  {$IFDEF DEBUG}
+  Result := True;
+  {$ELSE}
+  Result := False;
+  {$ENDIF}
+end;
+
 function ConstrainToMonitor(const Bounds: TRect): TRect;
 var
   Monitor: TMonitor;
@@ -207,6 +217,8 @@ var
   LayoutFolder: string;
 begin
   InitializeSkiaRuntime;
+  // Debug実行中は画面確認で停止せず、Releaseだけが未保存破棄を確認する。
+  FSkipSaveConfirmation := DebugSaveConfirmationDisabled;
 
   FDocument := TVectArtDocument.Create;
   FDocumentSession := TVectArtDocumentSession.Create(FDocument);
@@ -312,12 +324,16 @@ begin
   begin
     FDocument.SetCanvasSettings(CanvasWidth, CanvasHeight, BackgroundColor,
       CanvasTransparent);
+    if (FDesignerContext <> nil) and not CanvasTransparent then
+      FDesignerContext.ColorHistory.Add(BackgroundColor);
     EditorStateChanged(FEditorState);
   end;
 end;
 
 function TMainForm.ConfirmSaveChanges: Boolean;
 begin
+  if FSkipSaveConfirmation then
+    Exit(True);
   Result := (FDocumentSession = nil) or
     FDocumentSession.ConfirmSave(Handle, SaveDocumentForContinuation);
 end;
@@ -356,6 +372,8 @@ begin
   FDocument.Reset(AWidth, AHeight);
   FDocument.SetCanvasSettings(AWidth, AHeight, ABackgroundColor,
     ATransparent);
+  if FDesignerContext <> nil then
+    FDesignerContext.ColorHistory.Clear;
   if FEditHistory <> nil then
     FEditHistory.Clear;
   if FDocumentFileController <> nil then
@@ -383,6 +401,8 @@ begin
     Exit;
   end;
   DocumentChanged(FDocument);
+  if FDesignerContext <> nil then
+    FDesignerContext.ColorHistory.LoadFromDocument(FDocument);
   FFileActionsUI.CurrentFileName := FileName;
   FFileActionsUI.CanSave := True;
   FFileActionsUI.AddRecentFile(FileName);

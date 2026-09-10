@@ -3,11 +3,13 @@
 unit VectArtDesignerCreationColors;
 interface
 uses System.Classes, Vcl.Controls, Vcl.Buttons, Vcl.Graphics,
-  VectArtDesignerEditorState, VectArtDesignerColorSwatch;
+  VectArtDesignerEditorState, VectArtDesignerColorHistory,
+  VectArtDesignerColorSwatch;
 type
   TVectArtCreationColors = class(TCustomControl)
   private
     FState: TVectArtEditorState;
+    FColorHistory: TVectArtColorHistory;
     FColor1, FColor2: TVectArtColorSwatch;
     FSwap: TSpeedButton;
     FEditingFirst: Boolean;
@@ -21,6 +23,8 @@ type
     constructor Create(AOwner: TComponent); override;
     procedure RefreshColors;
     property EditorState: TVectArtEditorState read FState write SetState;
+    property ColorHistory: TVectArtColorHistory read FColorHistory
+      write FColorHistory;
   end;
 implementation
 uses VectArtDesignerPaintPopup;
@@ -75,8 +79,12 @@ procedure TVectArtCreationColors.OpenColor(Sender: TObject);
 begin
   if FState = nil then Exit;
   FEditingFirst := Sender = FColor1;
-  if FEditingFirst then ShowVectArtColorPopup(Self,'色1（線・文字）',FState.Color1,nil,ColorChanged)
-  else ShowVectArtColorPopup(Self,'色2（塗り）',FState.Color2,nil,ColorChanged);
+  if FEditingFirst then
+    ShowVectArtColorPopup(Self,'色1（線・文字）',FState.Color1,nil,
+      ColorChanged,FColorHistory)
+  else
+    ShowVectArtColorPopup(Self,'色2（塗り）',FState.Color2,nil,
+      ColorChanged,FColorHistory);
 end;
 procedure TVectArtCreationColors.ColorChanged(Sender: TObject; Color: TColor);
 begin
