@@ -165,10 +165,19 @@ begin
             P.SaveToFile(ExtractFilePath(ParamStr(0))+'main-form-line-live.png');
           finally P.Free; B.Free; end;
         end;
+        if (F.Menu = nil) or (F.Menu.Items.Count = 0) or
+          (F.Menu.Items[0].Count = 0) then
+          raise Exception.Create('File menu missing');
+        F.Menu.Items[0].Items[0].Click;
+        Application.ProcessMessages;
+        if (F.Document.LayerCount <> 1) or
+          (F.Document.CanvasLayer.Width <> DEFAULT_CANVAS_WIDTH) or
+          (F.Document.CanvasLayer.Height <> DEFAULT_CANVAS_HEIGHT) then
+          raise Exception.Create('New canvas menu did not reset document');
       finally F.Free; end;
       Application.ProcessMessages;
     end;
-    Writeln('PASS main form selection pixels, stacked shape/text panels, resize and destruction (3 cycles)');
+    Writeln('PASS main form selection pixels, stacked panels, new canvas, resize and destruction (3 cycles)');
   finally
     if HadLayout then TFile.WriteAllBytes(LayoutPath,SavedLayout)
     else if TFile.Exists(LayoutPath) then TFile.Delete(LayoutPath);

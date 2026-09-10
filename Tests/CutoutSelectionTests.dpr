@@ -42,6 +42,10 @@ begin
       'Rectangle cutout did not start');
     Require(Selection.MouseMove([ssLeft], 220, 170),
       'Rectangle cutout did not move');
+    ScreenOutline := Selection.ScreenOutline;
+    Require((Length(ScreenOutline) = 5) and
+      (ScreenOutline[0] = ScreenOutline[High(ScreenOutline)]),
+      'Active rectangle cutout preview is not closed');
     Require(Selection.MouseUp(mbLeft, 220, 170) and Selection.Committed,
       'Rectangle cutout did not commit');
     Outline := Selection.LogicalOutline;
@@ -49,6 +53,10 @@ begin
       SameValue(Outline[0].Y, 10.0) and SameValue(Outline[2].X, 60.0) and
       SameValue(Outline[2].Y, 60.0),
       'Rectangle cutout coordinates differ');
+    ScreenOutline := Selection.ScreenOutline;
+    Require((Length(ScreenOutline) = 5) and
+      (ScreenOutline[0] = ScreenOutline[High(ScreenOutline)]),
+      'Rectangle cutout preview is not closed');
 
     EditorState.SelectCutoutToolGroup;
     Selection.Configure(EditorState, Rect(100, 50, 500, 350), 2.0);

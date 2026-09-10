@@ -268,6 +268,11 @@ begin
       Check(TVectArtRectangleLayer(D[1]).StrokeWidth=8,'Stroke slider apply');
       H.Undo; UI.RefreshFromDocument;
       Check(Value=2,'Stroke slider undo');
+      TrackBar.Position:=0;
+      Check((TrackBar.Position=1) and
+        (TVectArtRectangleLayer(D[1]).StrokeWidth=1),
+        'Stroke slider must not allow zero width');
+      H.Undo; UI.RefreshFromDocument;
     end;
     Sections := TVectArtSettingsSections(FindControl(UI,TVectArtSettingsSections));
     Check(Sections <> nil,'Stacked settings page missing');

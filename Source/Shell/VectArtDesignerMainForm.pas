@@ -9,16 +9,16 @@ uses
   Vcl.Menus, Vcl.StdCtrls, Winapi.Windows,
   ShortcutAction, VectArtDesignerContext,
   VectArtDesignerDockManager,
+  VectArtDesignerDocumentSession,
   VectArtDesignerDocument,
   VectArtDesignerEditHistory, VectArtDesignerEditorState,
   VectArtDesignerEditorWorkspaceFrame, VectArtDesignerLayerPanelFrame,
   VectArtDesignerLineToolbar,
   VectArtDesignerLayerOperations,
   VectArtDesignerEditActionsUI, VectArtDesignerFileActionsUI,
-  VectArtDesignerMifContainer, VectArtDesignerMifDocument,
+  VectArtDesignerDocumentFileController,
   VectArtDesignerObjectPropertiesFrame, VectArtDesignerToolFrames,
-  VectArtDesignerTemplatePanelFrame, VectArtDesignerToolPaletteFrame,
-  VectArtDesignerSvgDocument;
+  VectArtDesignerTemplatePanelFrame, VectArtDesignerToolPaletteFrame;
 
 type
   TMainForm = class(TForm)
@@ -35,6 +35,7 @@ type
     pnlLeftDropTarget: TPanel;
     pnlRightDropTarget: TPanel;
     procedure FormCreate(Sender: TObject);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure FormDestroy(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure FormResize(Sender: TObject);
@@ -42,6 +43,8 @@ type
     FDockManager: TVectDockManager;
     FDesignerContext: IVectArtDesignerContext;
     FDocument: TVectArtDocument;
+    FDocumentSession: TVectArtDocumentSession;
+    FLastSaveSucceeded: Boolean;
     FEditorFrame: TEditorWorkspaceFrame;
     FEditorState: TVectArtEditorState;
     FEditActionsUI: TVectArtEditActionsUI;
@@ -65,18 +68,17 @@ type
     FObjectPropertiesMenuItem: TMenuItem;
     FTemplateMenuItem: TMenuItem;
     FToolPaletteMenuItem: TMenuItem;
-    FMifContainer: TVectArtMifContainer;
-    FMifHasEditableDocument: Boolean;
+    FDocumentFileController: TVectArtDocumentFileController;
     FMifAnalysisDetail: string;
     FMifAnalysisRevision: Int64;
     FMifAnalysisStatus: string;
-    FMifReader: IVectArtMifContainerReader;
-    FMifWriter: IVectArtMifContainerWriter;
     procedure AttachFrame(AFrame: TFrame; AHost: TWinControl);
     procedure CanvasSettingsRequest(Sender: TObject);
+    function ConfirmSaveChanges: Boolean;
     procedure CreateStandardMenus;
     function CreateViewMenuItem(const Caption: string): TMenuItem;
     procedure DocumentChanged(Sender: TObject);
+    procedure DocumentSessionChanged(Sender: TObject);
     procedure DocumentRefreshTimer(Sender: TObject);
     procedure FinalizeSkiaRuntime;
     procedure HistoryChanged(Sender: TObject);
@@ -86,13 +88,19 @@ type
     procedure FileSaveRequest(Sender: TObject; const FileName: string);
     procedure FileSaveShortcut(Sender: TObject);
     procedure InitializeSkiaRuntime;
+    function IsContinuousSliderInput: Boolean;
     procedure RefreshDocumentPanels;
+    procedure ScheduleDocumentPanelRefresh;
+    function SaveDocumentForContinuation: Boolean;
     procedure InitializeShortcuts;
     function CanUseToolShortcut: Boolean;
     function IsEditingSurfaceFocused: Boolean;
     function IsTextInputFocused: Boolean;
     function MifConstraintStatusText: string;
     procedure LoadLayoutSettings;
+    procedure NewCanvasRequest(Sender: TObject);
+    procedure NewCanvasWizardRequest(Sender: TObject);
+    procedure ResetToNewDocument(AWidth, AHeight: Integer);
     procedure SaveLayoutSettings;
     procedure SelectAllLayers;
     procedure SetLayoutEditing(const Value: Boolean);
@@ -121,10 +129,11 @@ implementation
 uses
   System.IniFiles, System.IOUtils, System.Math,
   {$IFDEF DEBUG} VectArtDesignerMifDebugLog, {$ENDIF}
+  HorizontalTrackBarControl,
   TextRendererSkiaBootstrap, TextRendererSkiaRuntime,
   VectArtDesignerCanvasSettingsDialog,
   VectArtDesignerClipboardOperations, VectArtDesignerKeyboardMovement,
-  VectArtDesignerLayerGroupOperations;
+  VectArtDesignerLayerGroupOperations, VectArtDesignerMifDocument;
 
 {$R *.dfm}
 
@@ -196,6 +205,10 @@ begin
   InitializeSkiaRuntime;
 
   FDocument := TVectArtDocument.Create;
+  FDocumentSession := TVectArtDocumentSession.Create(FDocument);
+  FDocumentSession.OnChanged := DocumentSessionChanged;
+  DocumentSessionChanged(FDocumentSession);
+  OnCloseQuery := FormCloseQuery;
   FMifAnalysisRevision := -1;
   FDocument.OnChanged := DocumentChanged;
   FEditorState := TVectArtEditorState.Create;
@@ -204,15 +217,20 @@ begin
   FEditHistory.OnChanged := HistoryChanged;
   FDesignerContext := TVectArtDesignerContext.Create(FDocument, FEditHistory,
     FEditorState);
-  FMifReader := CreateVectArtMifContainerReader;
-  FMifWriter := CreateVectArtMifContainerWriter;
+  FDocumentFileController := TVectArtDocumentFileController.Create(FDocument,
+    FEditHistory);
   lblShortcutItems.Visible := False;
   CreateStandardMenus;
+  FFileActionsUI.OnNewFile := NewCanvasRequest;
+  FFileActionsUI.OnNewWizard := NewCanvasWizardRequest;
   FFileActionsUI.OnOpenFile := FileOpenRequest;
   FFileActionsUI.OnSaveFile := FileSaveRequest;
+  FFileActionsUI.CanSave := True;
   FEditActionsUI.History := FEditHistory;
   FEditActionsUI.OnCanvasSettingsRequest := CanvasSettingsRequest;
+  FEditActionsUI.OnNewRequest := NewCanvasRequest;
   FEditActionsUI.OnOpenRequest := FileOpenShortcut;
+  FEditActionsUI.OnSaveRequest := FileSaveShortcut;
   FLineToolbar := TVectArtLineToolbarControl.CreateForHost(Self,
     pnlShortcutBar);
   FLineToolbar.Document := FDocument;
@@ -287,90 +305,71 @@ begin
   end;
 end;
 
-procedure TMainForm.FileOpenRequest(Sender: TObject; const FileName: string);
-var
-  Container: TVectArtMifContainer;
-  {$IFDEF DEBUG} DebugLogFileName: string; {$ENDIF}
-  ErrorMessage: string;
-  Extension: string;
-  ImportMessage: string;
-  SvgImportReport: TSvgImportReport;
+function TMainForm.ConfirmSaveChanges: Boolean;
 begin
-  ErrorMessage := '';
-  Extension := LowerCase(ExtractFileExt(FileName));
-  if Extension = '.svg' then
-  begin
-    if not TryLoadVectArtDocumentFromSvgFile(FileName, FDocument,
-      SvgImportReport, ErrorMessage) then
-    begin
-      lblStatus.Caption := 'SVG open error: ' + ErrorMessage;
-      Exit;
-    end;
-    FreeAndNil(FMifContainer);
-    FMifHasEditableDocument := True;
-    if FEditHistory <> nil then
-      FEditHistory.Clear;
-    DocumentChanged(FDocument);
-    FFileActionsUI.CurrentFileName := FileName;
-    FFileActionsUI.CanSave := True;
-    FEditActionsUI.OnSaveRequest := FileSaveShortcut;
-    Caption := 'VectArtDesigner - ' + ExtractFileName(FileName);
-    if SvgImportReport.HasIssues then
-    begin
-      Application.MessageBox(PChar(
-        'MIF編集モデルへ変換または無視したSVG要素があります。' +
-        sLineBreak + sLineBreak + SvgImportReport.ToDisplayText),
-        'SVG読込結果', MB_OK or MB_ICONWARNING);
-      lblStatus.Caption := Format('SVG document loaded with %d notice(s): %s',
-        [Length(SvgImportReport.Issues), ExtractFileName(FileName)]);
-    end
-    else
-      lblStatus.Caption := 'SVG document loaded: ' +
-        ExtractFileName(FileName);
+  Result := (FDocumentSession = nil) or
+    FDocumentSession.ConfirmSave(Handle, SaveDocumentForContinuation);
+end;
+
+procedure TMainForm.NewCanvasRequest(Sender: TObject);
+begin
+  if not ConfirmSaveChanges then
     Exit;
-  end;
-  if Extension <> '.mif' then
-  begin
-    lblStatus.Caption := 'Open error: unsupported file extension';
+  ResetToNewDocument(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT);
+end;
+
+procedure TMainForm.NewCanvasWizardRequest(Sender: TObject);
+var
+  CanvasHeight: Integer;
+  CanvasWidth: Integer;
+begin
+  if not ConfirmSaveChanges then
     Exit;
-  end;
-  if (FMifReader = nil) or
-    not FMifReader.TryReadFile(FileName, Container, ErrorMessage) then
-  begin
-    lblStatus.Caption := 'MIF open error: ' + ErrorMessage;
+  if ExecuteCanvasSettingsDialog(Self, DEFAULT_CANVAS_WIDTH,
+    DEFAULT_CANVAS_HEIGHT, CanvasWidth, CanvasHeight) then
+    ResetToNewDocument(CanvasWidth, CanvasHeight);
+end;
+
+procedure TMainForm.ResetToNewDocument(AWidth, AHeight: Integer);
+begin
+  if FDocument = nil then
     Exit;
-  end;
-  FreeAndNil(FMifContainer);
-  FMifContainer := Container;
-  ImportMessage := '';
-  FMifHasEditableDocument := TryLoadVectArtDocumentFromMif(FMifContainer,
-    FDocument, ImportMessage);
-  {$IFDEF DEBUG}
-  DebugLogFileName := WriteMifOpenDebugLog(FileName, FMifContainer,
-    ImportMessage);
-  {$ENDIF}
-  if FMifHasEditableDocument then
-  begin
-    if FEditHistory <> nil then
-      FEditHistory.Clear;
-    DocumentChanged(FDocument);
-  end;
-  FFileActionsUI.CurrentFileName := FileName;
+  if (FEditorFrame <> nil) and (FEditorFrame.CanvasControl <> nil) then
+    FEditorFrame.CanvasControl.CancelCutoutSelection;
+  FDocument.Reset(AWidth, AHeight);
+  if FEditHistory <> nil then
+    FEditHistory.Clear;
+  if FDocumentFileController <> nil then
+    FDocumentFileController.Reset;
+  FMifAnalysisRevision := -1;
+  FFileActionsUI.CurrentFileName := '';
   FFileActionsUI.CanSave := True;
   FEditActionsUI.OnSaveRequest := FileSaveShortcut;
-  Caption := 'VectArtDesigner - ' + ExtractFileName(FileName);
-  if ImportMessage = '' then
-    lblStatus.Caption := Format('MIF document loaded: %s   Chunks: %d',
-      [ExtractFileName(FileName), FMifContainer.ChunkCount])
-  else
-    lblStatus.Caption := Format(
-      'MIF container loaded without editable data: %s   Chunks: %d',
-      [ExtractFileName(FileName), FMifContainer.ChunkCount]);
-  {$IFDEF DEBUG}
-  if DebugLogFileName <> '' then
-    lblStatus.Caption := lblStatus.Caption + '   Debug log: ' +
-      ExtractFileName(DebugLogFileName);
-  {$ENDIF}
+  FDocumentSession.MarkClean('新規キャンバス');
+  lblStatus.Caption := Format('新規キャンバス: %d x %d',
+    [AWidth, AHeight]);
+end;
+
+procedure TMainForm.FileOpenRequest(Sender: TObject; const FileName: string);
+var
+  StatusText: string;
+begin
+  if not ConfirmSaveChanges then
+    Exit;
+  StatusText := 'Open error: file controller unavailable';
+  if (FDocumentFileController = nil) or
+    not FDocumentFileController.OpenFile(Handle, FileName, StatusText) then
+  begin
+    lblStatus.Caption := StatusText;
+    Exit;
+  end;
+  DocumentChanged(FDocument);
+  FFileActionsUI.CurrentFileName := FileName;
+  FFileActionsUI.CanSave := True;
+  FFileActionsUI.AddRecentFile(FileName);
+  FEditActionsUI.OnSaveRequest := FileSaveShortcut;
+  FDocumentSession.MarkClean(ExtractFileName(FileName));
+  lblStatus.Caption := StatusText;
 end;
 
 procedure TMainForm.FileOpenShortcut(Sender: TObject);
@@ -381,99 +380,23 @@ end;
 
 procedure TMainForm.FileSaveRequest(Sender: TObject; const FileName: string);
 var
-  Container: TVectArtMifContainer;
-  ErrorMessage: string;
-  ExportMessage: string;
-  ExportReport: TMifExportReport;
-  Extension: string;
+  StatusText: string;
 begin
-  ErrorMessage := '';
-  Container := nil;
-  Extension := LowerCase(ExtractFileExt(FileName));
-  if Extension = '.svg' then
+  FLastSaveSucceeded := False;
+  StatusText := 'Save error: file controller unavailable';
+  if (FDocumentFileController = nil) or
+    not FDocumentFileController.SaveFile(Handle, FileName, StatusText) then
   begin
-    if not TrySaveVectArtDocumentToSvgFile(FDocument, FileName,
-      ErrorMessage) then
-    begin
-      lblStatus.Caption := 'SVG save error: ' + ErrorMessage;
-      Exit;
-    end;
-    FreeAndNil(FMifContainer);
-    FMifHasEditableDocument := True;
-    FFileActionsUI.CurrentFileName := FileName;
-    FFileActionsUI.CanSave := True;
-    FEditActionsUI.OnSaveRequest := FileSaveShortcut;
-    Caption := 'VectArtDesigner - ' + ExtractFileName(FileName);
-    lblStatus.Caption := 'SVG document saved: ' + ExtractFileName(FileName);
+    lblStatus.Caption := StatusText;
     Exit;
-  end;
-  if Extension <> '.mif' then
-  begin
-    lblStatus.Caption := 'Save error: unsupported file extension';
-    Exit;
-  end;
-  if (FMifContainer <> nil) and not FMifHasEditableDocument then
-  begin
-    if (FMifWriter = nil) or
-      not FMifWriter.TryWriteFile(FMifContainer, FileName, ErrorMessage) then
-    begin
-      lblStatus.Caption := 'MIF save error: ' + ErrorMessage;
-      Exit;
-    end;
-    FFileActionsUI.CurrentFileName := FileName;
-    Caption := 'VectArtDesigner - ' + ExtractFileName(FileName);
-    lblStatus.Caption := 'MIF container preserved: ' +
-      ExtractFileName(FileName);
-    Exit;
-  end;
-  if not TryCreateVectArtMifFromDocument(FDocument, FMifContainer, Container,
-    ExportReport, ErrorMessage) then
-  begin
-    if ExportReport.Compatibility = mecUnsupported then
-    begin
-      ExportMessage := 'MIFへ書き出せない項目があります。' +
-        sLineBreak + sLineBreak + ExportReport.ToDisplayText;
-      Application.MessageBox(PChar(ExportMessage), 'MIF書き出し',
-        MB_OK or MB_ICONWARNING);
-      lblStatus.Caption := 'MIF save cancelled: unsupported content';
-      Exit;
-    end;
-    lblStatus.Caption := 'MIF document generation error: ' + ErrorMessage;
-    Exit;
-  end;
-  if ExportReport.Compatibility = mecNeedsConfirmation then
-  begin
-    ExportMessage := 'MIFへの書き出しには注意が必要です。' +
-      sLineBreak + sLineBreak + ExportReport.ToDisplayText +
-      sLineBreak + sLineBreak + 'この内容で書き出しますか？';
-    if Application.MessageBox(PChar(ExportMessage), 'MIF書き出しの確認',
-      MB_OKCANCEL or MB_ICONWARNING) <> IDOK then
-    begin
-      Container.Free;
-      Container := nil;
-      lblStatus.Caption := 'MIF save cancelled';
-      Exit;
-    end;
-  end;
-  try
-    if (FMifWriter = nil) or
-      not FMifWriter.TryWriteFile(Container, FileName, ErrorMessage) then
-    begin
-      lblStatus.Caption := 'MIF save error: ' + ErrorMessage;
-      Exit;
-    end;
-    FreeAndNil(FMifContainer);
-    FMifContainer := Container;
-    Container := nil;
-    FMifHasEditableDocument := True;
-  finally
-    Container.Free;
   end;
   FFileActionsUI.CurrentFileName := FileName;
   FFileActionsUI.CanSave := True;
+  FFileActionsUI.AddRecentFile(FileName);
   FEditActionsUI.OnSaveRequest := FileSaveShortcut;
-  Caption := 'VectArtDesigner - ' + ExtractFileName(FileName);
-  lblStatus.Caption := 'MIF document saved: ' + ExtractFileName(FileName);
+  FDocumentSession.MarkClean(ExtractFileName(FileName));
+  FLastSaveSucceeded := True;
+  lblStatus.Caption := StatusText;
 end;
 
 procedure TMainForm.FileSaveShortcut(Sender: TObject);
@@ -484,23 +407,42 @@ end;
 
 procedure TMainForm.DocumentChanged(Sender: TObject);
 begin
+  if FDocumentSession <> nil then
+    FDocumentSession.ObserveDocumentChange;
   if FEditorFrame <> nil then
     FEditorFrame.CanvasControl.Invalidate;
   if (FDocument <> nil) and FDocument.IsInteractiveUpdate then
     Exit;
-  // 文字編集は1文字ごとにDocumentを更新する。キャンバス以外のネイティブUIは
-  // 入力停止後へ集約し、編集欄の再設定と背景消去によるちらつきを避ける。
-  if (FEditorFrame <> nil) and FEditorFrame.CanvasControl.TextEditing then
+  // 連続入力中もキャンバスは上で即時更新する。設定欄などのネイティブUIだけを
+  // 入力停止後へ集約し、値の再設定と背景消去によるちらつき・操作遅延を避ける。
+  if ((FEditorFrame <> nil) and FEditorFrame.CanvasControl.TextEditing) or
+    IsContinuousSliderInput then
   begin
-    FDocumentRefreshPending := True;
-    FDocumentRefreshTimer.Enabled := False;
-    FDocumentRefreshTimer.Enabled := True;
+    ScheduleDocumentPanelRefresh;
     Exit;
   end;
   if FDocumentRefreshTimer <> nil then
     FDocumentRefreshTimer.Enabled := False;
   FDocumentRefreshPending := False;
   RefreshDocumentPanels;
+end;
+
+procedure TMainForm.DocumentSessionChanged(Sender: TObject);
+begin
+  if FDocumentSession <> nil then
+    Caption := FDocumentSession.Caption;
+end;
+
+function TMainForm.IsContinuousSliderInput: Boolean;
+var
+  FocusedControl: TWinControl;
+  FocusedHandle: HWND;
+begin
+  FocusedHandle := GetFocus;
+  if FocusedHandle = 0 then
+    Exit(False);
+  FocusedControl := FindControl(FocusedHandle);
+  Result := FocusedControl is THorizontalTrackBarControl;
 end;
 
 procedure TMainForm.DocumentRefreshTimer(Sender: TObject);
@@ -523,6 +465,23 @@ begin
   if FLineToolbar <> nil then
     FLineToolbar.RefreshState;
   EditorStateChanged(FEditorState);
+end;
+
+procedure TMainForm.ScheduleDocumentPanelRefresh;
+begin
+  FDocumentRefreshPending := True;
+  if FDocumentRefreshTimer = nil then
+    Exit;
+  FDocumentRefreshTimer.Enabled := False;
+  FDocumentRefreshTimer.Enabled := True;
+end;
+
+function TMainForm.SaveDocumentForContinuation: Boolean;
+begin
+  FLastSaveSucceeded := False;
+  if FFileActionsUI <> nil then
+    FFileActionsUI.ExecuteSave;
+  Result := FLastSaveSucceeded;
 end;
 
 procedure TMainForm.SetReferenceBackgroundRgba(const Pixels: TBytes;
@@ -703,6 +662,11 @@ begin
   UpdateToolMenuItems;
 end;
 
+procedure TMainForm.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+begin
+  CanClose := ConfirmSaveChanges;
+end;
+
 procedure TMainForm.FormDestroy(Sender: TObject);
 begin
   SaveLayoutSettings;
@@ -732,13 +696,12 @@ begin
     FEditorState.OnChanged := nil;
   if FEditHistory <> nil then
     FEditHistory.OnChanged := nil;
-  FreeAndNil(FMifContainer);
-  FMifReader := nil;
-  FMifWriter := nil;
+  FreeAndNil(FDocumentFileController);
   FreeAndNil(FFileActionsUI);
   FreeAndNil(FEditActionsUI);
   FreeAndNil(FEditHistory);
   FreeAndNil(FEditorState);
+  FreeAndNil(FDocumentSession);
   FreeAndNil(FDocument);
   FinalizeSkiaRuntime;
 end;
@@ -746,6 +709,16 @@ end;
 procedure TMainForm.InitializeShortcuts;
 begin
   FShortcuts := TShortcutAction.Create;
+  FShortcuts.Add(Ord('N'), [ssCtrl],
+    procedure
+    begin
+      FFileActionsUI.ExecuteNew;
+    end);
+  FShortcuts.Add(Ord('N'), [ssCtrl, ssShift],
+    procedure
+    begin
+      FFileActionsUI.ExecuteNewWizard;
+    end);
   FShortcuts.Add(Ord('O'), [ssCtrl],
     procedure
     begin
@@ -1051,6 +1024,8 @@ begin
       Ini := TMemIniFile.Create(FLayoutFileName, TEncoding.UTF8);
       if Ini.ReadInteger('File', 'Version', 0) <> 1 then
         Exit;
+      if FFileActionsUI <> nil then
+        FFileActionsUI.LoadHistory(Ini);
       SavedWidth := Max(Ini.ReadInteger('MainForm', 'Width', Width),
         Constraints.MinWidth);
       SavedHeight := Max(Ini.ReadInteger('MainForm', 'Height', Height),
@@ -1105,6 +1080,8 @@ begin
       else
         Ini.WriteString('MainForm', 'WindowState', 'Normal');
       FDockManager.SaveLayout(Ini);
+      if FFileActionsUI <> nil then
+        FFileActionsUI.SaveHistory(Ini);
       Ini.UpdateFile;
     except
       on E: Exception do

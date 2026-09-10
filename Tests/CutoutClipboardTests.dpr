@@ -55,6 +55,19 @@ begin
     Document.CanvasLayer.BackgroundColor := clRed;
     Document.CanvasLayer.Transparent := False;
 
+    Points := [PointF(12, 14), PointF(42, 14), PointF(42, 34),
+      PointF(12, 34)];
+    Data := CreateVectArtRegionPng(Document, vcmRectangle, Points);
+    Image := DecodePng(Data);
+    try
+      Require((Image.Width = 30) and (Image.Height = 20),
+        'Rectangle cutout dimensions differ');
+      Require(Image.AlphaScanline[0]^[0] = 255,
+        'Rectangle cutout unexpectedly masked its corner');
+    finally
+      Image.Free;
+    end;
+
     Points := [PointF(10, 10), PointF(30, 10), PointF(30, 30),
       PointF(10, 30)];
     Data := CreateVectArtRegionPng(Document, vcmEllipse, Points);
@@ -92,6 +105,18 @@ begin
         'Polygon exterior is not transparent');
       Require(Image.AlphaScanline[5]^[10] = 255,
         'Polygon interior is not opaque');
+    finally
+      Image.Free;
+    end;
+
+    Document.SetCanvasSize(20000, 2);
+    Points := [PointF(0, 0), PointF(20000, 0), PointF(20000, 2),
+      PointF(0, 2)];
+    Data := CreateVectArtRegionPng(Document, vcmRectangle, Points);
+    Image := DecodePng(Data);
+    try
+      Require((Image.Width = 16384) and (Image.Height = 2),
+        'Large cutout did not respect the renderer limit');
     finally
       Image.Free;
     end;

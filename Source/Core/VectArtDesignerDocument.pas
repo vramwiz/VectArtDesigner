@@ -399,6 +399,7 @@ type
     function InsertImage(Index: Integer; const Data: TVectArtImageData): Integer;
     function InsertText(Index: Integer; const Data: TVectArtTextData): Integer;
     function IsLayerSelected(Index: Integer): Boolean;
+    procedure Reset(AWidth, AHeight: Integer);
     procedure SetCanvasSize(AWidth, AHeight: Integer);
     procedure SetRectangleBounds(Index: Integer; const Value: TRectF);
     procedure SetRectangleFillColor(Index: Integer; Value: TColor);
@@ -1319,6 +1320,26 @@ end;
 function TVectArtDocument.IsLayerSelected(Index: Integer): Boolean;
 begin
   Result := FSelectedLayers.Contains(Index);
+end;
+
+procedure TVectArtDocument.Reset(AWidth, AHeight: Integer);
+begin
+  AWidth := Max(AWidth, 1);
+  AHeight := Max(AHeight, 1);
+  BeginUpdate;
+  try
+    FSelectedLayers.Clear;
+    FSelectedIndex := -1;
+    FLayers.Clear;
+    FNextGroupId := 1;
+    FNextLayerId := 1;
+    FLayers.Add(TVectArtCanvasLayer.Create(AWidth, AHeight, clWhite));
+    EnsureLayerIdentity(FLayers[0]);
+    InvalidateLayerRelations;
+    StructureChanged;
+  finally
+    EndUpdate;
+  end;
 end;
 
 procedure TVectArtDocument.SetCanvasSize(AWidth, AHeight: Integer);

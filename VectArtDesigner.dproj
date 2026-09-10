@@ -162,7 +162,10 @@
         <DCCReference Include="Source\Shell\VectArtDesignerMainForm.pas">
             <Form>MainForm</Form>
         </DCCReference>
+        <DCCReference Include="Source\Shell\Document\VectArtDesignerDocumentSession.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerFileActionsUI.pas"/>
+        <DCCReference Include="Source\Shell\File\VectArtDesignerDocumentFileController.pas"/>
+        <DCCReference Include="Source\Shell\File\VectArtDesignerRecentFiles.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerEditActionsUI.pas"/>
         <DCCReference Include="Source\ObjectProperties\VectArtDesignerStrokeStyleCombo.pas"/>
         <DCCReference Include="Source\Shell\VectArtDesignerLineToolbar.pas"/>
@@ -196,6 +199,7 @@
         <DCCReference Include="Source\Persistence\Svg\VectArtDesignerSvgDocument.pas"/>
         <DCCReference Include="Source\Persistence\VectArtDesignerDocumentJson.pas"/>
         <DCCReference Include="Source\Editor\Clipboard\VectArtDesignerClipboardOperations.pas"/>
+        <DCCReference Include="Source\Editor\Clipboard\VectArtDesignerAttributePasteOperations.pas"/>
         <DCCReference Include="Source\Editor\Clipboard\VectArtDesignerCutoutSelection.pas"/>
         <DCCReference Include="Source\Editor\VectArtDesignerCanvas.pas"/>
         <DCCReference Include="Source\Editor\Menus\VectArtDesignerObjectContextMenu.pas"/>

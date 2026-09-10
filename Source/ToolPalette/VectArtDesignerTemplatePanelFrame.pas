@@ -28,7 +28,7 @@ uses
 
 const
   COLOR_TEMPLATE_BACKGROUND = TColor($00252525);
-  TEMPLATE_PANEL_WIDTH = 145;
+  TEMPLATE_PANEL_WIDTH = 199;
 
 constructor TTemplatePanelFrame.Create(AOwner: TComponent);
 begin

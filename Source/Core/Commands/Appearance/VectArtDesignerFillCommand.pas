@@ -10,11 +10,14 @@ type
     FIndex: Integer;
     FBefore, FAfter: TVectArtFillStyle;
     FBeforeColor, FAfterColor: TColor;
-    FBeforeFilled: Boolean;
+    FBeforeFilled, FAfterFilled: Boolean;
     procedure Apply(Color: TColor; const Fill: TVectArtFillStyle; IsFilled: Boolean);
   public
     constructor Create(Document: TVectArtDocument; Index: Integer;
-      Color: TColor; const Fill: TVectArtFillStyle);
+      Color: TColor; const Fill: TVectArtFillStyle); overload;
+    constructor Create(Document: TVectArtDocument; Index: Integer;
+      Color: TColor; const Fill: TVectArtFillStyle;
+      IsFilled: Boolean); overload;
     procedure Execute; override;
     procedure Undo; override;
   end;
@@ -59,8 +62,15 @@ begin Apply(FBeforeColor,FBefore); end;
 constructor TVectArtFillCommand.Create(Document: TVectArtDocument; Index: Integer;
   Color: TColor; const Fill: TVectArtFillStyle);
 begin
+  Create(Document, Index, Color, Fill, True);
+end;
+
+constructor TVectArtFillCommand.Create(Document: TVectArtDocument; Index: Integer;
+  Color: TColor; const Fill: TVectArtFillStyle; IsFilled: Boolean);
+begin
   inherited Create;
   FDocument := Document; FIndex := Index; FAfter := Fill; FAfterColor := Color;
+  FAfterFilled := IsFilled;
   if Document[Index] is TVectArtRectangleLayer then
     with TVectArtRectangleLayer(Document[Index]) do
     begin FBefore := FillStyle; FBeforeColor := FillColor; FBeforeFilled := Filled; end
@@ -84,7 +94,7 @@ begin
   FDocument.ChangedLayer(FIndex);
 end;
 procedure TVectArtFillCommand.Execute;
-begin Apply(FAfterColor,FAfter,True); end;
+begin Apply(FAfterColor,FAfter,FAfterFilled); end;
 procedure TVectArtFillCommand.Undo;
 begin Apply(FBeforeColor,FBefore,FBeforeFilled); end;
 end.

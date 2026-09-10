@@ -254,7 +254,9 @@ begin
   for I := 0 to High(Logical) do
     Result[I] := Point(Round(FCanvasBounds.Left + Logical[I].X * FZoom),
       Round(FCanvasBounds.Top + Logical[I].Y * FZoom));
-  if (FConfiguredMode in [vcmPolygon, vcmFreehand]) and
+  if (FConfiguredMode = vcmRectangle) and (Length(Result) > 0) then
+    Result := Result + [Result[0]]
+  else if (FConfiguredMode in [vcmPolygon, vcmFreehand]) and
     (Length(Result) > 0) then
   begin
     if FActive and (FConfiguredMode = vcmPolygon) then

@@ -37,6 +37,7 @@ type
     FRotateRightItem: TMenuItem;
     FUngroupItem: TMenuItem;
     procedure AlignClick(Sender: TObject);
+    procedure AttributePasteClick(Sender: TObject);
     procedure CopyClick(Sender: TObject);
     procedure CutClick(Sender: TObject);
     procedure DeleteClick(Sender: TObject);
@@ -64,6 +65,7 @@ implementation
 
 uses
   Winapi.Windows, VectArtDesignerClipboardOperations,
+  VectArtDesignerAttributePasteOperations,
   VectArtDesignerLayerAlignmentOperations,
   VectArtDesignerLayerFlipOperations,
   VectArtDesignerLayerGroupOperations,
@@ -114,7 +116,9 @@ begin
     FAttributePasteItems[AttributeIndex] := TMenuItem.Create(Self);
     FAttributePasteItems[AttributeIndex].Caption :=
       ATTRIBUTE_PASTE_CAPTIONS[AttributeIndex];
-    // 選択的な属性適用処理を追加するまで入口だけを表示する。
+    FAttributePasteItems[AttributeIndex].Tag := AttributeIndex;
+    if AttributeIndex <= Ord(High(TVectArtAttributePasteKind)) then
+      FAttributePasteItems[AttributeIndex].OnClick := AttributePasteClick;
     FAttributePasteItems[AttributeIndex].Enabled := False;
     FAttributePasteMenu.Add(FAttributePasteItems[AttributeIndex]);
   end;
@@ -217,6 +221,13 @@ begin
   end;
 end;
 
+procedure TVectArtObjectContextMenu.AttributePasteClick(Sender: TObject);
+begin
+  if (Sender is TMenuItem) and PasteVectArtAttribute(FDocument,
+    FEditHistory, TVectArtAttributePasteKind(TMenuItem(Sender).Tag)) then
+    NotifyExecuted;
+end;
+
 procedure TVectArtObjectContextMenu.AlignClick(Sender: TObject);
 begin
   if Sender is TMenuItem then
@@ -288,6 +299,7 @@ end;
 
 procedure TVectArtObjectContextMenu.RefreshState;
 var
+  AttributePastes: TVectArtAttributePasteKinds;
   Enabled: Boolean;
   I: Integer;
   Operations: TVectArtLayerOperations;
@@ -296,8 +308,14 @@ begin
   FCutItem.Enabled := CanCutVectArtSelection(FDocument);
   FDeleteItem.Enabled := FCutItem.Enabled;
   FPasteItem.Enabled := CanPasteVectArtClipboard;
-  FAttributePasteMenu.Enabled := (FDocument <> nil) and
-    (FDocument.SelectionCount > 0);
+  AttributePastes := AvailableVectArtAttributePastes(FDocument);
+  for I := 0 to Ord(High(TVectArtAttributePasteKind)) do
+    FAttributePasteItems[I].Enabled :=
+      TVectArtAttributePasteKind(I) in AttributePastes;
+  for I := Ord(High(TVectArtAttributePasteKind)) + 1 to
+    High(FAttributePasteItems) do
+    FAttributePasteItems[I].Enabled := False;
+  FAttributePasteMenu.Enabled := AttributePastes <> [];
   FHideItem.Enabled := (FDocument <> nil) and
     (FDocument.SelectionCount > 0);
   FHideItem.Checked := IsVectArtSelectionHidden(FDocument);

@@ -12,6 +12,7 @@ uses
 function CanCopyVectArtSelection(Document: TVectArtDocument): Boolean;
 function CanCutVectArtSelection(Document: TVectArtDocument): Boolean;
 function CanPasteVectArtClipboard: Boolean;
+function TryReadVectArtObjectClipboard(out Source: TVectArtDocument): Boolean;
 function CopyVectArtSelectionToClipboard(Document: TVectArtDocument): Boolean;
 function CanCopyVectArtRegion(Document: TVectArtDocument;
   const Points: TArray<TPointF>): Boolean;
@@ -244,6 +245,32 @@ begin
   end;
 end;
 
+function TryReadVectArtObjectClipboard(out Source: TVectArtDocument): Boolean;
+var
+  ErrorMessage: string;
+  ObjectBytes: TBytes;
+  ObjectJson: string;
+begin
+  Source := nil;
+  Result := False;
+  try
+    ObjectBytes := ReadClipboardBytes(ClipboardObjectFormat);
+    if Length(ObjectBytes) = 0 then
+      Exit;
+    ObjectJson := TEncoding.UTF8.GetString(ObjectBytes);
+    Source := TVectArtDocument.Create;
+    if not TryDeserializeVectArtDocument(ObjectJson, Source,
+      ErrorMessage) or (Source.LayerCount <= 1) then
+    begin
+      FreeAndNil(Source);
+      Exit;
+    end;
+    Result := True;
+  except
+    FreeAndNil(Source);
+  end;
+end;
+
 function WriteClipboard(const ObjectJson: string;
   const PngData: TBytes): Boolean;
 var
@@ -424,9 +451,13 @@ var
   Pixel: PVectArtRgbaPixel;
   SampleX: Integer;
   SampleY: Integer;
+  ScaleX: Single;
+  ScaleY: Single;
   X: Integer;
   Y: Integer;
 begin
+  ScaleX := RenderBounds.Width / Buffer.Width;
+  ScaleY := RenderBounds.Height / Buffer.Height;
   Pixel := Buffer.Data;
   for Y := 0 to Buffer.Height - 1 do
     for X := 0 to Buffer.Width - 1 do
@@ -435,8 +466,10 @@ begin
       for SampleY := 0 to High(SAMPLE_OFFSETS) do
         for SampleX := 0 to High(SAMPLE_OFFSETS) do
           if PointInCutout(Mode,
-            PointF(RenderBounds.Left + X + SAMPLE_OFFSETS[SampleX],
-              RenderBounds.Top + Y + SAMPLE_OFFSETS[SampleY]),
+            PointF(RenderBounds.Left +
+              (X + SAMPLE_OFFSETS[SampleX]) * ScaleX,
+              RenderBounds.Top +
+              (Y + SAMPLE_OFFSETS[SampleY]) * ScaleY),
             Points, SelectionBounds) then
             Inc(Coverage);
       Pixel^.A := (Cardinal(Pixel^.A) * Cardinal(Coverage) + 2) div 4;
@@ -473,8 +506,8 @@ begin
     Max(Floor(SelectionBounds.Top), CanvasBounds.Top),
     Min(Ceil(SelectionBounds.Right), CanvasBounds.Right),
     Min(Ceil(SelectionBounds.Bottom), CanvasBounds.Bottom));
-  Width := Round(RenderBounds.Width);
-  Height := Round(RenderBounds.Height);
+  Width := EnsureRange(Round(RenderBounds.Width), 1, 16384);
+  Height := EnsureRange(Round(RenderBounds.Height), 1, 16384);
   if (Width <= 0) or (Height <= 0) then
     Exit;
   Buffer := TVectArtRenderBuffer.Create;
@@ -867,26 +900,13 @@ end;
 procedure PasteVectArtClipboard(Document: TVectArtDocument;
   EditHistory: TVectArtEditHistory);
 var
-  ErrorMessage: string;
-  ObjectBytes: TBytes;
-  ObjectJson: string;
   PngData: TBytes;
   Source: TVectArtDocument;
 begin
   try
     if Document = nil then
       Exit;
-    Source := nil;
-    ObjectBytes := ReadClipboardBytes(ClipboardObjectFormat);
-    if Length(ObjectBytes) > 0 then
-    begin
-      ObjectJson := TEncoding.UTF8.GetString(ObjectBytes);
-      Source := TVectArtDocument.Create;
-      if not TryDeserializeVectArtDocument(ObjectJson, Source,
-        ErrorMessage) or (Source.LayerCount <= 1) then
-        FreeAndNil(Source);
-    end;
-    if Source <> nil then
+    if TryReadVectArtObjectClipboard(Source) then
     try
       ExecutePaste(Document, EditHistory, Source, True);
       Exit;

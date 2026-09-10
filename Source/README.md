@@ -9,6 +9,9 @@
 | Persistence/Mif/Rendering | 埋込PNG描画、画像配置と数値属性、ペイント属性の入出力 |
 | Persistence/Svg/Paint | ペイント定義の読込と書出し、標準表現のない方式の表示PNG |
 | Persistence | Document JSON、選択画像の埋込PNG変換（TextureImage） |
+| Shell | メイン画面でのUI接続と状態表示 |
+| Shell/Document | Revisionに基づく未保存状態、表示名、破棄前の保存確認 |
+| Shell/File | ファイルメニュー、SVG／MIF入出力、最近使ったファイルの永続化 |
 | ObjectProperties/Color | 色選択UI、色見本、ペイントプレビュー |
 | Core/Commands/Appearance | 塗り・線・文字のペイントと枠／塗りの有効状態 |
 | Core/Commands/Transform | 選択全体の整列・反転・回転 |
@@ -25,6 +28,10 @@ MIFの依存方向は公開変換APIからReader／Raster／Paint／Placementへ
 ユニットの追加・移動時は本体のdpr／dprojとテスト内の明示パスを更新する。検証出力はTestOutput配下へ限定する。
 
 Source内の各フォルダは最大6ユニット（今回の追加後も同じ）。大量のユニットが集中したフォルダはなく、現在の責務別分類を維持する。
+
+新規キャンバスは既存のDocument参照を交換せず、Document.ResetでCanvas以外のレイヤー、選択、識別子を初期化する。Shell/FileActionsUIはメニューとダイアログ、Shell/File/RecentFilesは最大10件の履歴と設定ファイル、Shell/File/DocumentFileControllerはSVG／MIF入出力とMIFコンテナーの所有権を担当する。MainFormは各処理の接続とステータス表示だけを行う。
+
+Shell/Document/DocumentSessionはDocument.Revisionの変化を未保存変更として追跡し、選択変更だけでは未保存扱いにしない。終了、新規キャンバス、ウィザード新規作成、別ファイル読込の前に保存確認を行い、保存が失敗またはキャンセルされた場合は後続操作を中止する。保存処理はコールバックとし、ファイル形式へ依存させない。
 
 作成色はEditorStateのColor1／Color2だけで保持し、ToolPalette/CreationColorsが単色編集を担当する。オブジェクト設定から作成色を更新しない。Dockの親ウィンドウ確定後に色欄を生成する。
 
@@ -65,6 +72,7 @@ ObjectPropertiesControl側の担当を維持する。
 - Layers/VectArtDesignerLayerRenderer.pas: 下端基準の行順を保ったスクロール量、全行の内容高、1行単位の移動量を担当する。
 - Layers/VectArtDesignerLayerList.pas: 表示範囲、スクロールバー同期、ホイール入力、スクロール後のクリック判定を担当する。グループ展開とDocument変更時は表示行数から範囲を再計算する。
 - Layers/Interaction/VectArtDesignerLayerDragDrop.pas: D&Dの編集可否、フラットグループ境界、移動後のLayerId順とUndo／Redoを担当する。LayerListはマウス捕捉、挿入線、自動スクロールだけを保持する。
+- Layersの一覧表示は可視／ロック操作とサムネイルに限定し、名称・寸法・不透明度はObjectPropertiesへ集約する。左ドックでは一覧を170pxに抑え、独立したテンプレ図形枠へ幅を配分する。
 
 完成整理（2026-09-09）:
 - ClipboardとLayerDuplicationに重複していたRectangle／Line／Path／Imageのデータ取得と種類別削除をCore/Transferへ集約した。画像バイト列とPath頂点列は元レイヤーの寿命から分離する。
@@ -74,3 +82,5 @@ ObjectPropertiesControl側の担当を維持する。
 - Core/EditorStateは切り取りツールの四角／丸／鋭角の閉じた図形／閉じた自由曲線という4モードだけを共有し、選択領域自体はDocumentへ保存しない。
 - Editor/Clipboard/CutoutSelectionはキャンバス論理座標の一時領域、マウス入力、表示輪郭を担当する。Canvasは入力転送とGDI／Direct2Dの点線表示を担当する。
 - Editor/Clipboard/ClipboardOperationsは選択領域とキャンバスの交差範囲を再描画し、非四角形の外側を透明化してPNG／Bitmapをクリップボードへ渡す。独自オブジェクト形式は付加しない。
+- Editor/Clipboard/AttributePasteOperationsは単一オブジェクトの独自クリップボード形式から、色・サイズ・文字・フォント名だけを選択中の互換オブジェクトへ一括適用し、1回のUndo／Redoで戻せるようにする。
+- 16384pxを超える領域はレンダラー上限内へ縮小し、形状マスクのサンプリング座標も同じ縮小率へ追従する。

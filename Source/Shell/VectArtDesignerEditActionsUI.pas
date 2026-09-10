@@ -11,6 +11,7 @@ type
   TVectArtEditShortcutControl = class(TCustomControl)
   private
     FHistory: TVectArtEditHistory;
+    FOnNewRequest: TNotifyEvent;
     FOnOpenRequest: TNotifyEvent;
     FOnSaveRequest: TNotifyEvent;
     function ButtonEnabled(Index: Integer): Boolean;
@@ -26,6 +27,8 @@ type
     constructor Create(AOwner: TComponent); override;
     procedure RefreshState;
     property History: TVectArtEditHistory read FHistory write SetHistory;
+    property OnNewRequest: TNotifyEvent read FOnNewRequest
+      write FOnNewRequest;
     property OnOpenRequest: TNotifyEvent read FOnOpenRequest
       write FOnOpenRequest;
     property OnSaveRequest: TNotifyEvent read FOnSaveRequest
@@ -38,6 +41,7 @@ type
     FCanvasSettingsVisible: Boolean;
     FHistory: TVectArtEditHistory;
     FMenu: TMenuItem;
+    FOnNewRequest: TNotifyEvent;
     FOnOpenRequest: TNotifyEvent;
     FOnSaveRequest: TNotifyEvent;
     FOnCanvasSettingsRequest: TNotifyEvent;
@@ -50,6 +54,7 @@ type
     procedure RedoClick(Sender: TObject);
     procedure SetHistory(const Value: TVectArtEditHistory);
     procedure SetCanvasSettingsVisible(const Value: Boolean);
+    procedure SetOnNewRequest(const Value: TNotifyEvent);
     procedure SetOnOpenRequest(const Value: TNotifyEvent);
     procedure SetOnSaveRequest(const Value: TNotifyEvent);
     procedure UndoClick(Sender: TObject);
@@ -63,6 +68,8 @@ type
       write SetCanvasSettingsVisible;
     property OnCanvasSettingsRequest: TNotifyEvent
       read FOnCanvasSettingsRequest write FOnCanvasSettingsRequest;
+    property OnNewRequest: TNotifyEvent read FOnNewRequest
+      write SetOnNewRequest;
     property OnOpenRequest: TNotifyEvent read FOnOpenRequest
       write SetOnOpenRequest;
     property OnSaveRequest: TNotifyEvent read FOnSaveRequest
@@ -87,6 +94,7 @@ const
 function TVectArtEditShortcutControl.ButtonEnabled(Index: Integer): Boolean;
 begin
   case Index of
+    0: Result := Assigned(FOnNewRequest);
     1: Result := Assigned(FOnOpenRequest);
     2: Result := Assigned(FOnSaveRequest);
     3: Result := (FHistory <> nil) and FHistory.CanUndo;
@@ -201,7 +209,9 @@ begin
   if Button = mbLeft then
   begin
     Index := EnsureRange(X div BUTTON_WIDTH, 0, BUTTON_COUNT - 1);
-    if (Index = 1) and Assigned(FOnOpenRequest) then
+    if (Index = 0) and Assigned(FOnNewRequest) then
+      FOnNewRequest(Self)
+    else if (Index = 1) and Assigned(FOnOpenRequest) then
       FOnOpenRequest(Self)
     else if (Index = 2) and Assigned(FOnSaveRequest) then
       FOnSaveRequest(Self)
@@ -313,6 +323,13 @@ procedure TVectArtEditActionsUI.SetOnSaveRequest(const Value: TNotifyEvent);
 begin
   FOnSaveRequest := Value;
   FShortcutControl.OnSaveRequest := Value;
+  RefreshState;
+end;
+
+procedure TVectArtEditActionsUI.SetOnNewRequest(const Value: TNotifyEvent);
+begin
+  FOnNewRequest := Value;
+  FShortcutControl.OnNewRequest := Value;
   RefreshState;
 end;
 

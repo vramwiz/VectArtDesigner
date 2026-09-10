@@ -12,7 +12,6 @@ type
   private
     FToolPalette: TVectArtToolPaletteControl;
     FContext: IVectArtDesignerContext;
-    procedure OpenTemplates(Sender: TObject);
     procedure SetContext(const Value: IVectArtDesignerContext);
   public
     constructor Create(AOwner: TComponent); override;
@@ -24,7 +23,7 @@ type
 implementation
 
 uses
-  Vcl.Controls, Vcl.Graphics, VectArtDesignerEditorState;
+  Vcl.Controls, Vcl.Graphics;
 
 {$R VectArtDesignerToolPaletteFrame.dfm}
 
@@ -39,13 +38,6 @@ begin
   FToolPalette := TVectArtToolPaletteControl.Create(Self);
   FToolPalette.Parent := Self;
   FToolPalette.Align := alClient;
-  FToolPalette.OnTemplates := OpenTemplates;
-end;
-
-procedure TToolPaletteFrame.OpenTemplates(Sender: TObject);
-begin
-  if FContext <> nil then
-    FContext.EditorState.CurrentTool := vetTemplate;
 end;
 
 procedure TToolPaletteFrame.RefreshState;

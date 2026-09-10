@@ -1686,8 +1686,6 @@ begin
         Direct2DCanvas.Pen.Style := psDot;
         if FCutoutSelection.Mode = vcmEllipse then
           Direct2DCanvas.Ellipse(CutoutBounds)
-        else if FCutoutSelection.Mode = vcmRectangle then
-          Direct2DCanvas.FrameRect(CutoutBounds)
         else
           Direct2DCanvas.Polyline(CutoutOutline);
         Direct2DCanvas.Pen.Style := psSolid;
@@ -1881,8 +1879,6 @@ begin
     Canvas.Pen.Style := psDot;
     if FCutoutSelection.Mode = vcmEllipse then
       Canvas.Ellipse(CutoutBounds)
-    else if FCutoutSelection.Mode = vcmRectangle then
-      Canvas.FrameRect(CutoutBounds)
     else
       Canvas.Polyline(CutoutOutline);
     Canvas.Pen.Style := psSolid;

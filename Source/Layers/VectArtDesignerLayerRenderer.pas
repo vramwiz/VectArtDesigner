@@ -589,7 +589,6 @@ var
   CanvasLayer: TVectArtCanvasLayer;
   CellRect: TRect;
   Column: Integer;
-  DetailText: string;
   LockRect: TRect;
   LineLayer: TVectArtLineLayer;
   LineEnd: TPoint;
@@ -603,7 +602,6 @@ var
   Row: Integer;
   SavedDC: Integer;
   TextLayer: TVectArtTextLayer;
-  TextX: Integer;
   ThumbnailArea: TRect;
   ThumbnailRect: TRect;
   VisibilityRect: TRect;
@@ -828,37 +826,6 @@ begin
   ACanvas.Pen.Color := COLOR_THUMB_BORDER;
   ACanvas.FrameRect(ThumbnailRect);
 
-  TextX := ThumbnailArea.Right + 8;
-  ACanvas.Font.Name := 'Segoe UI';
-  ACanvas.Font.Height := -13;
-  ACanvas.Font.Color := COLOR_TEXT_PRIMARY;
-  ACanvas.TextOut(TextX, ItemRect.Top + 20, Layer.Name);
-  if Layer is TVectArtCanvasLayer then
-    DetailText := Format('%d x %d  %d%%', [TVectArtCanvasLayer(Layer).Width,
-      TVectArtCanvasLayer(Layer).Height, Round(Layer.Opacity * 100)])
-  else if Layer is TVectArtRectangleLayer then
-    DetailText := Format('%d x %d  %d%%',
-      [Round(TVectArtRectangleLayer(Layer).Bounds.Width),
-       Round(TVectArtRectangleLayer(Layer).Bounds.Height),
-       Round(Layer.Opacity * 100)])
-  else if Layer is TVectArtImageLayer then
-    if TVectArtImageLayer(Layer).SourceKind = visLogo then
-      DetailText := Format('Logo  %d%%', [Round(Layer.Opacity * 100)])
-    else
-      DetailText := Format('Image  %d%%', [Round(Layer.Opacity * 100)])
-  else if Layer is TVectArtPathLayer then
-    DetailText := Format('Path  %d%%', [Round(Layer.Opacity * 100)])
-  else if Layer is TVectArtTextLayer then
-    DetailText := Format('Text  %s  %d%%',
-      [TVectArtTextLayer(Layer).FontFamily, Round(Layer.Opacity * 100)])
-  else
-    DetailText := Format('Line  %spx  %d%%',
-      [FormatFloat('0.##', TVectArtLineLayer(Layer).StrokeWidth),
-       Round(Layer.Opacity * 100)]);
-  ACanvas.Font.Height := -11;
-  ACanvas.Font.Color := COLOR_TEXT_SECONDARY;
-  ACanvas.TextOut(TextX, ItemRect.Top + 43, DetailText);
-
   VisibilityRect := VisibilityButtonRect(ItemRect);
   LockRect := LockButtonRect(ItemRect);
   ACanvas.Pen.Color := COLOR_TEXT_SECONDARY;
@@ -888,7 +855,6 @@ var
   CanvasLayer: TVectArtCanvasLayer;
   CellRect: TRect;
   Column: Integer;
-  DetailText: string;
   LockRect: TRect;
   LineLayer: TVectArtLineLayer;
   LineEnd: TPoint;
@@ -901,7 +867,6 @@ var
   RectangleRect: TRect;
   Row: Integer;
   TextLayer: TVectArtTextLayer;
-  TextX: Integer;
   ThumbnailArea: TRect;
   ThumbnailRect: TRect;
   VisibilityRect: TRect;
@@ -1129,37 +1094,6 @@ begin
   ACanvas.Pen.Color := COLOR_THUMB_BORDER;
   ACanvas.FrameRect(ThumbnailRect);
 
-  TextX := ThumbnailArea.Right + 8;
-  ACanvas.Font.Name := 'Segoe UI';
-  ACanvas.Font.Height := -13;
-  ACanvas.Font.Color := COLOR_TEXT_PRIMARY;
-  ACanvas.TextOut(TextX, ItemRect.Top + 20, Layer.Name);
-  if Layer is TVectArtCanvasLayer then
-    DetailText := Format('%d x %d  %d%%', [TVectArtCanvasLayer(Layer).Width,
-      TVectArtCanvasLayer(Layer).Height, Round(Layer.Opacity * 100)])
-  else if Layer is TVectArtRectangleLayer then
-    DetailText := Format('%d x %d  %d%%',
-      [Round(TVectArtRectangleLayer(Layer).Bounds.Width),
-       Round(TVectArtRectangleLayer(Layer).Bounds.Height),
-       Round(Layer.Opacity * 100)])
-  else if Layer is TVectArtImageLayer then
-    if TVectArtImageLayer(Layer).SourceKind = visLogo then
-      DetailText := Format('Logo  %d%%', [Round(Layer.Opacity * 100)])
-    else
-      DetailText := Format('Image  %d%%', [Round(Layer.Opacity * 100)])
-  else if Layer is TVectArtPathLayer then
-    DetailText := Format('Path  %d%%', [Round(Layer.Opacity * 100)])
-  else if Layer is TVectArtTextLayer then
-    DetailText := Format('Text  %s  %d%%',
-      [TVectArtTextLayer(Layer).FontFamily, Round(Layer.Opacity * 100)])
-  else
-    DetailText := Format('Line  %spx  %d%%',
-      [FormatFloat('0.##', TVectArtLineLayer(Layer).StrokeWidth),
-       Round(Layer.Opacity * 100)]);
-  ACanvas.Font.Height := -11;
-  ACanvas.Font.Color := COLOR_TEXT_SECONDARY;
-  ACanvas.TextOut(TextX, ItemRect.Top + 43, DetailText);
-
   VisibilityRect := VisibilityButtonRect(ItemRect);
   LockRect := LockButtonRect(ItemRect);
   ACanvas.Pen.Color := COLOR_TEXT_SECONDARY;
@@ -1359,7 +1293,6 @@ var
   ButtonRect: TRect;
   CenterX: Integer;
   CenterY: Integer;
-  TextRect: TRect;
 begin
   if Entry.IsGroupMember then
   begin
@@ -1388,22 +1321,6 @@ begin
     ACanvas.MoveTo(CenterX, ButtonRect.Top + 3);
     ACanvas.LineTo(CenterX, ButtonRect.Bottom - 3);
   end;
-  TextRect := Rect(ItemRect.Left + 134, ItemRect.Top + 8,
-    ItemRect.Right - 4, ItemRect.Bottom - 5);
-  if Selected then
-    ACanvas.Brush.Color := COLOR_ROW_SELECTED
-  else
-    ACanvas.Brush.Color := COLOR_ROW_BACKGROUND;
-  ACanvas.FillRect(TextRect);
-  ACanvas.Brush.Style := bsClear;
-  ACanvas.Font.Name := 'Segoe UI';
-  ACanvas.Font.Height := -13;
-  ACanvas.Font.Color := COLOR_TEXT_PRIMARY;
-  ACanvas.TextOut(TextRect.Left, ItemRect.Top + 20, 'グループ');
-  ACanvas.Font.Height := -11;
-  ACanvas.Font.Color := COLOR_TEXT_SECONDARY;
-  ACanvas.TextOut(TextRect.Left, ItemRect.Top + 43,
-    Format('%d レイヤー', [Entry.MemberCount]));
 end;
 
 procedure TVectArtLayerRenderer.DrawGroupDecoration(
@@ -1413,7 +1330,6 @@ var
   ButtonRect: TRect;
   CenterX: Integer;
   CenterY: Integer;
-  TextRect: TRect;
 begin
   if Entry.IsGroupMember then
   begin
@@ -1442,22 +1358,6 @@ begin
     ACanvas.MoveTo(CenterX, ButtonRect.Top + 3);
     ACanvas.LineTo(CenterX, ButtonRect.Bottom - 3);
   end;
-  TextRect := Rect(ItemRect.Left + 134, ItemRect.Top + 8,
-    ItemRect.Right - 4, ItemRect.Bottom - 5);
-  if Selected then
-    ACanvas.Brush.Color := COLOR_ROW_SELECTED
-  else
-    ACanvas.Brush.Color := COLOR_ROW_BACKGROUND;
-  ACanvas.FillRect(TextRect);
-  ACanvas.Brush.Style := bsClear;
-  ACanvas.Font.Name := 'Segoe UI';
-  ACanvas.Font.Height := -13;
-  ACanvas.Font.Color := COLOR_TEXT_PRIMARY;
-  ACanvas.TextOut(TextRect.Left, ItemRect.Top + 20, 'グループ');
-  ACanvas.Font.Height := -11;
-  ACanvas.Font.Color := COLOR_TEXT_SECONDARY;
-  ACanvas.TextOut(TextRect.Left, ItemRect.Top + 43,
-    Format('%d レイヤー', [Entry.MemberCount]));
 end;
 
 function TVectArtLayerRenderer.ExpandedGroupFrameRect(

@@ -34,6 +34,7 @@ uses
 
 const
   COLOR_PANEL_BACKGROUND = TColor($00212121);
+  LAYER_PANEL_WIDTH = 170;
 
 function TLayerPanelFrame.CanRunLayerAction(
   Action: TVectArtLayerAction): Boolean;
@@ -44,7 +45,8 @@ end;
 constructor TLayerPanelFrame.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  ConfigureToolAppearance('Layers', 'Layers', COLOR_PANEL_BACKGROUND, 224);
+  ConfigureToolAppearance('Layers', 'Layers', COLOR_PANEL_BACKGROUND,
+    LAYER_PANEL_WIDTH);
   TitleLabel.Visible := False;
   FLayerList := TVectArtLayerListControl.Create(Self);
   FLayerList.Parent := Self;

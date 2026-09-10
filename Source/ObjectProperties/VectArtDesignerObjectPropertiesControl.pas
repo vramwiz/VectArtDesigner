@@ -764,7 +764,9 @@ begin
     RefreshFromDocument;
     Exit;
   end;
-  NewWidth := Max(NewWidth, 0.0);
+  // 線を消す操作は「枠と塗り潰し」の塗りのみモードへ限定する。
+  // 線幅の直接入力とスライダーは、描画可能な最小1pxを維持する。
+  NewWidth := Max(NewWidth, 1.0);
   LayerIndices := GetSelectedStrokeIndices;
   LinesIncluded := False;
   OtherStrokesIncluded := False;

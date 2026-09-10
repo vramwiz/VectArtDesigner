@@ -94,8 +94,8 @@ begin
   FStrokeWidthEdit.Free;
   FStrokeWidthSlider := TVectArtNumericSlider.CreateForParent(Self, Self);
   FStrokeWidthSlider.Name := 'StrokeWidthSlider';
-  FStrokeWidthSlider.Configure(0,10000,1,2);
-  FStrokeWidthSlider.SetSliderRange(0,100);
+  FStrokeWidthSlider.Configure(1,10000,1,2);
+  FStrokeWidthSlider.SetSliderRange(1,100);
   FStrokeWidthSlider.OnChange := NumericSettingChanged;
   FStrokeWidthEdit := FStrokeWidthSlider.Edit;
   FOpacityEdit.Free;

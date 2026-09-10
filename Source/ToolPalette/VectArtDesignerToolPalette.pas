@@ -12,7 +12,6 @@ type
   private
     FColors: TVectArtCreationColors;
     FEditorState: TVectArtEditorState;
-    FOnTemplates: TNotifyEvent;
     procedure ActivateButton(Index: Integer);
     function ButtonRect(Index: Integer): TRect;
     function ButtonSelected(Index: Integer): Boolean;
@@ -27,7 +26,6 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     procedure RefreshState;
-    property OnTemplates: TNotifyEvent read FOnTemplates write FOnTemplates;
     property EditorState: TVectArtEditorState read FEditorState
       write SetEditorState;
   end;
@@ -39,7 +37,7 @@ uses
 
 const
   BUTTON_SIZE = 46;
-  BUTTON_COUNT = 12;
+  BUTTON_COUNT = 11;
   COLOR_BACKGROUND = TColor($00252525);
   COLOR_BUTTON = TColor($002D2D2D);
   COLOR_SELECTED = TColor($0046382B);
@@ -70,7 +68,6 @@ begin
     8: FEditorState.SelectClosedBezierToolGroup;
     9: FEditorState.SelectCutoutToolGroup;
     10: FEditorState.CurrentTool := vetText;
-    11: if Assigned(FOnTemplates) then FOnTemplates(Self);
   end;
 end;
 
@@ -92,7 +89,6 @@ begin
     8: Result := FEditorState.CurrentTool = vetClosedBezier;
     9: Result := FEditorState.CurrentTool = vetCutout;
     10: Result := FEditorState.CurrentTool = vetText;
-    11: Result := FEditorState.CurrentTool = vetTemplate;
   else
     Result := False;
   end;
@@ -125,13 +121,6 @@ begin
   Canvas.Pen.Color := COLOR_ICON;
   Canvas.Pen.Width := 1;
   Canvas.Brush.Style := bsClear;
-  if Index = 11 then
-  begin
-    Canvas.Font.Color := COLOR_ICON;
-    Canvas.Font.Size := 19;
-    Canvas.TextOut(CenterX - 14, CenterY - 17, '☆');
-    Exit;
-  end;
   if Index = 0 then
   begin
     Canvas.MoveTo(CenterX - 8, CenterY - 11);
