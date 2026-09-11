@@ -1,0 +1,22 @@
+﻿プロジェクトの依存関係を確認中...
+VectArtDesigner.dproj をコンパイル中 (Debug, Win64)
+dcc64 の "VectArtDesigner.dpr" コマンド ライン
+  c:\program files (x86)\embarcadero\studio\37.0\bin\dcc64.exe -$O- -$D1 --no-config -M -Q -TX.exe -AGenerics.Collections=System.Generics.Collections;
+  Generics.Defaults=System.Generics.Defaults;WinTypes=Winapi.Windows;WinProcs=Winapi.Windows;DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE -DDEBUG;;
+  FRAMEWORK_VCL -I"c:\program files (x86)\embarcadero\studio\37.0\lib\Win64\release\JA";"c:\program files 
+  (x86)\embarcadero\studio\37.0\lib\Win64\release";D:\Users\take6\Embarcadero\Studio\37.0\Imports\Win64;"c:\program files 
+  (x86)\embarcadero\studio\37.0\Imports";C:\Users\Public\Documents\Embarcadero\Studio\37.0\Dcp\Win64;"c:\program files 
+  (x86)\embarcadero\studio\37.0\include" -LEC:\Users\Public\Documents\Embarcadero\Studio\37.0\Bpl\Win64 
+  -LNC:\Users\Public\Documents\Embarcadero\Studio\37.0\Dcp\Win64 -NUWin64\Debug -NSSystem;Xml;Data;Datasnap;Web;Soap;Vcl;Winapi; -O"c:\program files 
+  (x86)\embarcadero\studio\37.0\lib\Win64\release";D:\Users\take6\Embarcadero\Studio\37.0\Imports\Win64;"c:\program files 
+  (x86)\embarcadero\studio\37.0\Imports";C:\Users\Public\Documents\Embarcadero\Studio\37.0\Dcp\Win64;"c:\program files 
+  (x86)\embarcadero\studio\37.0\include" -R"c:\program files (x86)\embarcadero\studio\37.0\lib\Win64\release\JA";"c:\program files 
+  (x86)\embarcadero\studio\37.0\lib\Win64\release";D:\Users\take6\Embarcadero\Studio\37.0\Imports\Win64;"c:\program files 
+  (x86)\embarcadero\studio\37.0\Imports";C:\Users\Public\Documents\Embarcadero\Studio\37.0\Dcp\Win64;"c:\program files 
+  (x86)\embarcadero\studio\37.0\include" -U"c:\program files (x86)\embarcadero\studio\37.0\lib\Win64\release\JA";"c:\program files 
+  (x86)\embarcadero\studio\37.0\lib\Win64\release";D:\Users\take6\Embarcadero\Studio\37.0\Imports\Win64;"c:\program files 
+  (x86)\embarcadero\studio\37.0\Imports";C:\Users\Public\Documents\Embarcadero\Studio\37.0\Dcp\Win64;"c:\program files 
+  (x86)\embarcadero\studio\37.0\include" -VR -NBC:\Users\Public\Documents\Embarcadero\Studio\37.0\Dcp\Win64 
+  -NHC:\Users\Public\Documents\Embarcadero\Studio\37.0\hpp\Win64 -NOWin64\Debug  VectArtDesigner.dpr   
+成功
+経過時間: 00:00:01.5

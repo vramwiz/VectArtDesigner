@@ -19,14 +19,18 @@ procedure ShowVectArtColorPopup(Target: TComponent; const Title: string;
 procedure ShowVectArtFillPopup(Target: TComponent; Color: TColor;
   const Fill: TVectArtFillStyle; const UsedColors: TArray<TColor>;
   OnChanged: TVectArtFillChanged; AllowTexture: Boolean = True;
-  ColorHistory: TVectArtColorHistory = nil);
+  ColorHistory: TVectArtColorHistory = nil;
+  PatternColor1: TColor = clNone; PatternColor2: TColor = clNone);
 procedure CloseVectArtColorPopup(Target: TComponent);
 
 implementation
 
 uses VectArtDesignerSettingsFont,
-  System.SysUtils, System.Math, System.UITypes, Winapi.Windows, Vcl.Dialogs,
-  VectArtDesignerNumericSlider, ColorPickerHueBar, ColorPickerSVArea, ColorPickerColorMath, VectArtDesignerTextureImage, VectArtDesignerPaintPreview, VectArtDesignerColorSwatch;
+  System.SysUtils, System.Math, System.UITypes, Winapi.Windows,
+  Vcl.Dialogs, VectArtDesignerNumericSlider, ColorPickerHueBar,
+  ColorPickerSVArea, ColorPickerColorMath, VectArtDesignerTextureImage,
+  VectArtDesignerPaintPreview, VectArtDesignerColorSwatch,
+  VectArtDesignerPatternTiles;
 
 type
   TVectArtPaintPopup = class(TForm)
@@ -51,16 +55,27 @@ type
     FHue: TColorPickerHueBar;
     FSV: TColorPickerSVArea;
     FTextureButton: TButton;
+    FTexturePattern: TComboBox;
+    FPatternLabels: TArray<TLabel>;
+    FPatternSliders: TArray<TVectArtNumericSlider>;
+    FPatternSettings: TVectArtPatternSettings;
     FTexture: TPicture;
     FColors: TArray<TColor>;
     FColorHistory: TVectArtColorHistory;
     FColor1, FColor2: TColor;
+    FPatternColor1, FPatternColor2: TColor;
     FHistoryPending: Boolean;
     FHistoryPendingColor: TColor;
     FHistoryPendingSlot: Integer;
     FUpdating, FPicking: Boolean;
+    FTexturePatternKind: Integer;
     procedure PickerChanged(Sender: TObject);
     procedure CommitFill;
+    procedure ApplyTexturePattern(Sender: TObject);
+    procedure PatternParameterChanged(Sender: TObject);
+    procedure SyncPatternControls(var Y: Integer);
+    procedure RegeneratePattern;
+    procedure LoadTextureBytes(const Bytes: TBytes);
     procedure EditAngle(Sender: TObject);
     procedure EditWaveCount(Sender: TObject);
     procedure Changed(Sender: TObject);
@@ -90,6 +105,14 @@ const
     clGreen, clTeal, clNavy, clPurple);
 
 constructor TVectArtPaintPopup.Create(AOwner: TComponent);
+var I: Integer;
+
+  procedure DarkCombo(Combo: TComboBox);
+  begin
+    Combo.Color := TColor($00303030);
+    Combo.Font.Color := TColor($00EEEEEE);
+    Combo.StyleElements := Combo.StyleElements - [seFont];
+  end;
 begin
   inherited CreateNew(AOwner);
   BorderStyle := bsToolWindow;
@@ -98,8 +121,10 @@ begin
   OnDeactivate := PopupDeactivate;
   ClientWidth := 370;
   ClientHeight := 466;
+  Color := TColor($00181818);
   Font.Name := VECTART_SETTINGS_FONT_NAME;
   Font.Height := VECTART_SETTINGS_FONT_HEIGHT;
+  Font.Color := TColor($00EEEEEE);
   FTexture := TPicture.Create;
   FPreviewBitmap := Vcl.Graphics.TBitmap.Create;
   FPreviewBitmap.PixelFormat := pf32bit;
@@ -111,6 +136,7 @@ begin
   FMode.SetBounds(16, 94, 338, 28);
   FMode.ItemIndex := 0;
   FMode.OnChange := Changed;
+  DarkCombo(FMode);
   FPreview := TPaintBox.Create(Self);
   FPreview.Parent := Self;
   FPreview.SetBounds(16, 16, 338, 68);
@@ -123,6 +149,7 @@ begin
   FGradient.ItemIndex := 0;
   FGradient.SetBounds(16, 132, 172, 28);
   FGradient.OnChange := Changed;
+  DarkCombo(FGradient);
   FAngleLabel := TLabel.Create(Self);
   FAngleLabel.Parent := Self;
   FAngleLabel.Caption := '角度（°）';
@@ -146,6 +173,29 @@ begin
   FTextureButton.Caption := 'テクスチャ画像を選択…';
   FTextureButton.SetBounds(16, 132, 338, 28);
   FTextureButton.OnClick := LoadTexture;
+  FTexturePattern := TComboBox.Create(Self);
+  FTexturePattern.Parent := Self;
+  FTexturePattern.Name := 'TexturePatternCombo';
+  FTexturePattern.Style := csDropDownList;
+  FTexturePattern.Items.Add('画像');
+  FTexturePattern.Items.AddStrings(VECTART_PATTERN_NAMES);
+  FTexturePattern.ItemIndex := 0;
+  FTexturePattern.OnChange := ApplyTexturePattern;
+  DarkCombo(FTexturePattern);
+  FTexturePatternKind := 0;
+  FPatternSettings := DefaultVectArtPatternSettings(vpkHatch);
+  SetLength(FPatternLabels, 7);
+  SetLength(FPatternSliders, 7);
+  for I := 0 to High(FPatternSliders) do
+  begin
+    FPatternLabels[I] := TLabel.Create(Self);
+    FPatternLabels[I].Parent := Self;
+    FPatternLabels[I].AutoSize := False;
+    FPatternLabels[I].Font.Color := TColor($00EEEEEE);
+    FPatternSliders[I] := TVectArtNumericSlider.CreateForParent(Self, Self);
+    FPatternSliders[I].Name := 'PatternParameterSlider' + IntToStr(I);
+    FPatternSliders[I].OnChange := PatternParameterChanged;
+  end;
   // スタイル付きグループ枠の内部余白で文字が切れないよう、独立した選択ボタンにする。
   FSlot1 := TRadioButton.Create(Self);
   FSlot1.Parent := Self;
@@ -154,15 +204,20 @@ begin
   FSlot1.SetBounds(24,166,154,26);
   FSlot1.Checked := True;
   FSlot1.OnClick := Changed;
+  FSlot1.Font.Color := TColor($00EEEEEE);
+  FSlot1.StyleElements := FSlot1.StyleElements - [seFont];
   FSlot2 := TRadioButton.Create(Self);
   FSlot2.Parent := Self;
   FSlot2.Name := 'ColorSlot2';
   FSlot2.Caption := '色2';
   FSlot2.SetBounds(188,166,154,26);
   FSlot2.OnClick := Changed;
+  FSlot2.Font.Color := TColor($00EEEEEE);
+  FSlot2.StyleElements := FSlot2.StyleElements - [seFont];
   FPaletteLabel := TLabel.Create(Self);
   FPaletteLabel.Parent := Self;
   FPaletteLabel.Caption := '最近使用した色／基本色';
+  FPaletteLabel.Font.Color := TColor($00EEEEEE);
   FPalette := TDrawGrid.Create(Self);
   FPalette.Parent := Self;
   FPalette.SetBounds(16, 342, 338, 108);
@@ -183,6 +238,8 @@ begin
   FSV.Name := 'SVPicker'; FSV.OnChange := PickerChanged;
 
   ApplyVectArtSettingsFont(Self);
+  // 種類名を他の設定文字より2px大きくし、下側が欠けない高さを確保する。
+  FTexturePattern.Font.Height := Font.Height - 2;
 end;
 
 destructor TVectArtPaintPopup.Destroy;
@@ -272,7 +329,7 @@ begin
 end;
 
 procedure TVectArtPaintPopup.Sync;
-var Y,I,PaletteHeight: Integer; C: TColor;
+var Y,I,PaletteHeight: Integer; C: TColor; PatternMode, ColorControls: Boolean;
 begin
   FUpdating := True;
   try
@@ -310,19 +367,39 @@ begin
     FSwatch1.Brush.Color := FColor1; FSwatch2.Brush.Color := FColor2;
     FAngle.SetDisplay(((FAngleValue mod 360)+360) mod 360);
     FWaveCount.SetDisplay(FWaveCountValue);
-    FTextureButton.Visible := FMode.ItemIndex = 2;
-    if FTextureButton.Visible then
-    begin FTextureButton.SetBounds(16,Y,338,28); Inc(Y,38); end;
+    PatternMode := (FMode.ItemIndex = 2) and (FTexturePattern.ItemIndex > 0);
+    ColorControls := (FMode.ItemIndex <> 2) or PatternMode;
+    FTextureButton.Visible := (FMode.ItemIndex = 2) and not PatternMode;
+    FTexturePattern.Visible := FMode.ItemIndex = 2;
+    FTextureButton.Enabled := FTextureButton.Visible;
+    if FTexturePattern.Visible then
+    begin
+      FTexturePattern.SetBounds(16,Y,338,32);
+      Inc(Y,42);
+      if FTextureButton.Visible then
+      begin
+        FTextureButton.SetBounds(16,Y,338,28);
+        Inc(Y,38);
+      end;
+      if PatternMode then
+        SyncPatternControls(Y);
+    end;
     FPaletteLabel.SetBounds(16,Y,338,20); Inc(Y,24);
     PaletteHeight := FPalette.RowCount * FPalette.DefaultRowHeight + 4;
+    if PatternMode then
+    begin
+      Dec(Y,24);
+      PaletteHeight := 0;
+    end;
     FPalette.SetBounds(16,Y,338,PaletteHeight);
     FPalette.Enabled := FMode.ItemIndex <> 2;
     FPalette.Visible := FPalette.Enabled; FPaletteLabel.Visible := FPalette.Enabled;
     FSV.SetBounds(16,Y+PaletteHeight+12,302,160);
     FHue.SetBounds(330,Y+PaletteHeight+12,24,160);
-    FSV.Visible := FPalette.Enabled; FHue.Visible := FPalette.Enabled;
+    FSV.Visible := ColorControls; FHue.Visible := ColorControls;
     C := FColor1;
-    if (FMode.ItemIndex = 1) and FSlot2.Checked then C := FColor2;
+    if ((FMode.ItemIndex = 1) or ((FMode.ItemIndex = 2) and
+      not FTextureButton.Enabled)) and FSlot2.Checked then C := FColor2;
     FSelectedColor := -1;
     for I := 0 to High(FColors) do
       if ColorToRGB(FColors[I]) = ColorToRGB(C) then
@@ -333,11 +410,82 @@ begin
     // 操作中のRGB丸め誤差をHSVへ戻すと色相が揺れるため、ピッカーへ再同期しない。
     if not FPicking then
     begin FHue.Color := C; FSV.BaseColor := C; FSV.Color := C; end;
-    if FMode.ItemIndex = 2 then ClientHeight := FTextureButton.Top+FTextureButton.Height+16
-    else ClientHeight := Y+PaletteHeight+12+160+16;
+    if (FMode.ItemIndex = 2) and FTextureButton.Enabled then
+    begin
+      if FTextureButton.Visible then
+        ClientHeight := FTextureButton.Top + FTextureButton.Height + 16
+      else
+        ClientHeight := FTexturePattern.Top + FTexturePattern.Height + 16;
+    end
+    else
+      ClientHeight := Y+PaletteHeight+12+160+16;
     FPreviewDirty := True;
     FPreview.Invalidate; FPalette.Invalidate;
   finally FUpdating := False; end;
+end;
+
+procedure TVectArtPaintPopup.SyncPatternControls(var Y: Integer);
+var I, Count: Integer;
+
+  procedure AddParameter(const Caption: string; Tag: Integer;
+    Minimum, Maximum, Value: Single);
+  begin
+    FPatternLabels[Count].Caption := Caption;
+    FPatternLabels[Count].Tag := Tag;
+    FPatternLabels[Count].SetBounds(16, Y + 5, 68, 20);
+    FPatternLabels[Count].Visible := True;
+    FPatternSliders[Count].Tag := Tag;
+    FPatternSliders[Count].Configure(Minimum, Maximum, 0.1, 1);
+    FPatternSliders[Count].SetDisplay(Value);
+    FPatternSliders[Count].SetBounds(84, Y, 270, 30);
+    FPatternSliders[Count].Visible := True;
+    Inc(Count);
+    Inc(Y, 34);
+  end;
+
+begin
+  for I := 0 to High(FPatternSliders) do
+  begin
+    FPatternLabels[I].Visible := False;
+    FPatternSliders[I].Visible := False;
+  end;
+  FSlot1.Caption := '線の色';
+  if FPatternSettings.Kind = vpkDots then FSlot1.Caption := '点の色'
+  else if FPatternSettings.Kind = vpkChecker then FSlot1.Caption := '前景色';
+  FSlot2.Caption := '背景色';
+  FSlot1.Visible := True;
+  FSlot2.Visible := True;
+  FSwatch1.Visible := True;
+  FSwatch2.Visible := True;
+  FSlot1.SetBounds(24,Y,72,26); FSlot2.SetBounds(188,Y,72,26);
+  FSwatch1.SetBounds(100,Y+2,62,22); FSwatch2.SetBounds(264,Y+2,62,22);
+  Inc(Y,36);
+  Count := 0;
+  case FPatternSettings.Kind of
+    vpkHatch:
+      begin AddParameter('線幅', 1, 0.1, 64, FPatternSettings.Width);
+        AddParameter('間隔', 2, 1, 256, FPatternSettings.Spacing); end;
+    vpkDots:
+      begin AddParameter('点サイズ', 4, 0.1, 128, FPatternSettings.Size);
+        AddParameter('間隔', 2, 1, 256, FPatternSettings.Spacing); end;
+    vpkGrid:
+      begin AddParameter('線幅', 1, 0.1, 64, FPatternSettings.Width);
+        AddParameter('横間隔', 2, 1, 256, FPatternSettings.Spacing);
+        AddParameter('縦間隔', 3, 1, 256, FPatternSettings.SpacingY); end;
+    vpkChecker: AddParameter('マスサイズ', 4, 1, 128, FPatternSettings.Size);
+    vpkWave:
+      begin AddParameter('線幅', 1, 0.1, 64, FPatternSettings.Width);
+        AddParameter('振幅', 5, 0.1, 128, FPatternSettings.Amplitude);
+        AddParameter('周期', 6, 1, 256, FPatternSettings.Period);
+        AddParameter('行間隔', 3, 1, 256, FPatternSettings.SpacingY); end;
+    vpkHoneycomb:
+      begin AddParameter('六角半径', 4, 1, 128, FPatternSettings.Size);
+        AddParameter('線幅', 1, 0.1, 64, FPatternSettings.Width);
+        AddParameter('間隔', 2, 0, 128, FPatternSettings.Spacing); end;
+  end;
+  AddParameter('角度', 7, -180, 180, FPatternSettings.Angle);
+  AddParameter('横移動', 8, -256, 256, FPatternSettings.OffsetX);
+  AddParameter('縦移動', 9, -256, 256, FPatternSettings.OffsetY);
 end;
 procedure TVectArtPaintPopup.Changed(Sender: TObject);
 begin
@@ -347,6 +495,82 @@ begin
     CommitPendingColor;
   if (Sender = FMode) or (Sender = FGradient) then CommitFill;
   Sync;
+end;
+
+procedure TVectArtPaintPopup.LoadTextureBytes(const Bytes: TBytes);
+var Stream: TBytesStream;
+begin
+  FTexturePng := Copy(Bytes);
+  if Length(FTexturePng) = 0 then
+  begin
+    FTexture.Assign(nil);
+    Exit;
+  end;
+  Stream := TBytesStream.Create(FTexturePng);
+  try
+    FTexture.LoadFromStream(Stream);
+  finally
+    Stream.Free;
+  end;
+end;
+
+procedure TVectArtPaintPopup.RegeneratePattern;
+var PreviewBytes: TBytes; Stream: TBytesStream;
+begin
+  FTexturePng := CreateVectArtPatternPng(FPatternSettings,
+    FColor1, FColor2, 255);
+  PreviewBytes := CreateVectArtPatternPreviewPng(FPatternSettings,
+    FColor1, FColor2, Max(FPreview.Width, 1), Max(FPreview.Height, 1), 255);
+  Stream := TBytesStream.Create(PreviewBytes);
+  try
+    FTexture.LoadFromStream(Stream);
+  finally
+    Stream.Free;
+  end;
+end;
+
+procedure TVectArtPaintPopup.ApplyTexturePattern(Sender: TObject);
+begin
+  if FUpdating or not Visible then Exit;
+  FTexturePatternKind := FTexturePattern.ItemIndex;
+  if FTexturePatternKind > 0 then
+  begin
+    FColor1 := FPatternColor1;
+    FColor2 := FPatternColor2;
+    FPatternSettings := DefaultVectArtPatternSettings(
+      TVectArtPatternKind(FTexturePatternKind - 1));
+    RegeneratePattern;
+  end
+  else
+  begin
+    FTexturePng := nil;
+    FTexture.Assign(nil);
+  end;
+  FPreviewDirty := True;
+  if Assigned(FFillChanged) then CommitFill;
+  Sync;
+end;
+
+procedure TVectArtPaintPopup.PatternParameterChanged(Sender: TObject);
+var Slider: TVectArtNumericSlider;
+begin
+  if FUpdating or not Visible then Exit;
+  Slider := TVectArtNumericSlider(Sender);
+  case Slider.Tag of
+    1: FPatternSettings.Width := Slider.Value;
+    2: FPatternSettings.Spacing := Slider.Value;
+    3: FPatternSettings.SpacingY := Slider.Value;
+    4: FPatternSettings.Size := Slider.Value;
+    5: FPatternSettings.Amplitude := Slider.Value;
+    6: FPatternSettings.Period := Slider.Value;
+    7: FPatternSettings.Angle := Slider.Value;
+    8: FPatternSettings.OffsetX := Slider.Value;
+    9: FPatternSettings.OffsetY := Slider.Value;
+  end;
+  RegeneratePattern;
+  FPreviewDirty := True;
+  FPreview.Invalidate;
+  CommitFill;
 end;
 
 procedure TVectArtPaintPopup.EditWaveCount(Sender: TObject);
@@ -377,13 +601,16 @@ var
   Slot: Integer;
 begin
   Color := ColorToRGB(Color);
-  if (FMode.ItemIndex = 1) and FSlot2.Checked then Slot := 2 else Slot := 1;
+  if ((FMode.ItemIndex = 1) or ((FMode.ItemIndex = 2) and
+    (FTexturePattern.ItemIndex > 0))) and FSlot2.Checked then Slot := 2 else Slot := 1;
   if FHistoryPending and (FHistoryPendingSlot <> Slot) then
     CommitPendingColor;
   FHistoryPending := True;
   FHistoryPendingColor := Color;
   FHistoryPendingSlot := Slot;
   if Slot = 2 then FColor2 := Color else FColor1 := Color;
+  if (FMode.ItemIndex = 2) and (FTexturePattern.ItemIndex > 0) then
+    RegeneratePattern;
   if Assigned(FFillChanged) then CommitFill;
   if (FMode.ItemIndex = 0) and Assigned(FChanged) then FChanged(Self,Color);
   Sync;
@@ -441,7 +668,7 @@ begin
 end;
 
 procedure TVectArtPaintPopup.LoadTexture(Sender: TObject);
-var Dialog: TOpenDialog; Bytes: TBytes; Stream: TBytesStream;
+var Dialog: TOpenDialog; Bytes: TBytes;
 begin
   Dialog := TOpenDialog.Create(Self);
   try
@@ -450,9 +677,9 @@ begin
       try
         // 変換完了まで現在の設定を維持し、プレビューと保存データを同じPNGから更新する。
         Bytes := LoadVectArtTexturePng(Dialog.FileName);
-        Stream := TBytesStream.Create(Bytes);
-        try FTexture.LoadFromStream(Stream); finally Stream.Free; end;
-        FTexturePng := Bytes;
+        FTexturePattern.ItemIndex := 0;
+        FTexturePatternKind := 0;
+        LoadTextureBytes(Bytes);
         FPreviewDirty := True; FPreview.Invalidate; CommitFill;
       except on E: Exception do MessageDlg(E.Message, mtError, [mbOK], 0); end;
   finally Dialog.Free; end;
@@ -495,7 +722,7 @@ begin
   if FMode.ItemIndex = 1 then begin
     if FGradient.ItemIndex = 5 then Fill.Kind := vfkSpectrum
     else if FGradient.ItemIndex = 4 then
-    begin Fill.Kind := vfkWave; Fill.WaveCount := FWaveCountValue; end
+      begin Fill.Kind := vfkWave; Fill.WaveCount := FWaveCountValue; end
     else if FGradient.ItemIndex = 3 then Fill.Kind := vfkSquare
     else if FGradient.ItemIndex = 2 then Fill.Kind := vfkCircle
     else if FGradient.ItemIndex = 1 then Fill.Kind := vfkRadial
@@ -504,6 +731,11 @@ begin
   end;
   if FMode.ItemIndex = 2 then
   begin
+    if FTexturePattern.ItemIndex > 0 then
+    begin
+      FTexturePng := CreateVectArtPatternPng(FPatternSettings,
+        FColor1, FColor2, 255);
+    end;
     if Length(FTexturePng) = 0 then Exit;
     Fill.Kind := vfkTexture; Fill.TexturePng := Copy(FTexturePng);
   end;
@@ -513,7 +745,7 @@ end;
 procedure ShowVectArtFillPopup(Target: TComponent; Color: TColor;
   const Fill: TVectArtFillStyle; const UsedColors: TArray<TColor>;
   OnChanged: TVectArtFillChanged; AllowTexture: Boolean;
-  ColorHistory: TVectArtColorHistory);
+  ColorHistory: TVectArtColorHistory; PatternColor1, PatternColor2: TColor);
 var Stream: TBytesStream;
 begin
   ShowVectArtColorPopup(Target,'色・塗りを編集',Color,UsedColors,nil,
@@ -527,11 +759,18 @@ begin
     if Fill.Kind = vfkLinearVertical then Popup.FAngleValue := 90;
     Popup.FColor2 := Fill.Color2;
     if Fill.Kind = vfkSolid then Popup.FColor2 := clWhite;
+    if PatternColor1 = clNone then Popup.FPatternColor1 := Color
+    else Popup.FPatternColor1 := ColorToRGB(PatternColor1);
+    if PatternColor2 = clNone then Popup.FPatternColor2 := Popup.FColor2
+    else Popup.FPatternColor2 := ColorToRGB(PatternColor2);
+    Popup.FPatternSettings := DefaultVectArtPatternSettings(vpkHatch);
     if Popup.FMode.Items.Count < 3 then Popup.FMode.Items.Add('テクスチャ');
     Popup.FMode.Items[1] := 'グラデーション';
     Popup.FMode.Items[2] := 'テクスチャ';
     Popup.FTexturePng := Copy(Fill.TexturePng);
     Popup.FTexture.Assign(nil);
+    Popup.FTexturePatternKind := 0;
+    Popup.FTexturePattern.ItemIndex := 0;
     Popup.FSlot1.Checked := True;
     if Fill.Kind in [vfkLinearHorizontal,vfkLinearVertical,vfkRadial,vfkCircle,vfkSquare,vfkWave,vfkSpectrum] then
     begin
@@ -548,6 +787,8 @@ begin
       Popup.FMode.ItemIndex := 2;
       Stream := TBytesStream.Create(Fill.TexturePng);
       try Popup.FTexture.LoadFromStream(Stream); finally Stream.Free; end;
+      Popup.FTexturePattern.ItemIndex := 0;
+      Popup.FTexturePatternKind := 0;
     end;
     if not AllowTexture then Popup.FMode.Items.Delete(2);
     Popup.FFillChanged := OnChanged;

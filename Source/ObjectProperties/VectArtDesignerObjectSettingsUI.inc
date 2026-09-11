@@ -370,8 +370,12 @@ begin
     if Layer is TVectArtRectangleLayer then Value := TVectArtRectangleLayer(Layer).StrokeColor
     else if Layer is TVectArtLineLayer then Value := TVectArtLineLayer(Layer).StrokeColor
     else Value := TVectArtPathLayer(Layer).StrokeColor;
-    ShowVectArtFillPopup(Self,Value,Fill,nil,PopupStrokePaintChanged,True,
-      FColorHistory);
+    if FEditorState <> nil then
+      ShowVectArtFillPopup(Self,Value,Fill,nil,PopupStrokePaintChanged,True,
+        FColorHistory,FEditorState.Color1,FEditorState.Color2)
+    else
+      ShowVectArtFillPopup(Self,Value,Fill,nil,PopupStrokePaintChanged,True,
+        FColorHistory);
     Exit;
   end;
   if not FPopupStroke and (FDocument.SelectionCount = 1) then
@@ -387,8 +391,12 @@ begin
         FColorHistory);
       Exit;
     end;
-    ShowVectArtFillPopup(Self,Value,Fill,nil,PopupFillChanged,True,
-      FColorHistory);
+    if FEditorState <> nil then
+      ShowVectArtFillPopup(Self,Value,Fill,nil,PopupFillChanged,True,
+        FColorHistory,FEditorState.Color1,FEditorState.Color2)
+    else
+      ShowVectArtFillPopup(Self,Value,Fill,nil,PopupFillChanged,True,
+        FColorHistory);
   end
   else
     ShowVectArtColorPopup(Self,'色を編集',Value,nil,PopupColorChanged,

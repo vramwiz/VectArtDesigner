@@ -119,7 +119,7 @@ var B: TBitmap; P: TPngImage; DC: HDC;
 begin
   B := TBitmap.Create; P := TPngImage.Create;
   try
-    B.SetSize(Control.Width,Control.Height);
+    B.SetSize(Control.ClientWidth,Control.ClientHeight);
     Control.HandleNeeded;
     if (Control is TForm) and TForm(Control).Visible then
     begin
@@ -216,6 +216,7 @@ var
   TransparencyLabel: TControl;
   HostPanel: TPanel;
   PreviousBottom, VisibleCount: Integer;
+  PatternBytes: TBytes;
 begin
   Application.Initialize;
   // キャンバスの文字描画はDLL読込だけでなくTextRenderer側のAcquireも必要。
@@ -451,7 +452,10 @@ begin
       Check(TVectArtRectangleLayer(D[1]).FillStyle.Angle = 135,'Spectrum angle apply');
       Text := '45'; OnExit(TVectArtNumericSlider(ColorForm.FindComponent('GradientAngleSlider')).Edit);
     end;
-    CloseVectArtColorPopup(UI); Swatch.OnClick(Swatch);
+    CloseVectArtColorPopup(UI);
+    S.Color1 := clYellow;
+    S.Color2 := clAqua;
+    Swatch.OnClick(Swatch);
     Check(TComboBox(ColorForm.FindComponent('GradientKindCombo')).Text = 'スペクトル','Spectrum reopen');
     Capture(ColorForm,'paint-spectrum');
     with TComboBox(ColorForm.FindComponent('GradientKindCombo')) do
@@ -462,9 +466,45 @@ begin
     Capture(ColorForm,'paint-gradient');
     ModeCombo := TComboBox(FindControl(ColorForm,TComboBox));
     ModeCombo.ItemIndex := 2; ModeCombo.OnChange(ModeCombo);
-    Check(not FindControl(ColorForm,TDrawGrid).Visible,'Texture color grid visible');
-    Check(not TColorPickerSVArea(ColorForm.FindComponent('SVPicker')).Visible,'Texture picker visible');
-    Check(ColorForm.ClientHeight < 220,'Texture popup retains color space');
+    Check(not FindControl(ColorForm,TDrawGrid).Visible,'Pattern color grid visible');
+    Check(TColorPickerSVArea(ColorForm.FindComponent('SVPicker')).Visible,'Pattern picker missing');
+    Check(ColorForm.ClientHeight > 400,'Pattern settings were not laid out');
+    with TComboBox(ColorForm.FindComponent('TexturePatternCombo')) do
+    begin
+      ItemIndex := Items.IndexOf('斜線'); OnChange(ColorForm.FindComponent('TexturePatternCombo'));
+    end;
+    Check(not TDrawGrid(FindControl(ColorForm,TDrawGrid)).Visible,
+      'Pattern should use the compact picker layout');
+    Check(TColorPickerSVArea(ColorForm.FindComponent('SVPicker')).Visible,'Pattern picker missing');
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind=vfkTexture,'Pattern not applied as texture');
+    Check((TVectArtRectangleLayer(D[1]).FillColor=clYellow) and
+      (TVectArtRectangleLayer(D[1]).FillStyle.Color2=clAqua),
+      'Pattern did not adopt tool color1/color2');
+    PatternBytes := Copy(TVectArtRectangleLayer(D[1]).FillStyle.TexturePng);
+    with TVectArtNumericSlider(ColorForm.FindComponent('PatternParameterSlider0')).Edit do
+    begin
+      Text := '9'; OnExit(TVectArtNumericSlider(ColorForm.FindComponent('PatternParameterSlider0')).Edit);
+    end;
+    Check(not CompareMem(@PatternBytes[0],
+      @TVectArtRectangleLayer(D[1]).FillStyle.TexturePng[0],
+      Min(Length(PatternBytes), Length(TVectArtRectangleLayer(D[1]).FillStyle.TexturePng))),
+      'Pattern slider did not regenerate texture');
+    Capture(ColorForm,'paint-pattern');
+    H.Undo;
+    H.Undo;
+    Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind<>vfkTexture,
+      'Pattern undo did not restore previous paint');
+    S.Color1 := clBlack;
+    S.Color2 := clWhite;
+    TVectArtRectangleLayer(D[1]).FillColor := clBlue;
+    UI.RefreshFromDocument;
+    CloseVectArtColorPopup(UI);
+    Swatch.OnClick(Swatch);
+    ModeCombo := TComboBox(FindControl(ColorForm,TComboBox));
+    ModeCombo.ItemIndex := 2;
+    ModeCombo.OnChange(ModeCombo);
+    with TComboBox(ColorForm.FindComponent('TexturePatternCombo')) do
+    begin ItemIndex := 0; OnChange(ColorForm.FindComponent('TexturePatternCombo')); end;
     PickTexture(ColorForm);
     Check(TVectArtRectangleLayer(D[1]).FillStyle.Kind=vfkTexture,'Texture file applied to fill');
     Check(S.Color2 = clWhite,'Texture creation default');
