@@ -1,0 +1,28 @@
+2026-09-11 11:36:56.146 OpenColor enter document=True selection=1 locked=False sender=TVectArtColorSwatch
+2026-09-11 11:36:56.146 ShowFill enter kind=0 bytes=0
+2026-09-11 11:36:56.149 ShowColor enter target=TVectArtObjectPropertiesControl
+2026-09-11 11:36:56.205 ShowColor popup ready
+2026-09-11 11:36:56.221 ShowColor before Show visible=False bounds=32,32,388,450
+2026-09-11 11:36:56.270 ShowColor after Show visible=True handle=1116132 bounds=766,285,388,450 foreground=1116132
+2026-09-11 11:36:56.305 ShowFill exit visible=True bounds=766,285,388,474
+2026-09-11 11:38:39.408 Refresh fillSwatch enabled=False legacyEdit=False selection=0
+2026-09-11 11:38:43.204 Refresh fillSwatch enabled=False legacyEdit=False selection=0
+2026-09-11 11:38:43.240 Refresh fillSwatch enabled=True legacyEdit=True selection=1
+2026-09-11 11:38:47.487 OpenColor enter document=True selection=1 locked=False sender=TVectArtColorSwatch
+2026-09-11 11:38:47.487 ShowFill enter kind=0 bytes=0
+2026-09-11 11:38:47.487 ShowColor enter target=TVectArtObjectPropertiesControl
+2026-09-11 11:38:47.566 ShowColor popup ready
+2026-09-11 11:38:47.586 ShowColor before Show visible=False bounds=96,96,388,450
+2026-09-11 11:38:47.632 ShowColor after Show visible=True handle=1116558 bounds=766,285,388,450 foreground=1116558
+2026-09-11 11:38:47.658 ShowFill exit visible=True bounds=766,285,388,474
+2026-09-11 11:39:20.345 Refresh fillSwatch enabled=False legacyEdit=False selection=0
+2026-09-11 11:39:31.487 Refresh fillSwatch enabled=False legacyEdit=False selection=0
+2026-09-11 11:39:34.407 Refresh fillSwatch enabled=False legacyEdit=False selection=0
+2026-09-11 11:39:34.439 Refresh fillSwatch enabled=True legacyEdit=True selection=1
+2026-09-11 11:39:35.450 OpenColor enter document=True selection=1 locked=False sender=TVectArtColorSwatch
+2026-09-11 11:39:35.451 ShowFill enter kind=0 bytes=0
+2026-09-11 11:39:35.467 ShowColor enter target=TVectArtObjectPropertiesControl
+2026-09-11 11:39:35.562 ShowColor popup ready
+2026-09-11 11:39:35.593 ShowColor before Show visible=False bounds=64,64,388,450
+2026-09-11 11:39:35.948 ShowColor after Show visible=True handle=6164182 bounds=766,285,388,450 foreground=6164182
+2026-09-11 11:39:35.994 ShowFill exit visible=True bounds=766,285,388,474

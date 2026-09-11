@@ -319,11 +319,13 @@ begin
     for I := 0 to Sections.SectionCount-1 do
       if Sections.Sections[I].Caption = '塗り色' then Sections.ActiveSection := Sections.Sections[I];
     Swatch := TVectArtColorSwatch(FindControl(Sections.ActiveSection,TVectArtColorSwatch));
+    Check(Swatch.Enabled,'Shape fill swatch is disabled');
     Swatch.OnClick(Swatch);
     ColorForm := nil;
     for I := 0 to Screen.FormCount-1 do
       if Screen.Forms[I].Caption = '色・塗りを編集' then ColorForm := Screen.Forms[I];
     Check(ColorForm <> nil,'Shared paint popup missing');
+    Check(ColorForm.Visible,'Shared paint popup is not visible');
     Check(ColorForm.FindComponent('HexColorEdit') = nil,'HEX editor still present');
     PickPopupColor(ColorForm,clLime);
     Check(TVectArtRectangleLayer(D[1]).FillColor = clLime,'Popup live color apply');

@@ -1,5 +1,6 @@
 ﻿// 単色専用と線・塗り・文字のペイント設定で、色表示・使用色・編集窓を共有する。
 // 適用先への変更通知だけを行い、Documentの更新とUndoは呼び出し側に委ねる。
+// 内蔵パターンは操作中の軽量プレビューと確定後の保存画像をここで切り替える。
 unit VectArtDesignerPaintPopup;
 
 interface
@@ -69,10 +70,17 @@ type
     FHistoryPendingSlot: Integer;
     FUpdating, FPicking: Boolean;
     FTexturePatternKind: Integer;
+    FPatternCommitPending: Boolean;
+    FPatternCommitTimer: TTimer;
     procedure PickerChanged(Sender: TObject);
     procedure CommitFill;
     procedure ApplyTexturePattern(Sender: TObject);
     procedure PatternParameterChanged(Sender: TObject);
+    procedure PatternParameterMouseUp(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
+    procedure PatternCommitTimer(Sender: TObject);
+    procedure CommitPendingPattern;
+    procedure UpdatePatternPreview;
     procedure SyncPatternControls(var Y: Integer);
     procedure RegeneratePattern;
     procedure LoadTextureBytes(const Bytes: TBytes);
@@ -126,6 +134,10 @@ begin
   Font.Height := VECTART_SETTINGS_FONT_HEIGHT;
   Font.Color := TColor($00EEEEEE);
   FTexture := TPicture.Create;
+  FPatternCommitTimer := TTimer.Create(Self);
+  FPatternCommitTimer.Enabled := False;
+  FPatternCommitTimer.Interval := 150;
+  FPatternCommitTimer.OnTimer := PatternCommitTimer;
   FPreviewBitmap := Vcl.Graphics.TBitmap.Create;
   FPreviewBitmap.PixelFormat := pf32bit;
   FPreviewDirty := True;
@@ -195,6 +207,7 @@ begin
     FPatternSliders[I] := TVectArtNumericSlider.CreateForParent(Self, Self);
     FPatternSliders[I].Name := 'PatternParameterSlider' + IntToStr(I);
     FPatternSliders[I].OnChange := PatternParameterChanged;
+    FPatternSliders[I].TrackBar.OnMouseUp := PatternParameterMouseUp;
   end;
   // スタイル付きグループ枠の内部余白で文字が切れないよう、独立した選択ボタンにする。
   FSlot1 := TRadioButton.Create(Self);
@@ -244,6 +257,8 @@ end;
 
 destructor TVectArtPaintPopup.Destroy;
 begin
+  FPatternCommitPending := False;
+  FPatternCommitTimer.Enabled := False;
   // Applicationが先にこのフォームを破棄しても、主画面の終了処理へ参照を残さない。
   if Popup = Self then Popup := nil;
   FChanged := nil;
@@ -261,6 +276,8 @@ begin
   inherited;
   if (Operation = opRemove) and (AComponent = FTarget) then
   begin
+    FPatternCommitPending := False;
+    FPatternCommitTimer.Enabled := False;
     CommitPendingColor;
     FTarget := nil;
     FChanged := nil;
@@ -326,6 +343,7 @@ procedure TVectArtPaintPopup.PopupDeactivate(Sender: TObject);
 begin
   // HSV操作中の中間色は捨て、操作を終えた時点の色だけを履歴へ確定する。
   CommitPendingColor;
+  CommitPendingPattern;
 end;
 
 procedure TVectArtPaintPopup.Sync;
@@ -490,6 +508,7 @@ end;
 procedure TVectArtPaintPopup.Changed(Sender: TObject);
 begin
   if FUpdating then Exit;
+  CommitPendingPattern;
   if (Sender = FSlot1) or (Sender = FSlot2) or (Sender = FMode) or
     (Sender = FGradient) then
     CommitPendingColor;
@@ -515,10 +534,15 @@ begin
 end;
 
 procedure TVectArtPaintPopup.RegeneratePattern;
-var PreviewBytes: TBytes; Stream: TBytesStream;
 begin
   FTexturePng := CreateVectArtPatternPng(FPatternSettings,
     FColor1, FColor2, 255);
+  UpdatePatternPreview;
+end;
+
+procedure TVectArtPaintPopup.UpdatePatternPreview;
+var PreviewBytes: TBytes; Stream: TBytesStream;
+begin
   PreviewBytes := CreateVectArtPatternPreviewPng(FPatternSettings,
     FColor1, FColor2, Max(FPreview.Width, 1), Max(FPreview.Height, 1), 255);
   Stream := TBytesStream.Create(PreviewBytes);
@@ -529,9 +553,43 @@ begin
   end;
 end;
 
+procedure TVectArtPaintPopup.CommitPendingPattern;
+begin
+  if not FPatternCommitPending then
+    Exit;
+  FPatternCommitTimer.Enabled := False;
+  FPatternCommitPending := False;
+  FTexturePng := CreateVectArtPatternPng(FPatternSettings,
+    FColor1, FColor2, 255);
+  CommitFill;
+end;
+
+procedure TVectArtPaintPopup.PatternCommitTimer(Sender: TObject);
+var I: Integer;
+begin
+  FPatternCommitTimer.Enabled := False;
+  // ドラッグ中の休止を操作終了と誤認せず、512px画像とUndoを途中生成しない。
+  for I := 0 to High(FPatternSliders) do
+    if GetCapture = FPatternSliders[I].TrackBar.Handle then
+    begin
+      FPatternCommitTimer.Enabled := True;
+      Exit;
+    end;
+  CommitPendingPattern;
+end;
+
+procedure TVectArtPaintPopup.PatternParameterMouseUp(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  // 最終座標はTrackBar側ですでに反映済みなので、マウス解放時に一度だけ確定する。
+  if Button = mbLeft then
+    CommitPendingPattern;
+end;
+
 procedure TVectArtPaintPopup.ApplyTexturePattern(Sender: TObject);
 begin
   if FUpdating or not Visible then Exit;
+  CommitPendingPattern;
   FTexturePatternKind := FTexturePattern.ItemIndex;
   if FTexturePatternKind > 0 then
   begin
@@ -567,10 +625,17 @@ begin
     8: FPatternSettings.OffsetX := Slider.Value;
     9: FPatternSettings.OffsetY := Slider.Value;
   end;
-  RegeneratePattern;
+  // 操作中は小さな表示用画像だけを更新し、512px画像の生成、Document更新、
+  // Undo追加はマウスを離した時点または連続入力が止まった後へ集約する。
+  UpdatePatternPreview;
   FPreviewDirty := True;
   FPreview.Invalidate;
-  CommitFill;
+  FPatternCommitPending := True;
+  FPatternCommitTimer.Enabled := False;
+  FPatternCommitTimer.Enabled := True;
+  // 数値欄の確定は連続ドラッグではないため、その場で保存用画像まで反映する。
+  if not Slider.TrackBar.Focused then
+    CommitPendingPattern;
 end;
 
 procedure TVectArtPaintPopup.EditWaveCount(Sender: TObject);
@@ -600,6 +665,7 @@ procedure TVectArtPaintPopup.ApplyColor(Color: TColor);
 var
   Slot: Integer;
 begin
+  CommitPendingPattern;
   Color := ColorToRGB(Color);
   if ((FMode.ItemIndex = 1) or ((FMode.ItemIndex = 2) and
     (FTexturePattern.ItemIndex > 0))) and FSlot2.Checked then Slot := 2 else Slot := 1;
@@ -689,7 +755,10 @@ procedure ShowVectArtColorPopup(Target: TComponent; const Title: string;
   Color: TColor; const UsedColors: TArray<TColor>;
   OnChanged: TVectArtColorChanged; ColorHistory: TVectArtColorHistory);
 begin
-  if Popup = nil then Popup := TVectArtPaintPopup.Create(Application);
+  if Popup <> nil then
+    Popup.CommitPendingPattern
+  else
+    Popup := TVectArtPaintPopup.Create(Application);
   Popup.CommitPendingColor;
   if Popup.FTarget <> nil then Popup.FTarget.RemoveFreeNotification(Popup);
   Popup.FTarget := Target;
@@ -799,6 +868,7 @@ procedure CloseVectArtColorPopup(Target: TComponent);
 begin
   if (Popup <> nil) and (Popup.FTarget = Target) then
   begin
+    Popup.CommitPendingPattern;
     Popup.CommitPendingColor;
     Popup.FChanged := nil;
     Popup.FFillChanged := nil;

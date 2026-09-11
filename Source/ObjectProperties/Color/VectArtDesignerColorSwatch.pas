@@ -37,8 +37,9 @@ function HexColor(Color: TColor): string;
 
 implementation
 
-uses System.SysUtils, System.Types, System.Math, System.UITypes, System.Skia,
-  Winapi.Windows, VectArtDesignerFillPaint;
+uses System.SysUtils, System.Types, System.Math,
+  System.UITypes, System.Skia, Winapi.Windows, Vcl.Imaging.pngimage,
+  VectArtDesignerFillPaint;
 
 function HexColor(Color: TColor): string;
 begin
@@ -93,7 +94,13 @@ begin
 end;
 
 procedure TVectArtColorSwatch.Paint;
-var Surface: ISkSurface; Paint: ISkPaint; H: Integer; Caption: string;
+var
+  Caption: string;
+  H: Integer;
+  Paint: ISkPaint;
+  Png: TPngImage;
+  Stream: TBytesStream;
+  Surface: ISkSurface;
 begin
   if FCircular then Canvas.Brush.Color := TColor($00252525)
   else Canvas.Brush.Color := TColor($00353535);
@@ -117,14 +124,32 @@ begin
     begin FSwatchBitmap.SetSize(38,H); FSwatchDirty := True; end;
     if FSwatchDirty then
     begin
-      Surface := TSkSurface.MakeRasterDirect(
-        TSkImageInfo.Create(38,H,TSkColorType.BGRA8888,TSkAlphaType.Premul),
-        FSwatchBitmap.ScanLine[H-1],38*4);
-      Surface.Canvas.Clear(TAlphaColorRec.White);
-      Surface.Canvas.Translate(0,H); Surface.Canvas.Scale(1,-1);
-      Paint := TSkPaint.Create;
-      SetFillPaint(Paint,FValue,FFillStyle,RectF(0,0,38,H),1);
-      Surface.Canvas.DrawPaint(Paint); Surface := nil;
+      if FFillStyle.Kind = vfkTexture then
+      begin
+        FSwatchBitmap.Canvas.Brush.Color := clWhite;
+        FSwatchBitmap.Canvas.FillRect(Rect(0,0,38,H));
+        Stream := TBytesStream.Create(FFillStyle.TexturePng);
+        Png := TPngImage.Create;
+        try
+          Png.LoadFromStream(Stream);
+          // 小型見本では実寸の左上だけでなく、画像全体を縮小して内容を示す。
+          FSwatchBitmap.Canvas.StretchDraw(Rect(0,0,38,H),Png);
+        finally
+          Png.Free;
+          Stream.Free;
+        end;
+      end
+      else
+      begin
+        Surface := TSkSurface.MakeRasterDirect(
+          TSkImageInfo.Create(38,H,TSkColorType.BGRA8888,TSkAlphaType.Premul),
+          FSwatchBitmap.ScanLine[H-1],38*4);
+        Surface.Canvas.Clear(TAlphaColorRec.White);
+        Surface.Canvas.Translate(0,H); Surface.Canvas.Scale(1,-1);
+        Paint := TSkPaint.Create;
+        SetFillPaint(Paint,FValue,FFillStyle,RectF(0,0,38,H),1);
+        Surface.Canvas.DrawPaint(Paint); Surface := nil;
+      end;
       FSwatchDirty := False;
     end;
     Canvas.Draw(6,6,FSwatchBitmap);

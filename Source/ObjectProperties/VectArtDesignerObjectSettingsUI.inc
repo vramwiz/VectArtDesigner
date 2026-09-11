@@ -298,7 +298,15 @@ begin
       FPathStartMarkerSizeEdit.Enabled := False;
       FPathEndMarkerSizeEdit.Enabled := False;
     end;
-    FFillSwatch.Enabled := FColorEdit.Enabled;
+    // 非表示の旧HEX入力欄の状態へ依存させず、実際に塗りを持つ選択から直接決める。
+    FFillSwatch.Enabled := (FDocument <> nil) and
+      (FDocument.SelectionCount > 0) and not SelectedLayersHaveLock and
+      (((FDocument.SelectionCount = 1) and
+        ((FDocument[FDocument.SelectedIndex] is TVectArtRectangleLayer) or
+         (FDocument[FDocument.SelectedIndex] is TVectArtTextLayer) or
+         ((FDocument[FDocument.SelectedIndex] is TVectArtPathLayer) and
+          TVectArtPathLayer(FDocument[FDocument.SelectedIndex]).Closed))) or
+       (Length(GetSelectedRectangleIndices) = FDocument.SelectionCount));
     FStrokeSwatch.Enabled := (FDocument <> nil) and (FDocument.SelectionCount > 0) and
       (Length(GetSelectedStrokeIndices) = FDocument.SelectionCount) and not SelectedLayersHaveLock;
     S := StringReplace(FColorEdit.Text, '#', '', [rfReplaceAll]);
@@ -356,7 +364,8 @@ end;
 procedure TVectArtObjectPropertiesControl.OpenColor(Sender: TObject);
 var I: Integer; Layer: TVectArtLayer; Value: TColor; Fill: TVectArtFillStyle;
 begin
-  if (FDocument = nil) or SelectedLayersHaveLock then Exit;
+  if (FDocument = nil) or SelectedLayersHaveLock then
+    Exit;
   FPopupStroke := Sender = FStrokeSwatch;
   if FPopupStroke then Value := FStrokeSwatch.Value else Value := FFillSwatch.Value;
   FPopupSelection := FDocument.GetSelectedLayerIndices;
